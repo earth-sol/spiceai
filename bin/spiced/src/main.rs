@@ -47,34 +47,33 @@ fn main() {
         return;
     }
 
-    let tokio_runtime = match Runtime::new() {
-        Ok(runtime) => runtime,
-        Err(err) => {
-            eprintln!("Unable to start Tokio runtime: {err}");
-            std::process::exit(1);
-        }
-    };
-
     // Install the default AWS LC RS crypto provider for rusttls
     let _ = CryptoProvider::install_default(crypto::aws_lc_rs::default_provider());
 
     if args.repl {
+        let tokio_runtime = match Runtime::new() {
+            Ok(runtime) => runtime,
+            Err(err) => {
+                eprintln!("Unable to start Tokio runtime: {err}");
+                std::process::exit(1);
+            }
+        };
+
         if let Err(e) = tokio_runtime.block_on(flightrepl::run(args.repl_config)) {
             eprintln!("SQL REPL Error: {e}");
         };
         return;
     }
 
-    if let Err(err) = tokio_runtime.block_on(start_runtime(args)) {
+    // Explicitly create the tokio runtime manager on the main thread
+    // The runtimes will be dropped only when the main thread exits
+    let tokio_runtime_manager = spiced::spiced_tokio::TokioRuntimeManager::new();
+
+    if let Err(err) = spiced::run(&tokio_runtime_manager, args) {
         eprintln!("Spice Runtime error: {err}");
     }
 
     global::shutdown_tracer_provider();
-}
-
-async fn start_runtime(args: spiced::Args) -> Result<(), Box<dyn std::error::Error>> {
-    spiced::run(args).await?;
-    Ok(())
 }
 
 /// Build metadata conforming to <https://semver.org/#spec-item-10>

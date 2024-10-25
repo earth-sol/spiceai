@@ -42,6 +42,7 @@ use datafusion::{
 };
 use refresh::RefreshOverrides;
 use snafu::prelude::*;
+use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
 
 use tokio::sync::{mpsc, oneshot, RwLock};
@@ -178,6 +179,7 @@ fn validate_refresh_data_window(
 }
 
 pub struct Builder {
+    tokio_handle: Handle,
     runtime_status: Arc<status::RuntimeStatus>,
     dataset_name: TableReference,
     federated: Arc<dyn TableProvider>,
@@ -194,6 +196,7 @@ pub struct Builder {
 
 impl Builder {
     pub fn new(
+        tokio_handle: Handle,
         runtime_status: Arc<status::RuntimeStatus>,
         dataset_name: TableReference,
         federated: Arc<dyn TableProvider>,
@@ -201,6 +204,7 @@ impl Builder {
         refresh: refresh::Refresh,
     ) -> Self {
         Self {
+            tokio_handle,
             runtime_status,
             dataset_name,
             federated,
@@ -322,6 +326,7 @@ impl Builder {
         validate_refresh_data_window(&self.refresh, &self.dataset_name, &self.federated.schema());
         let refresh_params = Arc::new(RwLock::new(self.refresh));
         let mut refresher = refresh::Refresher::new(
+            self.tokio_handle.clone(),
             Arc::clone(&self.runtime_status),
             self.dataset_name.clone(),
             Arc::clone(&self.federated),
@@ -342,14 +347,17 @@ impl Builder {
         }
 
         if let Some(retention) = self.retention {
-            let retention_check_handle = tokio::spawn(AcceleratedTable::start_retention_check(
-                self.dataset_name.clone(),
-                Arc::clone(&self.accelerator),
-                retention,
-                self.cache_provider.clone(),
-            ));
+            let retention_check_handle =
+                self.tokio_handle
+                    .spawn(AcceleratedTable::start_retention_check(
+                        self.dataset_name.clone(),
+                        Arc::clone(&self.accelerator),
+                        retention,
+                        self.cache_provider.clone(),
+                    ));
             handlers.push(retention_check_handle);
         }
+
         Ok((
             AcceleratedTable {
                 dataset_name: self.dataset_name,
@@ -369,6 +377,7 @@ impl Builder {
 
 impl AcceleratedTable {
     pub fn builder(
+        tokio_handle: Handle,
         runtime_status: Arc<status::RuntimeStatus>,
         dataset_name: TableReference,
         federated: Arc<dyn TableProvider>,
@@ -376,6 +385,7 @@ impl AcceleratedTable {
         refresh: refresh::Refresh,
     ) -> Builder {
         Builder::new(
+            tokio_handle,
             runtime_status,
             dataset_name,
             federated,

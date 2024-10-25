@@ -26,7 +26,7 @@ use datafusion::{datasource::TableProvider, error::DataFusionError, sql::TableRe
 use futures::{future::join_all, stream::TryStreamExt};
 use opentelemetry::KeyValue;
 use snafu::{ResultExt, Snafu};
-use tokio::sync::Mutex;
+use tokio::{runtime::Handle, sync::Mutex};
 use tracing_futures::Instrument;
 
 use crate::{
@@ -204,12 +204,12 @@ AND labels.error_code IS NULL"
         Ok(Arc::new(datasets_with_recent_activity_set))
     }
 
-    pub fn start(&self) {
+    pub fn start(&self, tokio_handle: &Handle) {
         tracing::debug!("Starting datasets availability monitoring");
         let monitored_datasets = Arc::clone(&self.monitored_datasets);
         let df = Arc::clone(&self.df);
         let is_task_history_enabled = self.is_task_history_enabled;
-        tokio::spawn(async move {
+        tokio_handle.spawn(async move {
             // no need to check status immediately after start
             tokio::time::sleep(tokio::time::Duration::from_secs(
                 DATASET_UNAVAILABLE_THRESHOLD_SECONDS,

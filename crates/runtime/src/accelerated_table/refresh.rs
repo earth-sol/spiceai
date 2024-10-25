@@ -33,6 +33,7 @@ use opentelemetry::KeyValue;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
+use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::oneshot;
@@ -294,6 +295,7 @@ pub(crate) enum AccelerationRefreshMode {
 }
 
 pub struct Refresher {
+    tokio_handle: Handle,
     runtime_status: Arc<status::RuntimeStatus>,
     dataset_name: TableReference,
     federated: Arc<dyn TableProvider>,
@@ -306,6 +308,7 @@ pub struct Refresher {
 
 impl Refresher {
     pub(crate) fn new(
+        tokio_handle: Handle,
         runtime_status: Arc<status::RuntimeStatus>,
         dataset_name: TableReference,
         federated: Arc<dyn TableProvider>,
@@ -313,6 +316,7 @@ impl Refresher {
         accelerator: Arc<dyn TableProvider>,
     ) -> Self {
         let refresh_task_runner = RefreshTaskRunner::new(
+            tokio_handle.clone(),
             Arc::clone(&runtime_status),
             dataset_name.clone(),
             Arc::clone(&federated),
@@ -321,6 +325,7 @@ impl Refresher {
         );
 
         Self {
+            tokio_handle,
             runtime_status,
             dataset_name,
             federated,
@@ -403,7 +408,7 @@ impl Refresher {
         //   1. Periodic and manual refreshes happening at the same time
         //   2. The periodic refresh happening less than `refresh_check_interval` after a manual
         //        refresh (the sleep future is reset when a manual refresh completes).
-        Some(tokio::spawn(async move {
+        Some(self.tokio_handle.spawn(async move {
             // first refresh is on start, thus duration is 0
             let mut next_scheduled_refresh_timer = Some(sleep(Self::compute_delay(
                 Duration::from_secs(0),
@@ -489,7 +494,7 @@ impl Refresher {
 
         let cache_provider = self.cache_provider.clone();
 
-        tokio::spawn(async move {
+        self.tokio_handle.spawn(async move {
             if let Err(err) = refresh_task
                 .start_streaming_append(cache_provider, Some(ready_sender), refresh_defaults)
                 .await
@@ -514,7 +519,7 @@ impl Refresher {
         let cache_provider = self.cache_provider.clone();
         let refresh = Arc::clone(&self.refresh);
 
-        tokio::spawn(async move {
+        self.tokio_handle.spawn(async move {
             if let Err(err) = refresh_task
                 .start_changes_stream(refresh, changes_stream, cache_provider, Some(ready_sender))
                 .await
@@ -611,6 +616,7 @@ mod tests {
         let refresh = Refresh::new(RefreshMode::Full);
 
         let mut refresher = Refresher::new(
+            Handle::current().clone(),
             status,
             TableReference::bare("test"),
             federated,
@@ -807,6 +813,7 @@ mod tests {
                 .time_format(TimeFormat::ISO8601);
 
             let mut refresher = Refresher::new(
+                Handle::current().clone(),
                 status::RuntimeStatus::new(),
                 TableReference::bare("test"),
                 federated,
@@ -958,6 +965,7 @@ mod tests {
             }
 
             let mut refresher = Refresher::new(
+                Handle::current().clone(),
                 status::RuntimeStatus::new(),
                 TableReference::bare("test"),
                 federated,
@@ -1159,6 +1167,7 @@ mod tests {
             }
 
             let mut refresher = Refresher::new(
+                Handle::current().clone(),
                 status::RuntimeStatus::new(),
                 TableReference::bare("test"),
                 federated,

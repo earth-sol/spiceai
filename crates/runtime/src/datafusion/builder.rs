@@ -26,7 +26,7 @@ use datafusion::{
     prelude::{SessionConfig, SessionContext},
 };
 use datafusion_federation::FederationAnalyzerRule;
-use tokio::sync::RwLock as TokioRwLock;
+use tokio::{runtime::Handle, sync::RwLock as TokioRwLock};
 
 use crate::{embeddings, object_store_registry::default_runtime_env, status};
 
@@ -41,6 +41,7 @@ pub struct DataFusionBuilder {
     config: SessionConfig,
     status: Arc<status::RuntimeStatus>,
     cache_provider: Option<Arc<QueryResultsCacheProvider>>,
+    tokio_handle: Option<Handle>,
 }
 
 impl DataFusionBuilder {
@@ -62,12 +63,20 @@ impl DataFusionBuilder {
             config: df_config,
             status,
             cache_provider: None,
+            tokio_handle: None,
         }
     }
 
     #[must_use]
     pub fn with_cache_provider(mut self, cache_provider: Arc<QueryResultsCacheProvider>) -> Self {
         self.cache_provider = Some(cache_provider);
+        self
+    }
+
+    /// Sets the tokio handle for running background tasks.
+    #[must_use]
+    pub fn with_tokio_handle(mut self, tokio_handle: Handle) -> Self {
+        self.tokio_handle = Some(tokio_handle);
         self
     }
 
@@ -130,6 +139,7 @@ impl DataFusionBuilder {
             cache_provider: RwLock::new(self.cache_provider),
             pending_sink_tables: TokioRwLock::new(Vec::new()),
             accelerated_tables: TokioRwLock::new(HashSet::new()),
+            tokio_handle: self.tokio_handle.unwrap_or_else(|| Handle::current()),
         }
     }
 }

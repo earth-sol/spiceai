@@ -36,7 +36,7 @@ impl TlsConfig {
     pub fn try_new(
         cert_bytes: Vec<u8>,
         key_bytes: Vec<u8>,
-    ) -> std::result::Result<Self, Box<dyn std::error::Error>> {
+    ) -> std::result::Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let certs = load_certs(&cert_bytes)?;
         let key = load_key(&key_bytes)?;
 
@@ -65,7 +65,7 @@ fn load_certs(cert_bytes: &[u8]) -> io::Result<Vec<CertificateDer<'static>>> {
 
 fn load_key(
     key_bytes: &[u8],
-) -> std::result::Result<PrivateKeyDer<'static>, Box<dyn std::error::Error>> {
+) -> std::result::Result<PrivateKeyDer<'static>, Box<dyn std::error::Error + Send + Sync>> {
     let mut cursor = Cursor::new(key_bytes);
     private_key(&mut cursor)?.ok_or_else(|| "No private key found in provided TLS key".into())
 }

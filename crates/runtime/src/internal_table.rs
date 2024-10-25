@@ -20,6 +20,7 @@ use arrow::datatypes::Schema;
 use datafusion::datasource::TableProvider;
 use datafusion::sql::TableReference;
 use snafu::prelude::*;
+use tokio::runtime::Handle;
 use tokio::sync::RwLock;
 
 use crate::accelerated_table::{AcceleratedTableBuilderError, Retention};
@@ -86,7 +87,9 @@ async fn get_local_table_provider(
     Ok(source_table_provider)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn create_internal_accelerated_table(
+    tokio_handle: Handle,
     runtime_status: Arc<status::RuntimeStatus>,
     name: TableReference,
     schema: Arc<Schema>,
@@ -109,6 +112,7 @@ pub async fn create_internal_accelerated_table(
     .context(UnableToCreateAcceleratedTableProviderSnafu)?;
 
     let mut builder = AcceleratedTable::builder(
+        tokio_handle,
         runtime_status,
         name.clone(),
         source_table_provider,

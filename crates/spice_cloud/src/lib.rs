@@ -40,7 +40,7 @@ use runtime::{
     spice_metrics::get_metrics_table_reference,
     status, Runtime,
 };
-use tokio::sync::RwLock;
+use tokio::{runtime::Handle, sync::RwLock};
 
 pub mod catalog;
 pub mod schema;
@@ -188,6 +188,7 @@ impl SpiceExtension {
         let metrics_table_reference = get_metrics_table_reference();
 
         let table = create_synced_internal_accelerated_table(
+            runtime.background_tokio_handle().clone(),
             runtime.status(),
             metrics_table_reference.clone(),
             from.as_str(),
@@ -334,7 +335,9 @@ async fn get_spiceai_table_provider(
 /// # Errors
 ///
 /// This function will return an error if the accelerated table provider cannot be created
+#[allow(clippy::too_many_arguments)]
 pub async fn create_synced_internal_accelerated_table(
+    tokio_handle: Handle,
     runtime_status: Arc<status::RuntimeStatus>,
     table_reference: TableReference,
     from: &str,
@@ -358,6 +361,7 @@ pub async fn create_synced_internal_accelerated_table(
     .context(UnableToCreateAcceleratedTableProviderSnafu)?;
 
     let mut builder = AcceleratedTable::builder(
+        tokio_handle,
         runtime_status,
         table_reference.clone(),
         source_table_provider,

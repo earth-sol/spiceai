@@ -19,6 +19,7 @@ use crate::status;
 use super::{refresh::RefreshOverrides, refresh_task::RefreshTask};
 use futures::future::BoxFuture;
 use tokio::{
+    runtime::Handle,
     select,
     sync::mpsc::{self, Receiver, Sender},
     task::JoinHandle,
@@ -35,6 +36,7 @@ use super::refresh::Refresh;
 /// that only one [`RefreshTaskRunner`] is used per dataset, and that is is the only entity
 /// refreshing an `accelerator`.
 pub struct RefreshTaskRunner {
+    tokio_handle: Handle,
     runtime_status: Arc<status::RuntimeStatus>,
     dataset_name: TableReference,
     federated: Arc<dyn TableProvider>,
@@ -46,6 +48,7 @@ pub struct RefreshTaskRunner {
 impl RefreshTaskRunner {
     #[must_use]
     pub fn new(
+        tokio_handle: Handle,
         runtime_status: Arc<status::RuntimeStatus>,
         dataset_name: TableReference,
         federated: Arc<dyn TableProvider>,
@@ -53,6 +56,7 @@ impl RefreshTaskRunner {
         accelerator: Arc<dyn TableProvider>,
     ) -> Self {
         Self {
+            tokio_handle,
             runtime_status,
             dataset_name,
             federated,
@@ -85,7 +89,7 @@ impl RefreshTaskRunner {
         ));
         let base_refresh = Arc::clone(&self.refresh);
 
-        self.task = Some(tokio::spawn(async move {
+        self.task = Some(self.tokio_handle.spawn(async move {
             let mut task_completion: Option<BoxFuture<super::Result<()>>> = None;
 
             loop {

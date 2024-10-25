@@ -39,9 +39,12 @@ use runtime::spice_metrics;
 use runtime::{extension::ExtensionFactory, Runtime};
 use snafu::prelude::*;
 use spice_cloud::SpiceExtensionFactory;
+use spiced_tokio::TokioRuntimeManager;
 use spiced_tracing::LogVerbosity;
 use tracing::subscriber;
 
+#[path = "tokio.rs"]
+pub mod spiced_tokio;
 #[path = "tracing.rs"]
 mod spiced_tracing;
 mod tls;
@@ -72,7 +75,9 @@ pub enum Error {
     UnableToInitializePodsWatcher { source: runtime::NotifyError },
 
     #[snafu(display("Unable to configure TLS: {source}"))]
-    UnableToInitializeTls { source: Box<dyn std::error::Error> },
+    UnableToInitializeTls {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 
     #[snafu(display("Unable to initialize tracing: {source}"))]
     UnableToInitializeTracing {
@@ -151,7 +156,12 @@ pub struct Args {
     pub very_verbose: bool,
 }
 
-pub async fn run(args: Args) -> Result<()> {
+/// The main entrypoint for the runtime. Exits on error or shutdown signal.
+///
+/// This function must be called from the main thread.
+pub fn run(tokio_manager: &TokioRuntimeManager, args: Args) -> Result<()> {
+    // Enter the main runtime for functions that require a Tokio runtime to be available.
+    let _main_handle = tokio_manager.main().enter();
     let prometheus_registry = args.metrics.map(|_| prometheus::Registry::new());
 
     let current_dir = env::current_dir().unwrap_or(PathBuf::from("."));
@@ -196,51 +206,65 @@ pub async fn run(args: Args) -> Result<()> {
         )]))
         .with_datasets_health_monitor()
         .with_metrics_server_opt(args.metrics, prometheus_registry.clone())
-        .with_tokio_servers_runtime()
-        .context(UnableToInitializeTokioRuntimeSnafu)?;
+        .with_tokio_background_runtime(tokio_manager.background_raw().clone());
 
     if args.pods_watcher_enabled {
         let pods_watcher = PodsWatcher::new(current_dir.clone());
         builder = builder.with_pods_watcher(pods_watcher);
     }
 
-    let rt = builder.build().await;
+    let rt = tokio_manager.main().block_on(builder.build());
 
-    spiced_tracing::init_tracing(
-        &app,
-        tracing_config.as_ref(),
-        rt.datafusion(),
-        LogVerbosity::from_flags_and_env(
-            args.verbose == 1,                      // -v or --verbose
-            args.verbose >= 2 || args.very_verbose, // -vv or --very-verbose
-            "SPICED_LOG",
-        ),
-    )
-    .await
-    .context(UnableToInitializeTracingSnafu)?;
+    tokio_manager
+        .main()
+        .block_on(spiced_tracing::init_tracing(
+            &app,
+            tracing_config.as_ref(),
+            rt.datafusion(),
+            LogVerbosity::from_flags_and_env(
+                args.verbose == 1,                      // -v or --verbose
+                args.verbose >= 2 || args.very_verbose, // -vv or --very-verbose
+                "SPICED_LOG",
+            ),
+        ))
+        .context(UnableToInitializeTracingSnafu)?;
 
     if let Some(metrics_registry) = prometheus_registry {
         init_metrics(rt.datafusion(), metrics_registry).context(UnableToInitializeMetricsSnafu)?;
     }
 
-    let tls_config = tls::load_tls_config(&args, spicepod_tls_config.as_ref(), rt.secrets())
-        .await
+    let tls_config = tokio_manager
+        .main()
+        .block_on(tls::load_tls_config(
+            &args,
+            spicepod_tls_config.as_ref(),
+            rt.secrets(),
+        ))
         .context(UnableToInitializeTlsSnafu)?;
 
-    start_anonymous_telemetry(&args, telemetry_config.as_ref(), app_name.as_ref()).await;
+    tokio_manager
+        .background()
+        .block_on(start_anonymous_telemetry(
+            &args,
+            telemetry_config.as_ref(),
+            app_name.as_ref(),
+        ));
 
     let cloned_rt = rt.clone();
-    let server_thread =
-        tokio::spawn(async move { cloned_rt.start_servers(args.runtime, tls_config).await });
+    let server_thread = tokio_manager
+        .server()
+        .spawn(async move { cloned_rt.start_servers(args.runtime, tls_config).await });
 
-    tokio::select! {
-        () = rt.load_components() => {},
-        () = runtime::shutdown_signal() => {
-            tracing::debug!("Cancelling runtime initializing!");
-        },
-    }
+    tokio_manager.main().block_on(async move {
+        tokio::select! {
+            () = rt.load_components() => {},
+            () = runtime::shutdown_signal() => {
+                tracing::debug!("Cancelling runtime initializing!");
+            },
+        }
+    });
 
-    match server_thread.await {
+    match server_thread.block_on(&tokio_manager.server()) {
         Ok(ok) => ok.context(UnableToStartServersSnafu),
         Err(_) => Err(Error::GenericError {
             reason: "Unable to start spiced".into(),

@@ -98,6 +98,7 @@ pub async fn register_metrics_table(datafusion: &Arc<DataFusion>) -> Result<(), 
     );
 
     let table = create_internal_accelerated_table(
+        datafusion.background_tokio_handle().clone(),
         datafusion.runtime_status(),
         metrics_table_reference.clone(),
         otel_arrow::schema(),

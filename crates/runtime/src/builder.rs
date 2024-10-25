@@ -17,7 +17,7 @@ limitations under the License.
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use app::App;
-use tokio::{runtime::Runtime as TokioRuntime, sync::RwLock};
+use tokio::{runtime::Handle, sync::RwLock};
 
 use crate::{
     dataaccelerator, dataconnector,
@@ -41,7 +41,7 @@ pub struct RuntimeBuilder {
     prometheus_registry: Option<prometheus::Registry>,
     datafusion: Option<Arc<DataFusion>>,
     runtime_status: Option<Arc<status::RuntimeStatus>>,
-    tokio_servers_runtime: Option<Arc<TokioRuntime>>,
+    tokio_background_runtime: Option<Handle>,
 }
 
 impl RuntimeBuilder {
@@ -56,7 +56,7 @@ impl RuntimeBuilder {
             datafusion: None,
             autoload_extensions: HashMap::new(),
             runtime_status: None,
-            tokio_servers_runtime: None,
+            tokio_background_runtime: None,
         }
     }
 
@@ -119,11 +119,11 @@ impl RuntimeBuilder {
         self
     }
 
-    /// Configures a separate Tokio runtime instance to be used by the servers.
-    /// (e.g. HTTP, Flight, etc.)
-    pub fn with_tokio_servers_runtime(mut self) -> std::io::Result<Self> {
-        self.tokio_servers_runtime = Some(Arc::new(TokioRuntime::new()?));
-        Ok(self)
+    /// Configures a separate Tokio runtime instance to be used by background tasks.
+    /// (e.g. accelerated refresh, eviction, etc.)
+    pub fn with_tokio_background_runtime(mut self, handle: Handle) -> Self {
+        self.tokio_background_runtime = Some(handle);
+        self
     }
 
     pub fn with_runtime_status(mut self, runtime_status: Arc<status::RuntimeStatus>) -> Self {
@@ -142,9 +142,18 @@ impl RuntimeBuilder {
             None => status::RuntimeStatus::new(),
         };
 
+        let background_handle = self
+            .tokio_background_runtime
+            .clone()
+            .unwrap_or_else(|| Handle::current());
+
         let df = match self.datafusion {
             Some(df) => df,
-            None => Arc::new(DataFusion::builder(Arc::clone(&status)).build()),
+            None => Arc::new(
+                DataFusion::builder(Arc::clone(&status))
+                    .with_tokio_handle(background_handle.clone())
+                    .build(),
+            ),
         };
 
         let datasets_health_monitor = if self.datasets_health_monitor_enabled {
@@ -154,7 +163,7 @@ impl RuntimeBuilder {
                 .is_some_and(|app| app.runtime.task_history.enabled);
             let datasets_health_monitor = DatasetsHealthMonitor::new(Arc::clone(&df))
                 .with_task_history_enabled(is_task_history_enabled);
-            datasets_health_monitor.start();
+            datasets_health_monitor.start(&background_handle);
             Some(Arc::new(datasets_health_monitor))
         } else {
             None
@@ -178,7 +187,7 @@ impl RuntimeBuilder {
             metrics_endpoint: self.metrics_endpoint,
             prometheus_registry: self.prometheus_registry,
             status,
-            tokio_servers_runtime: self.tokio_servers_runtime,
+            tokio_background_runtime: background_handle,
         };
 
         let mut extensions: HashMap<String, Arc<dyn Extension>> = HashMap::new();

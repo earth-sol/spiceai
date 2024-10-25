@@ -51,7 +51,7 @@ use datafusion_federation::FederatedTableProviderAdaptor;
 use itertools::Itertools;
 use query::{Protocol, QueryBuilder};
 use snafu::prelude::*;
-use tokio::spawn;
+use tokio::runtime::Handle;
 use tokio::sync::oneshot;
 use tokio::sync::RwLock as TokioRwLock;
 use tokio::time::{sleep, Instant};
@@ -228,6 +228,7 @@ struct PendingSinkRegistration {
 
 pub struct DataFusion {
     pub ctx: Arc<SessionContext>,
+    tokio_handle: Handle,
     runtime_status: Arc<status::RuntimeStatus>,
     data_writers: RwLock<HashSet<TableReference>>,
     accelerated_tables: TokioRwLock<HashSet<TableReference>>,
@@ -245,6 +246,11 @@ impl DataFusion {
     #[must_use]
     pub fn runtime_status(&self) -> Arc<status::RuntimeStatus> {
         Arc::clone(&self.runtime_status)
+    }
+
+    #[must_use]
+    pub fn background_tokio_handle(&self) -> &Handle {
+        &self.tokio_handle
     }
 
     #[must_use]
@@ -683,6 +689,7 @@ impl DataFusion {
             .context(InvalidTimeColumnTimeFormatSnafu)?;
 
         let mut accelerated_table_builder = AcceleratedTable::builder(
+            self.tokio_handle.clone(),
             Arc::clone(&self.runtime_status),
             dataset.name.clone(),
             Arc::clone(&source_table_provider),
@@ -931,7 +938,7 @@ impl DataFusion {
         }
 
         let ctx = Arc::clone(&self.ctx);
-        spawn(async move {
+        self.tokio_handle.spawn(async move {
             // Tables are currently lazily created (i.e. not created until first data is received) so that we know the table schema.
             // This means that we can't create a view on top of a table until the first data is received for all dependent tables and therefore
             // the tables are created. To handle this, wait until all tables are created.

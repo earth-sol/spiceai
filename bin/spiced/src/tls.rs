@@ -30,7 +30,7 @@ pub(crate) async fn load_tls_config(
     args: &Args,
     spicepod_tls_config: Option<&SpicepodTlsConfig>,
     secrets: Arc<RwLock<Secrets>>,
-) -> std::result::Result<Option<Arc<TlsConfig>>, Box<dyn std::error::Error>> {
+) -> std::result::Result<Option<Arc<TlsConfig>>, Box<dyn std::error::Error + Send + Sync>> {
     let tls_enabled = args.tls_enabled || spicepod_tls_config.as_ref().is_some_and(|c| c.enabled);
     if !tls_enabled {
         return Ok(None);
@@ -87,7 +87,7 @@ async fn load_spicepod_tls_param(
     secret_field: impl Fn(&SpicepodTlsConfig) -> &Option<String>,
     secret_name: &str,
     param_name: &str,
-) -> std::result::Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+) -> std::result::Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
     let Some(tls) = spicepod_tls_config else {
         return Ok(None);
     };

@@ -151,6 +151,39 @@ jobs:
       - run: make ci test
         if: needs.check_changes.outputs.relevant_changes == 'true'
 
+  check-thread-pool:
+    name: Check Thread Pool
+    runs-on: spiceai-runners
+    needs: check_changes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          os: 'linux'
+      
+      - name: Set up make
+        uses: ./.github/actions/setup-make
+
+      - name: Set up cc
+        uses: ./.github/actions/setup-cc
+
+      - name: Check Thread Pool
+        if: needs.check_changes.outputs.relevant_changes == 'true'
+        run: |
+          make install-runtime-dev
+          ~/.spice/bin/spiced --version
+
+          # Verify servers are on the server thread pool
+          lldb -o "breakpoint set --name start_servers" -o "process launch" -o "quit" ~/.spice/bin/spiced | tee lldb.out
+          grep "tokio-spiced-server" lldb.out
+
+          # Verify accelerated refresh is on the background thread pool
+          lldb -o "breakpoint set --name run_once" -o "process launch" -o "quit" ~/.spice/bin/spiced | tee lldb.out
+          grep "tokio-spiced-background" lldb.out
+
   build-docker:
     name: Build Docker Image
     runs-on: spiceai-runners
