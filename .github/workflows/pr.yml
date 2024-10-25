@@ -196,6 +196,7 @@ jobs:
               refresh_check_interval: 10s
               refresh_mode: full
           " > spicepod.yaml
+          cat spicepod.yaml
 
           # Verify servers are on the server thread pool
           lldb -o "breakpoint set --name start_servers" -o "process launch" -o "quit" ~/.spice/bin/spiced | tee lldb.out
