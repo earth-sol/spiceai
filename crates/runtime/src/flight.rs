@@ -163,7 +163,10 @@ impl Service {
     ) -> Result<Schema, Status> {
         let query = QueryBuilder::new(sql, datafusion, protocol).build();
 
-        let schema = query.get_schema().await.map_err(handle_datafusion_error)?;
+        let schema = query
+            .get_schema()
+            .await
+            .map_err(handle_get_schema_datafusion_error)?;
         Ok(schema)
     }
 
@@ -211,19 +214,7 @@ impl Service {
                             flights.push(flight_batch.into());
                             Ok(flights)
                         }
-                        Err(e) => match e {
-                            DataFusionError::External(e) => {
-                                if let Some(execution_error) =
-                                    e.to_string().strip_prefix("Execution error: ")
-                                {
-                                    return Err(Status::invalid_argument(
-                                        execution_error.to_string(),
-                                    ));
-                                }
-                                Err(Status::invalid_argument(e.to_string()))
-                            }
-                            _ => Err(Status::invalid_argument(e.to_string())),
-                        },
+                        Err(e) => Err(handle_sql_datafusion_error(e)),
                     }
                 }
             })
@@ -263,7 +254,7 @@ where
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn handle_datafusion_error(e: DataFusionError) -> Status {
+fn handle_get_schema_datafusion_error(e: DataFusionError) -> Status {
     match e {
         DataFusionError::Plan(err_msg) | DataFusionError::Execution(err_msg) => {
             Status::invalid_argument(err_msg)
@@ -280,6 +271,34 @@ fn handle_datafusion_error(e: DataFusionError) -> Status {
             Status::invalid_argument(format!("{schema_err}"))
         }
         _ => to_tonic_err(e),
+    }
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn handle_sql_datafusion_error(e: DataFusionError) -> Status {
+    match e {
+        DataFusionError::External(ref external_error) => {
+            if let Some(execution_error) =
+                external_error.to_string().strip_prefix("Execution error: ")
+            {
+                return Status::invalid_argument(execution_error.to_string());
+            }
+            Status::invalid_argument(e.to_string())
+        }
+        DataFusionError::ArrowError(ref arrow_error, _) => {
+            // The S3 query error is managed here to avoid
+            // introducing custom downcast logic within Datafusion or Object Store.
+            let error_message = format!("{arrow_error:?}");
+            let s3_error_indicator = "store: \"S3\",";
+
+            if let Some(error_details) = error_message.split(s3_error_indicator).nth(1) {
+                if error_details.contains("TimedOut") && error_details.contains("Decode") {
+                    return Status::invalid_argument("Timed out while fetching data from S3. Please increase the `client_timeout` parameter.");
+                }
+            }
+            Status::invalid_argument(e.to_string())
+        }
+        _ => Status::invalid_argument(e.to_string()),
     }
 }
 
