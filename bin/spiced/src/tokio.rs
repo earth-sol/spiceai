@@ -83,9 +83,9 @@ impl TokioRuntimeManager {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            main: get_runtime("tokio-spiced-main"),
-            server: get_runtime("tokio-spiced-server"),
-            background: get_runtime("tokio-spiced-background"),
+            main: get_runtime("sp-main"), // Linux limits thread names to 15 characters
+            server: get_runtime("sp-server"),
+            background: get_runtime("sp-background"),
         }
     }
 

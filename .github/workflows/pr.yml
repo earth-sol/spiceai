@@ -200,11 +200,11 @@ jobs:
 
           # Verify servers are on the server thread pool
           lldb -o "breakpoint set --name start_servers" -o "process launch" -o "quit" ~/.spice/bin/spiced | tee lldb.out
-          grep "tokio-spiced-server" lldb.out
+          grep "sp-server" lldb.out
 
           # Verify accelerated refresh is on the background thread pool
           lldb -o "breakpoint set --name run_once" -o "process launch" -o "quit" ~/.spice/bin/spiced | tee lldb.out
-          grep "tokio-spiced-background" lldb.out
+          grep "sp-background" lldb.out
 
   build-docker:
     name: Build Docker Image
