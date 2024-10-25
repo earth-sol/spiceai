@@ -170,6 +170,10 @@ jobs:
       - name: Set up cc
         uses: ./.github/actions/setup-cc
 
+      - name: Set up lldb
+        run: |
+          sudo apt-get install -y lldb
+
       - name: Check Thread Pool
         if: needs.check_changes.outputs.relevant_changes == 'true'
         run: |
