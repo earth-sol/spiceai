@@ -145,7 +145,7 @@ install-cli-dev: build-cli-dev
 .PHONY: install-runtime-dev
 install-runtime-dev: build-runtime-dev
 	mkdir -p ~/.spice/bin
-	install -m 755 target/release/spiced ~/.spice/bin/spiced
+	install -m 755 target/debug/spiced ~/.spice/bin/spiced
 
 ################################################################################
 # Target: modtidy                                                              #

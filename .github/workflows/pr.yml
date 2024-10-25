@@ -176,6 +176,23 @@ jobs:
           make install-runtime-dev
           ~/.spice/bin/spiced --version
 
+          # Add spicepod.yaml
+          echo "
+          version: v1beta1
+          kind: Spicepod
+          name: quickstart
+          datasets:
+          - from: s3://spiceai-demo-datasets/taxi_trips/2024/
+            name: taxi_trips
+            description: taxi trips in s3
+            params:
+              file_format: parquet
+            acceleration:
+              enabled: true
+              refresh_check_interval: 10s
+              refresh_mode: full
+          " > spicepod.yaml
+
           # Verify servers are on the server thread pool
           lldb -o "breakpoint set --name start_servers" -o "process launch" -o "quit" ~/.spice/bin/spiced | tee lldb.out
           grep "tokio-spiced-server" lldb.out
