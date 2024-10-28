@@ -68,23 +68,13 @@ fn resource(spicepod_name: &str) -> Resource {
     spicepod_id_hasher.update(spicepod_name);
     let spicepod_id = format!("{:x}", spicepod_id_hasher.finalize());
 
-    let mut key_values = vec![
+    let key_values = vec![
         KeyValue::new("service.name", "spiced"), // May be overridden by setting OTEL_SERVICE_NAME env variable
         KeyValue::new("name", "spiced"),
         KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-        #[cfg(debug_assertions)]
-        KeyValue::new("service.build", "dev"),
-        #[cfg(not(debug_assertions))]
-        KeyValue::new("service.build", "release"),
         KeyValue::new("service.instance.id", instance_id),
         KeyValue::new("spicepod.id", spicepod_id),
     ];
-
-    if *INTERNAL_BUILD {
-        key_values.push(KeyValue::new("service.internal", "true"));
-    } else {
-        key_values.push(KeyValue::new("service.internal", "false"));
-    }
 
     Resource::new(key_values)
 }
