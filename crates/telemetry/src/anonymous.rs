@@ -46,12 +46,6 @@ static ENDPOINT: LazyLock<Arc<str>> = LazyLock::new(|| {
         .into()
 });
 
-static INTERNAL_BUILD: LazyLock<bool> = LazyLock::new(|| {
-    std::env::var("SPICEAI_INTERNAL_BUILD")
-        .map(|v| v == "true")
-        .unwrap_or(false)
-});
-
 fn resource(spicepod_name: &str) -> Resource {
     let hostname = hostname::get()
         .unwrap_or_else(|_| "unknown".into())
