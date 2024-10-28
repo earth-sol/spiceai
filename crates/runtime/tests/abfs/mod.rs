@@ -21,7 +21,6 @@ use bollard::secret::HealthConfig;
 use datafusion::assert_batches_eq;
 use runtime::Runtime;
 use spicepod::component::{dataset::Dataset, params::Params as DatasetParams};
-use std::path::PathBuf;
 use tracing::instrument;
 
 use crate::docker::{ContainerRunnerBuilder, RunningContainer};
@@ -56,9 +55,7 @@ pub async fn upload_sample_file() -> Result<(), anyhow::Error> {
     container_client.create().await?;
     tracing::trace!("Storage container created");
     tracing::trace!("Uploading sample file");
-    let sample_file = std::fs::read_to_string(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data/taxi_sample.csv"),
-    )?;
+    let sample_file = include_str!("../test_data/taxi_sample.csv");
     let blob_client = container_client.blob_client("taxi_sample.csv");
 
     blob_client
@@ -109,10 +106,16 @@ async fn run_queries() -> Result<(), anyhow::Error> {
     );
     emulator_dataset.params = Some(emulator_params);
 
-    let mut abfs_dataset = Dataset::new("abfs://testcontainer/taxi_sample.csv", "abfs_prefix");
+    let mut abfs_dataset = Dataset::new(
+        "abfs://data/taxi_small_samples/taxi_sample.csv",
+        "abfs_prefix",
+    );
     let abfs_params = DatasetParams::from_string_map(
         vec![
-            ("abfs_account".to_string(), "spiceazuretestblob".to_string()),
+            (
+                "abfs_account".to_string(),
+                "spiceaidemodatasets".to_string(),
+            ),
             // `skip_signature` is required for Anonymous blob access
             ("abfs_skip_signature".to_string(), "true".to_string()),
         ]

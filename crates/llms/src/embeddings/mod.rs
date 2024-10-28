@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
 
-use crate::chunking::{CharacterSplittingChunker, Chunker, ChunkingConfig};
+use crate::chunking::{Chunker, ChunkingConfig, RecursiveSplittingChunker};
 
 pub mod candle;
 
@@ -71,12 +71,13 @@ pub trait Embed: Sync + Send {
         Ok(())
     }
 
-    // TODO: Should have tokenizer specific method for specific implementations.
-    fn chunker(&self, cfg: ChunkingConfig) -> Option<Arc<dyn Chunker>> {
-        Some(Arc::new(CharacterSplittingChunker::new(&cfg)))
+    fn chunker(&self, cfg: &ChunkingConfig) -> Option<Arc<dyn Chunker>> {
+        Some(Arc::new(RecursiveSplittingChunker::with_character_sizer(
+            cfg,
+        )))
     }
 
-    /// Returns the size of the embedding vector returned by the model.
+    /// Returns the size of the embedding vector returned by the model. Return -1 if the size should be inferred from [`Embed::embed`] method.
     fn size(&self) -> i32;
 
     /// An OpenAI-compatible interface for the embedding trait. If not implemented, the default

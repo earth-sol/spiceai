@@ -27,7 +27,7 @@ build-dev:
 .PHONY: ci
 ci:
 	make -C bin/spice
-	export SPICED_TARGET_DIR=/workspace/spiceai/target; make -C bin/spiced
+	make -C bin/spiced
 
 .PHONY: test
 test:
@@ -37,6 +37,7 @@ test:
 nextest:
 	@cargo nextest run --all
 
+# Also update .github/workflows/integration.yml with changes to this target
 .PHONY: test-integration
 test-integration:
 	# Test if .env file exists, and login to Spice if not

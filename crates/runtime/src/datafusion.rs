@@ -30,27 +30,25 @@ use crate::dataconnector::{DataConnector, DataConnectorError};
 use crate::dataupdate::{
     DataUpdate, StreamingDataUpdate, StreamingDataUpdateExecutionPlan, UpdateType,
 };
-use crate::object_store_registry::default_runtime_env;
 use crate::secrets::Secrets;
-use crate::{embeddings, status, view};
+use crate::{status, view};
 
 use arrow::datatypes::{Schema, SchemaRef};
 use arrow::error::ArrowError;
 use arrow_tools::schema::verify_schema;
+use builder::DataFusionBuilder;
 use cache::QueryResultsCacheProvider;
 use datafusion::catalog::CatalogProvider;
 use datafusion::catalog::SchemaProvider;
-use datafusion::catalog_common::MemoryCatalogProvider;
 use datafusion::datasource::{TableProvider, ViewTable};
 use datafusion::error::DataFusionError;
-use datafusion::execution::context::{SessionConfig, SessionContext};
-use datafusion::execution::session_state::SessionStateBuilder;
+use datafusion::execution::context::SessionContext;
 use datafusion::physical_plan::collect;
 use datafusion::sql::parser::DFParser;
 use datafusion::sql::sqlparser::dialect::PostgreSqlDialect;
 use datafusion::sql::{sqlparser, TableReference};
-use datafusion_federation::{FederatedTableProviderAdaptor, FederationAnalyzerRule};
-use extension::{bytes_processed::BytesProcessedOptimizerRule, SpiceQueryPlanner};
+use datafusion_federation::FederatedTableProviderAdaptor;
+use itertools::Itertools;
 use query::{Protocol, QueryBuilder};
 use snafu::prelude::*;
 use tokio::spawn;
@@ -60,13 +58,12 @@ use tokio::time::{sleep, Instant};
 
 pub mod query;
 
+pub mod builder;
 mod extension;
 pub mod filter_converter;
 pub mod refresh_sql;
 pub mod schema;
 pub mod udf;
-
-use self::schema::SpiceSchemaProvider;
 
 pub const SPICE_DEFAULT_CATALOG: &str = "spice";
 pub const SPICE_RUNTIME_SCHEMA: &str = "runtime";
@@ -241,85 +238,8 @@ pub struct DataFusion {
 
 impl DataFusion {
     #[must_use]
-    pub fn new(status: Arc<status::RuntimeStatus>) -> Self {
-        Self::new_with_cache_provider(status, None)
-    }
-
-    /// Create a new `DataFusion` instance.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the default schema cannot be registered.
-    #[must_use]
-    pub fn new_with_cache_provider(
-        status: Arc<status::RuntimeStatus>,
-        cache_provider: Option<Arc<QueryResultsCacheProvider>>,
-    ) -> Self {
-        let mut df_config = SessionConfig::new()
-            .with_information_schema(true)
-            .with_create_default_catalog_and_schema(false)
-            .set_bool(
-                "datafusion.execution.listing_table_ignore_subdirectory",
-                false,
-            );
-
-        df_config.options_mut().sql_parser.dialect = "PostgreSQL".to_string();
-        df_config.options_mut().catalog.default_catalog = SPICE_DEFAULT_CATALOG.to_string();
-        df_config.options_mut().catalog.default_schema = SPICE_DEFAULT_SCHEMA.to_string();
-
-        let mut state = SessionStateBuilder::new()
-            .with_config(df_config)
-            .with_default_features()
-            .with_query_planner(Arc::new(SpiceQueryPlanner::new()))
-            .with_runtime_env(default_runtime_env())
-            .build();
-
-        if let Err(e) = datafusion_functions_json::register_all(&mut state) {
-            panic!("Unable to register JSON functions: {e}");
-        };
-
-        let ctx = SessionContext::new_with_state(state);
-        ctx.add_analyzer_rule(Arc::new(FederationAnalyzerRule::new()));
-        ctx.add_optimizer_rule(Arc::new(BytesProcessedOptimizerRule::new()));
-        ctx.register_udf(embeddings::cosine_distance::CosineDistance::new().into());
-        ctx.register_udf(crate::datafusion::udf::Greatest::new().into());
-        ctx.register_udf(crate::datafusion::udf::Least::new().into());
-        let catalog = MemoryCatalogProvider::new();
-        let default_schema = SpiceSchemaProvider::new();
-        let runtime_schema = SpiceSchemaProvider::new();
-        let metadata_schema = SpiceSchemaProvider::new();
-
-        match catalog.register_schema(SPICE_DEFAULT_SCHEMA, Arc::new(default_schema)) {
-            Ok(_) => {}
-            Err(e) => {
-                panic!("Unable to register default schema: {e}");
-            }
-        }
-
-        match catalog.register_schema(SPICE_RUNTIME_SCHEMA, Arc::new(runtime_schema)) {
-            Ok(_) => {}
-            Err(e) => {
-                panic!("Unable to register spice runtime schema: {e}");
-            }
-        }
-
-        match catalog.register_schema(SPICE_METADATA_SCHEMA, Arc::new(metadata_schema)) {
-            Ok(_) => {}
-            Err(e) => {
-                panic!("Unable to register spice runtime schema: {e}");
-            }
-        }
-
-        ctx.register_catalog(SPICE_DEFAULT_CATALOG, Arc::new(catalog));
-
-        DataFusion {
-            runtime_status: status,
-            ctx: Arc::new(ctx),
-            data_writers: RwLock::new(HashSet::new()),
-            cache_provider: RwLock::new(cache_provider),
-            pending_sink_tables: TokioRwLock::new(Vec::new()),
-            accelerated_tables: TokioRwLock::new(HashSet::new()),
-        }
+    pub fn builder(status: Arc<status::RuntimeStatus>) -> DataFusionBuilder {
+        DataFusionBuilder::new(status)
     }
 
     #[must_use]
@@ -368,16 +288,16 @@ impl DataFusion {
 
     pub async fn get_table(
         &self,
-        table_reference: TableReference,
+        table_reference: &TableReference,
     ) -> Option<Arc<dyn TableProvider>> {
-        let catalog_provider = match &table_reference {
+        let catalog_provider = match table_reference {
             TableReference::Bare { .. } | TableReference::Partial { .. } => {
                 self.ctx.catalog(SPICE_DEFAULT_CATALOG)
             }
             TableReference::Full { catalog, .. } => self.ctx.catalog(catalog),
         }?;
 
-        let schema_provider = match &table_reference {
+        let schema_provider = match table_reference {
             TableReference::Bare { .. } => catalog_provider.schema(SPICE_DEFAULT_SCHEMA),
             TableReference::Partial { schema, .. } | TableReference::Full { schema, .. } => {
                 catalog_provider.schema(schema)
@@ -1075,6 +995,52 @@ impl DataFusion {
         });
 
         Ok(())
+    }
+
+    /// Returns all table names in user defined schemas (i.e. not system or runtime schemas).
+    ///
+    /// Specifically filters out:
+    ///  - `spice.runtime`
+    ///  - `spice.metadata`
+    pub fn get_user_table_names(&self) -> Vec<TableReference> {
+        self.ctx
+            .catalog_names()
+            .iter()
+            .flat_map(|ctlg| {
+                let schemas = self
+                    .ctx
+                    .catalog(ctlg)
+                    .map(|c| c.schema_names())
+                    .unwrap_or_default();
+
+                self.ctx
+                    .catalog(ctlg)
+                    .map(|c| {
+                        schemas
+                            .iter()
+                            .filter(|schema| {
+                                !(ctlg == SPICE_DEFAULT_CATALOG && *schema == SPICE_RUNTIME_SCHEMA
+                                    || *schema == SPICE_METADATA_SCHEMA)
+                            })
+                            .flat_map(|schema| {
+                                c.schema(schema)
+                                    .map(|s| s.table_names())
+                                    .unwrap_or_default()
+                                    .iter()
+                                    .map(|t| {
+                                        TableReference::full(
+                                            Arc::from(ctlg.clone()),
+                                            Arc::from(schema.clone()),
+                                            Arc::from(t.clone()),
+                                        )
+                                    })
+                                    .collect::<Vec<TableReference>>()
+                            })
+                            .collect::<Vec<TableReference>>()
+                    })
+                    .unwrap_or_default()
+            })
+            .collect_vec()
     }
 
     pub fn get_public_table_names(&self) -> Result<Vec<String>> {

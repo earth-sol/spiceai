@@ -20,13 +20,13 @@ use std::{
 };
 
 use crate::exporter::AnonymousTelemetryExporter;
-use opentelemetry::{global::GlobalMeterProvider, KeyValue};
+use opentelemetry::KeyValue;
 use opentelemetry_sdk::{
     metrics::{
         data::{ResourceMetrics, Temporality},
         exporter::PushMetricsExporter,
-        reader::{AggregationSelector, MetricReader, TemporalitySelector},
-        Aggregation, InstrumentKind, ManualReader, PeriodicReader, Pipeline, SdkMeterProvider,
+        reader::{MetricReader, TemporalitySelector},
+        InstrumentKind, ManualReader, PeriodicReader, Pipeline, SdkMeterProvider,
     },
     runtime::Tokio,
     Resource,
@@ -91,10 +91,10 @@ pub async fn start(spicepod_name: &str) {
         .build();
 
     if crate::meter::METER_PROVIDER_ONCE
-        .set(GlobalMeterProvider::new(provider))
+        .set(Arc::new(provider))
         .is_err()
     {
-        tracing::error!("Failed to set global meter provider for the anonymous telemetry, already set by another codepath?");
+        tracing::trace!("Failed to set global meter provider for the anonymous telemetry, already set by another codepath?");
     }
 
     // Send an initial telemetry event to indicate the start of telemetry collection
@@ -106,17 +106,17 @@ pub async fn start(spicepod_name: &str) {
     };
 
     if let Err(err) = initial_reader.collect(&mut rm) {
-        tracing::error!("Failed to collect initial telemetry: {:?}", err);
+        tracing::trace!("Failed to collect initial telemetry: {:?}", err);
     };
 
     oss_telemetry_exporter
         .export(&mut rm)
         .await
         .unwrap_or_else(|err| {
-            tracing::error!("Failed to export initial telemetry: {:?}", err);
+            tracing::trace!("Failed to export initial telemetry: {:?}", err);
         });
 
-    tracing::debug!("Started anonymous telemetry collection to {}", *ENDPOINT);
+    tracing::trace!("Started anonymous telemetry collection to {}", *ENDPOINT);
 }
 
 #[derive(Debug, Clone)]
@@ -153,11 +153,5 @@ impl MetricReader for InitialReader {
 impl TemporalitySelector for InitialReader {
     fn temporality(&self, kind: InstrumentKind) -> Temporality {
         self.reader.temporality(kind)
-    }
-}
-
-impl AggregationSelector for InitialReader {
-    fn aggregation(&self, kind: InstrumentKind) -> Aggregation {
-        self.reader.aggregation(kind)
     }
 }

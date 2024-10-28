@@ -20,15 +20,10 @@ use arrow::array::RecordBatch;
 use async_trait::async_trait;
 use flight_client::{Credentials, FlightClient};
 use opentelemetry::metrics::MetricsError;
-use opentelemetry_sdk::metrics::{
-    data::Temporality,
-    reader::{AggregationSelector, DefaultAggregationSelector, TemporalitySelector},
-    Aggregation, InstrumentKind,
-};
+use opentelemetry_sdk::metrics::{data::Temporality, reader::TemporalitySelector, InstrumentKind};
 
 #[derive(Debug, Clone)]
 pub struct AnonymousTelemetryExporter {
-    aggregation_selector: DefaultAggregationSelector,
     flight_client: Option<FlightClient>,
 }
 
@@ -37,20 +32,11 @@ impl AnonymousTelemetryExporter {
         let flight_client = match FlightClient::try_new(url, Credentials::anonymous(), None).await {
             Ok(client) => Some(client),
             Err(e) => {
-                tracing::error!("Unable to initialize anonymous telemetry: {e}");
+                tracing::trace!("Unable to initialize anonymous telemetry: {e}");
                 None
             }
         };
-        Self {
-            aggregation_selector: DefaultAggregationSelector::new(),
-            flight_client,
-        }
-    }
-}
-
-impl AggregationSelector for AnonymousTelemetryExporter {
-    fn aggregation(&self, kind: InstrumentKind) -> Aggregation {
-        self.aggregation_selector.aggregation(kind)
+        Self { flight_client }
     }
 }
 
@@ -68,7 +54,7 @@ impl otel_arrow::ArrowExporter for AnonymousTelemetryExporter {
         };
 
         if let Err(e) = flight_client.publish("oss_telemetry", vec![metrics]).await {
-            tracing::error!("Unable to publish anonymous telemetry: {e}");
+            tracing::trace!("Unable to publish anonymous telemetry: {e}");
         };
 
         Ok(())

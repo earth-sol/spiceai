@@ -16,7 +16,7 @@ limitations under the License.
 
 use crate::chat::message_to_mistral;
 
-use super::{Chat, Error as ChatError, FailedToRunModelSnafu, Result};
+use super::{nsql::SqlGeneration, Chat, Error as ChatError, FailedToRunModelSnafu, Result};
 use async_openai::{
     error::{ApiError, OpenAIError},
     types::{
@@ -29,11 +29,12 @@ use async_trait::async_trait;
 use futures::Stream;
 use mistralrs::{
     ChatCompletionResponse, Constraint, Device, DeviceMapMetadata, Function, GGMLLoaderBuilder,
-    GGMLSpecificConfig, GGUFLoaderBuilder, GGUFSpecificConfig, MistralRs, MistralRsBuilder,
-    ModelDType, NormalLoaderBuilder, NormalRequest, Request as MistralRequest, RequestMessage,
-    Response as MistralResponse, SamplingParams, TokenSource, Tool, ToolChoice, ToolType,
+    GGMLSpecificConfig, GGUFLoaderBuilder, GGUFSpecificConfig, LocalModelPaths, MistralRs,
+    MistralRsBuilder, ModelDType, ModelPaths, NormalLoaderBuilder, NormalRequest, Pipeline,
+    Request as MistralRequest, RequestMessage, Response as MistralResponse, SamplingParams,
+    TokenSource, Tool, ToolChoice, ToolType,
 };
-use mistralrs_core::{LocalModelPaths, ModelPaths, Pipeline};
+
 use snafu::ResultExt;
 use std::{
     collections::HashMap,
@@ -224,7 +225,7 @@ impl MistralLlama {
         Device::cuda_if_available(0).unwrap_or(default_device)
     }
 
-    pub fn from_hf(model_id: &str, arch: &str) -> Result<Self> {
+    pub fn from_hf(model_id: &str, arch: &str, hf_token_literal: Option<String>) -> Result<Self> {
         let model_parts: Vec<&str> = model_id.split(':').collect();
 
         let loader_type = mistralrs::NormalLoaderType::from_str(arch).map_err(|_| {
@@ -240,12 +241,15 @@ impl MistralLlama {
             Some(model_parts[0].to_string()),
         );
         let device = Self::get_device();
+
+        let token_source = hf_token_literal.map_or(TokenSource::CacheToken, TokenSource::Literal);
+
         let pipeline = builder
-            .build(loader_type)
+            .build(Some(loader_type))
             .map_err(|e| ChatError::FailedToLoadModel { source: e.into() })?
             .load_model_from_hf(
                 model_parts.get(1).map(|&x| x.to_string()),
-                TokenSource::CacheToken,
+                token_source,
                 &ModelDType::Auto,
                 &device,
                 false,
@@ -286,7 +290,7 @@ impl MistralLlama {
     ) -> MistralRequest {
         MistralRequest::Normal(NormalRequest {
             messages: message,
-            sampling_params: sampling.unwrap_or_default(),
+            sampling_params: sampling.unwrap_or(SamplingParams::deterministic()),
             response: tx,
             return_logprobs: false,
             is_streaming,
@@ -355,6 +359,9 @@ impl MistralLlama {
 
 #[async_trait]
 impl Chat for MistralLlama {
+    fn as_sql(&self) -> Option<&dyn SqlGeneration> {
+        None
+    }
     async fn health(&self) -> Result<()> {
         // If [`MistralLlama`] is instantiated successfully, it is healthy.
         Ok(())
@@ -424,6 +431,12 @@ impl Chat for MistralLlama {
                     },
                     MistralResponse::CompletionDone(cr) => {
                         yield Ok(Some(cr.choices[0].text.clone()));
+                        break;
+                    },
+                    MistralResponse::ImageGeneration(_) => {
+                        yield Err(ChatError::UnsupportedModalityType {
+                            modality: "image generation".into(),
+                        });
                         break;
                     },
                     MistralResponse::Done(_) => {

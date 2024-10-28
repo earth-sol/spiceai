@@ -39,7 +39,7 @@ const ITERATIONS: i32 = 5;
 ///
 /// 1) Sets the number of `target_partitions` to 4, by default its the number of CPU cores available.
 fn get_test_datafusion(status: Arc<RuntimeStatus>) -> Arc<DataFusion> {
-    let mut df = DataFusion::new(status);
+    let mut df = DataFusion::builder(status).build();
 
     // Set the target partitions to 3 to make RepartitionExec show consistent partitioning across machines with different CPU counts.
     let mut new_state = df.ctx.state();
@@ -60,10 +60,10 @@ pub(crate) async fn setup_benchmark(
     connector: &str,
     acceleration: Option<Acceleration>,
     bench_name: &str,
-) -> (BenchmarkResultsBuilder, Runtime) {
+) -> Result<(BenchmarkResultsBuilder, Runtime), String> {
     init_tracing();
 
-    let app = build_app(upload_results_dataset, connector, acceleration, bench_name);
+    let app = build_app(upload_results_dataset, connector, acceleration, bench_name)?;
 
     let status = status::RuntimeStatus::new();
     let rt = Runtime::builder()
@@ -85,7 +85,7 @@ pub(crate) async fn setup_benchmark(
     let benchmark_results =
         BenchmarkResultsBuilder::new(get_commit_sha(), get_branch_name(), ITERATIONS);
 
-    (benchmark_results, rt)
+    Ok((benchmark_results, rt))
 }
 
 async fn runtime_ready_check(rt: &Runtime) {
@@ -127,26 +127,38 @@ fn build_app(
     connector: &str,
     acceleration: Option<Acceleration>,
     bench_name: &str,
-) -> App {
+) -> Result<App, String> {
     let mut app_builder = AppBuilder::new("runtime_benchmark_test");
 
     app_builder = match connector {
-        "spice.ai" => crate::bench_spicecloud::build_app(app_builder),
-        "s3" => crate::bench_s3::build_app(app_builder, bench_name),
+        "spice.ai" => Ok(crate::bench_spicecloud::build_app(app_builder)),
+        // Run both S3, ABFS and any other object store benchmarks
+        "s3" | "abfs" => {
+            // SQLite acceleration does not support default TPC-DS source scale so we use a smaller scale
+            if bench_name == "tpcds"
+                && acceleration
+                    .as_ref()
+                    .is_some_and(|a| a.engine == Some("sqlite".to_string()))
+            {
+                crate::bench_object_store::build_app(connector, app_builder, "tpcds_sf0_01")
+            } else {
+                crate::bench_object_store::build_app(connector, app_builder, bench_name)
+            }
+        }
         #[cfg(feature = "spark")]
-        "spark" => crate::bench_spark::build_app(app_builder),
+        "spark" => Ok(crate::bench_spark::build_app(app_builder)),
         #[cfg(feature = "postgres")]
-        "postgres" => crate::bench_postgres::build_app(app_builder),
+        "postgres" => crate::bench_postgres::build_app(app_builder, bench_name),
         #[cfg(feature = "mysql")]
-        "mysql" => crate::bench_mysql::build_app(app_builder),
+        "mysql" => crate::bench_mysql::build_app(app_builder, bench_name),
         #[cfg(feature = "odbc")]
-        "odbc-databricks" => crate::bench_odbc_databricks::build_app(app_builder),
+        "odbc-databricks" => Ok(crate::bench_odbc_databricks::build_app(app_builder)),
         #[cfg(feature = "odbc")]
-        "odbc-athena" => crate::bench_odbc_athena::build_app(app_builder),
+        "odbc-athena" => Ok(crate::bench_odbc_athena::build_app(app_builder)),
         #[cfg(feature = "delta_lake")]
-        "delta_lake" => crate::bench_delta::build_app(app_builder),
-        _ => app_builder,
-    };
+        "delta_lake" => Ok(crate::bench_delta::build_app(app_builder)),
+        _ => Err(format!("Unknown connector: {connector}")),
+    }?;
 
     if let Some(upload_results_dataset) = upload_results_dataset {
         app_builder = app_builder.with_dataset(make_spiceai_rw_dataset(
@@ -170,7 +182,7 @@ fn build_app(
         });
     }
 
-    app
+    Ok(app)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -228,6 +240,60 @@ fn get_accelerator_indexes(
                         let mut indexes: HashMap<String, IndexType> = HashMap::new();
                         indexes.insert("c_phone".to_string(), IndexType::Enabled);
                         indexes.insert("c_acctbal".to_string(), IndexType::Enabled);
+                        Some(indexes)
+                    }
+                    _ => None,
+                },
+                "tpcds" => match dataset {
+                    "catalog_sales" => {
+                        let mut indexes: HashMap<String, IndexType> = HashMap::new();
+                        indexes.insert("cs_ship_customer_sk".to_string(), IndexType::Enabled);
+                        indexes.insert("cs_sold_date_sk".to_string(), IndexType::Enabled);
+                        Some(indexes)
+                    }
+                    "customer_address" => {
+                        let mut indexes: HashMap<String, IndexType> = HashMap::new();
+                        indexes.insert("ca_county".to_string(), IndexType::Enabled);
+                        indexes.insert(
+                            "(ca_address_sk, ca_country, ca_state)".to_string(),
+                            IndexType::Enabled,
+                        );
+                        Some(indexes)
+                    }
+                    "customer_demographics" => {
+                        let mut indexes: HashMap<String, IndexType> = HashMap::new();
+                        indexes.insert(
+                            "(cd_demo_sk, cd_marital_status, cd_education_status)".to_string(),
+                            IndexType::Enabled,
+                        );
+                        Some(indexes)
+                    }
+                    "date_dim" => {
+                        let mut indexes: HashMap<String, IndexType> = HashMap::new();
+                        indexes.insert("(d_year, d_date_sk)".to_string(), IndexType::Enabled);
+                        Some(indexes)
+                    }
+                    "household_demographics" => {
+                        let mut indexes: HashMap<String, IndexType> = HashMap::new();
+                        indexes
+                            .insert("(hd_demo_sk, hd_dep_count)".to_string(), IndexType::Enabled);
+                        Some(indexes)
+                    }
+                    "store_sales" => {
+                        let mut indexes: HashMap<String, IndexType> = HashMap::new();
+                        indexes.insert("ss_customer_sk".to_string(), IndexType::Enabled);
+                        indexes.insert("ss_sold_date_sk".to_string(), IndexType::Enabled);
+                        indexes.insert(
+                            "(ss_store_sk, ss_sold_date_sk, ss_sales_price, ss_net_profit)"
+                                .to_string(),
+                            IndexType::Enabled,
+                        );
+                        Some(indexes)
+                    }
+                    "web_sales" => {
+                        let mut indexes: HashMap<String, IndexType> = HashMap::new();
+                        indexes.insert("ws_bill_customer_sk".to_string(), IndexType::Enabled);
+                        indexes.insert("ws_sold_date_sk".to_string(), IndexType::Enabled);
                         Some(indexes)
                     }
                     _ => None,

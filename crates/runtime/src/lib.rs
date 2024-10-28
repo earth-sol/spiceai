@@ -35,6 +35,7 @@ use component::dataset::{self, Dataset};
 use component::view::View;
 use config::Config;
 use dataaccelerator::spice_sys::dataset_checkpoint::DatasetCheckpoint;
+use dataconnector::localpod::{LocalPodConnector, LOCALPOD_DATACONNECTOR};
 use datafusion::SPICE_RUNTIME_SCHEMA;
 use datasets_health_monitor::DatasetsHealthMonitor;
 use embeddings::connector::EmbeddingConnector;
@@ -273,6 +274,9 @@ pub enum Error {
 
     #[snafu(display("Unable to create directory: {source}"))]
     UnableToCreateDirectory { source: std::io::Error },
+
+    #[snafu(display("{source}"))]
+    ComponentError { source: component::Error },
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -704,22 +708,34 @@ impl Runtime {
         };
 
         let valid_datasets = Self::get_valid_datasets(app, LogErrors(true));
+        let initialized_datasets = self.initialize_accelerators(&valid_datasets).await;
+
+        // Separate datasets into localpod and non-localpod
+        let (localpod_datasets, non_localpod_datasets): (Vec<_>, Vec<_>) = initialized_datasets
+            .into_iter()
+            .partition(|ds| ds.source() == LOCALPOD_DATACONNECTOR);
         let mut futures = vec![];
 
-        // Load only successfully initialized datasets
-        for ds in &self.initialize_accelerators(&valid_datasets).await {
+        // Load non-localpod datasets first in parallel
+        for ds in non_localpod_datasets {
             self.status
                 .update_dataset(&ds.name, status::ComponentStatus::Initializing);
-            futures.push(self.load_dataset(Arc::clone(ds)));
+            futures.push(self.load_dataset(ds));
         }
 
         if let Some(parallel_num) = app.runtime.num_of_parallel_loading_at_start_up {
             let stream = futures::stream::iter(futures).buffer_unordered(parallel_num);
             let _ = stream.collect::<Vec<_>>().await;
-            return;
+        } else {
+            let _ = join_all(futures).await;
         }
 
-        let _ = join_all(futures).await;
+        // Load localpod datasets
+        for ds in localpod_datasets {
+            self.status
+                .update_dataset(&ds.name, status::ComponentStatus::Initializing);
+            self.load_dataset(ds).await;
+        }
 
         // After all datasets have loaded, load the views.
         self.load_views(app);
@@ -1161,6 +1177,11 @@ impl Runtime {
     ) -> Result<Arc<dyn DataConnector>> {
         let secret_map = self.get_params_with_secrets(&params).await;
 
+        // Unlike most other data connectors, the localpod connector needs a reference to the current DataFusion instance.
+        if source == LOCALPOD_DATACONNECTOR {
+            return Ok(Arc::new(LocalPodConnector::new(Arc::clone(&self.df))));
+        }
+
         match dataconnector::create_new_connector(source, secret_map, self.secrets(), metadata)
             .await
         {
@@ -1284,7 +1305,7 @@ impl Runtime {
 
     #[allow(dead_code)]
     /// Loads a specific Embedding model from the spicepod. If an error occurs, no retry attempt is made.
-    async fn load_embedding(&self, in_embed: &Embeddings) -> Result<Box<dyn Embed>> {
+    async fn load_embedding(&self, in_embed: &Embeddings) -> Result<TaskEmbed> {
         let params_with_secrets = self.get_params_with_secrets(&in_embed.params).await;
 
         let l = try_to_embedding(in_embed, &params_with_secrets)
@@ -1294,7 +1315,11 @@ impl Runtime {
             .await
             .boxed()
             .context(UnableToInitializeEmbeddingModelSnafu)?;
-        Ok(l)
+
+        TaskEmbed::new(l)
+            .await
+            .boxed()
+            .context(UnableToInitializeEmbeddingModelSnafu)
     }
 
     #[allow(dead_code)]
@@ -1314,8 +1339,7 @@ impl Runtime {
                     Ok(e) => {
                         let mut embeds_map = self.embeds.write().await;
 
-                        let m = Box::new(TaskEmbed::new(e)) as Box<dyn Embed>;
-                        embeds_map.insert(in_embed.name.clone(), m);
+                        embeds_map.insert(in_embed.name.clone(), Box::new(e) as Box<dyn Embed>);
 
                         tracing::info!("Embedding [{}] ready to embed", in_embed.name);
                         metrics::embeddings::COUNT.add(
@@ -1532,7 +1556,7 @@ impl Runtime {
     async fn register_metrics_table(&self, metrics_enabled: bool) -> Result<()> {
         if metrics_enabled {
             let table_reference = get_metrics_table_reference();
-            let metrics_table = self.df.get_table(table_reference).await;
+            let metrics_table = self.df.get_table(&table_reference).await;
 
             if metrics_table.is_none() {
                 tracing::debug!("Registering local metrics table");

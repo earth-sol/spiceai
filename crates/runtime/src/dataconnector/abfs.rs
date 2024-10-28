@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use super::{
-    DataConnector, DataConnectorFactory, DataConnectorResult, ListingTableConnector, ParameterSpec,
-    Parameters,
-};
+use super::listing::{build_fragments, ListingTableConnector};
+use super::{DataConnector, DataConnectorFactory, DataConnectorResult, ParameterSpec, Parameters};
 
 use crate::component::dataset::Dataset;
 use snafu::prelude::*;
@@ -144,6 +142,8 @@ const PARAMETERS: &[ParameterSpec] = &[
         .description("The character separating values within a row."),
     ParameterSpec::runtime("file_compression_type")
         .description("The type of compression used on the file. Supported types are: gzip, bzip2, xz, zstd, uncompressed"),
+    ParameterSpec::runtime("hive_partitioning_enabled")
+        .description("Enable partitioning using hive-style partitioning from the folder structure. Defaults to false."),
 ];
 
 impl DataConnectorFactory for AzureBlobFSFactory {
@@ -221,7 +221,7 @@ impl ListingTableConnector for AzureBlobFS {
                     message: format!("{} is not a valid URL", &dataset.from),
                 })?;
 
-        let params = super::build_fragments(
+        let params = build_fragments(
             &self.params,
             vec![
                 "account",
