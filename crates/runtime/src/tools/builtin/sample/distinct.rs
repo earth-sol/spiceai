@@ -14,9 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 use arrow::array::{ArrayRef, RecordBatch};
-use datafusion::sql::TableReference;
+use datafusion::{common::utils::quote_identifier, sql::TableReference};
 use itertools::Itertools;
-use std::sync::Arc;
+use std::{
+    fmt::{Display, Formatter},
+    sync::Arc,
+};
 
 use crate::datafusion::{query::Protocol, DataFusion};
 use arrow::compute::concat;
@@ -39,6 +42,15 @@ pub struct DistinctColumnsParams {
     pub cols: Option<Vec<String>>,
 }
 
+impl Display for DistinctColumnsParams {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match serde_json::to_string(self) {
+            Ok(s) => write!(f, "{s}"),
+            Err(_) => Err(std::fmt::Error),
+        }
+    }
+}
+
 impl DistinctColumnsParams {
     /// Sample distinct values from a column in a table.
     /// For the number of distinct values, d
@@ -47,7 +59,7 @@ impl DistinctColumnsParams {
     async fn sample_distinct_from_column(
         df: Arc<DataFusion>,
         tbl: &TableReference,
-        col: &str,
+        column: &str,
         n: usize,
     ) -> Result<ArrayRef, Box<dyn std::error::Error + Send + Sync>> {
         // Ensure that we still get `n` rows when `len(distinct(col)) < n`, whilst
@@ -63,7 +75,8 @@ impl DistinctColumnsParams {
                 FROM {tbl}
             ) combined
             ORDER BY priority, {col}
-            LIMIT {n}"
+            LIMIT {n}",
+                col = quote_identifier(column)
             ),
         )
         .await

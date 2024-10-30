@@ -7,7 +7,7 @@ on:
       - release-*
       - feature-*
     paths-ignore:
-      - './docs/**'
+      - 'docs/**'
       - 'README.md'
       - 'version.txt'
       - 'acknowledgements.md'
@@ -22,7 +22,7 @@ concurrency:
 jobs:
   make_install:
     name: make install*
-    runs-on: teraswitch-runners
+    runs-on: spiceai-runners
     env:
       GOVER: 1.22.0
 

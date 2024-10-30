@@ -140,6 +140,9 @@ pub(crate) async fn refresh(
     Extension(df): Extension<Arc<DataFusion>>,
     Path(dataset_name): Path<String>,
     overrides_opt: Option<Json<RefreshOverrides>>,
+    // When this is an Option<Json>, Json rejections are silenced
+    // This means malformed Json, etc, will simply return None
+    // To get around this, we would need to implement a custom extractor
 ) -> Response {
     let app_lock = app.read().await;
     let Some(readable_app) = &*app_lock else {
@@ -189,7 +192,7 @@ pub(crate) async fn refresh(
         Err(err) => (
             status::StatusCode::INTERNAL_SERVER_ERROR,
             Json(MessageResponse {
-                message: format!("Failed to trigger refresh for {dataset_name}: {err}."),
+                message: format!("{err}"),
             }),
         )
             .into_response(),
