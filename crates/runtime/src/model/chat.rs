@@ -30,7 +30,10 @@ use llms::{
     chat::{nsql::SqlGeneration, Chat, Error as LlmError, Result as ChatResult},
 };
 use secrecy::{ExposeSecret, Secret, SecretString};
-use spicepod::component::model::{Model, ModelFileType, ModelSource};
+use spicepod::component::{
+    model::{Model, ModelFileType, ModelSource},
+    tool::Tool,
+};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::{collections::HashMap, str::FromStr};
@@ -51,6 +54,14 @@ macro_rules! extract_secret {
     };
 }
 
+pub fn tool_use_option<S: ::std::hash::BuildHasher>(
+    params: &HashMap<String, SecretString, S>,
+) -> Result<Option<SpiceToolsOptions>, Box<dyn std::error::Error + Send + Sync>> {
+    extract_secret!(params, "spice_tools")
+        .map(|x| x.parse())
+        .transpose()
+}
+
 /// Attempt to derive a runnable Chat model from a given component from the Spicepod definition.
 pub async fn try_to_chat_model<S: ::std::hash::BuildHasher>(
     component: &Model,
@@ -69,10 +80,8 @@ pub async fn try_to_chat_model<S: ::std::hash::BuildHasher>(
     let model = construct_model(&prefix, model_id, component, params)?;
 
     // Handle tool usage
-    let spice_tool_opt: Option<SpiceToolsOptions> = extract_secret!(params, "spice_tools")
-        .map(|x| x.parse())
-        .transpose()
-        .map_err(|_| LlmError::UnsupportedSpiceToolUseParameterError {})?;
+    let spice_tool_opt: Option<SpiceToolsOptions> =
+        tool_use_option(params).map_err(|_| LlmError::UnsupportedSpiceToolUseParameterError {})?;
 
     let spice_recursion_limit: Option<usize> = extract_secret!(params, "tool_recursion_limit")
         .map(|x| {
