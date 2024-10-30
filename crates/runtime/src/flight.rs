@@ -21,7 +21,7 @@ use crate::dataupdate::DataUpdate;
 use crate::metrics as runtime_metrics;
 use crate::timing::TimeMeasurement;
 use crate::tls::TlsConfig;
-use crate::user_agent_util::extract_user_agent;
+use crate::utils::user_agent::extract_user_agent;
 use arrow::array::RecordBatch;
 use arrow::datatypes::Schema;
 use arrow::ipc::writer::{DictionaryTracker, IpcDataGenerator};

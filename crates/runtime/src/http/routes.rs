@@ -17,7 +17,7 @@ limitations under the License.
 use crate::embeddings::vector_search;
 use crate::model::EmbeddingModelStore;
 use crate::model::LLMModelStore;
-use crate::user_agent_util::extract_user_agent;
+use crate::utils::user_agent::extract_user_agent;
 use crate::{config, datafusion::DataFusion};
 use app::App;
 use axum::routing::patch;

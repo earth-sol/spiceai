@@ -20,6 +20,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::{collections::HashMap, sync::Arc};
 
+use crate::utils::tracing::dataset_registered_trace;
 use crate::{dataconnector::DataConnector, datafusion::DataFusion};
 use ::datafusion::datasource::TableProvider;
 use ::datafusion::error::DataFusionError;
@@ -64,7 +65,6 @@ use tokio::sync::RwLock;
 use tools::builtin::get_builtin_tool_spec;
 use tools::factory as tool_factory;
 use tools::SpiceModelTool;
-use tracing_util::dataset_registered_trace;
 use util::fibonacci_backoff::FibonacciBackoffBuilder;
 pub use util::shutdown_signal;
 use util::{retry, RetryError};
@@ -101,8 +101,7 @@ pub mod timing;
 pub mod tls;
 pub mod tools;
 pub(crate) mod tracers;
-mod tracing_util;
-mod user_agent_util;
+pub(crate) mod utils;
 mod view;
 
 #[derive(Debug, Snafu)]
