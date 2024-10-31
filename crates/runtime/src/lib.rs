@@ -42,10 +42,11 @@ use extension::ExtensionFactory;
 use federated_table::FederatedTable;
 use futures::future::join_all;
 use futures::{Future, StreamExt};
+use itertools::Itertools;
 use llms::chat::Chat;
 use llms::embeddings::Embed;
 use model::{
-    try_to_chat_model, try_to_embedding, EmbeddingModelStore, LLMModelStore,
+    tool_use_option, try_to_chat_model, try_to_embedding, EmbeddingModelStore, LLMModelStore,
     ENABLE_MODEL_SUPPORT_MESSAGE,
 };
 use model_components::model::Model;
@@ -63,6 +64,7 @@ use tokio::sync::oneshot::error::RecvError;
 use tokio::sync::RwLock;
 use tools::builtin::get_builtin_tool_spec;
 use tools::factory as tool_factory;
+use tools::options::SpiceToolsOptions;
 use tools::SpiceModelTool;
 use tracing_util::dataset_registered_trace;
 use util::fibonacci_backoff::FibonacciBackoffBuilder;
