@@ -42,10 +42,11 @@ use extension::ExtensionFactory;
 use federated_table::FederatedTable;
 use futures::future::join_all;
 use futures::{Future, StreamExt};
+use itertools::Itertools;
 use llms::chat::Chat;
 use llms::embeddings::Embed;
 use model::{
-    try_to_chat_model, try_to_embedding, EmbeddingModelStore, LLMModelStore,
+    tool_use_option, try_to_chat_model, try_to_embedding, EmbeddingModelStore, LLMModelStore,
     ENABLE_MODEL_SUPPORT_MESSAGE,
 };
 use model_components::model::Model;
@@ -63,6 +64,7 @@ use tokio::sync::oneshot::error::RecvError;
 use tokio::sync::RwLock;
 use tools::builtin::get_builtin_tool_spec;
 use tools::factory as tool_factory;
+use tools::options::SpiceToolsOptions;
 use tools::SpiceModelTool;
 use tracing_util::dataset_registered_trace;
 use util::fibonacci_backoff::FibonacciBackoffBuilder;
@@ -1376,6 +1378,35 @@ impl Runtime {
         }
 
         // Load tools before loading models.
+        if let Some(app) = app_lock.as_ref() {
+            let has_auto = app.models.iter().any(|model| {
+                tool_use_option(&model.params).is_ok_and(|tool_opt| {
+                    tool_opt.is_some_and(|t| matches!(SpiceToolsOptions::Auto, t))
+                })
+            });
+
+            // If any model needs `auto`, load all tools.
+            let tools = if has_auto {
+                get_builtin_tool_spec()
+            } else {
+                app.models
+                    .iter()
+                    .filter_map(|model| {
+                        let Ok(Some(SpiceToolsOptions::Specific(tools))) =
+                            tool_use_option(&model.params)
+                        else {
+                            return None;
+                        };
+                        Some(vec![])
+                    })
+                    .flatten()
+                    .map()
+                    .collect_vec()
+            };
+            for tool in tools() {
+                self.load_tool(&tool).await;
+            }
+        }
         self.load_tools().await;
 
         if let Some(app) = app_lock.as_ref() {
@@ -1394,11 +1425,6 @@ impl Runtime {
             for tool in &app.tools {
                 self.load_tool(tool).await;
             }
-        }
-
-        // Load all built-in tools, regardless if they are in the spicepod
-        for tool in get_builtin_tool_spec() {
-            self.load_tool(&tool).await;
         }
     }
 

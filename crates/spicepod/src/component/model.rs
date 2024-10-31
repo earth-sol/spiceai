@@ -76,6 +76,7 @@ impl WithDependsOn<Model> for Model {
 pub enum ModelSource {
     OpenAi,
     Anthropic,
+    Xai,
     HuggingFace,
     SpiceAI,
     File,
@@ -107,6 +108,7 @@ impl Display for ModelSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ModelSource::OpenAi => write!(f, "openai"),
+            ModelSource::Xai => write!(f, "xai"),
             ModelSource::Anthropic => write!(f, "anthropic"),
             ModelSource::HuggingFace => write!(f, "huggingface:huggingface.co"),
             ModelSource::File => write!(f, "file:"),
