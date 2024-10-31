@@ -95,6 +95,8 @@ impl TryFrom<&str> for ModelSource {
             Ok(ModelSource::Anthropic)
         } else if value.starts_with("openai") {
             Ok(ModelSource::OpenAi)
+        } else if value.starts_with("xai") {
+            Ok(ModelSource::Xai)
         } else if value.starts_with("spiceai") {
             Ok(ModelSource::SpiceAI)
         } else {
@@ -200,10 +202,14 @@ impl Model {
             return None;
         };
 
-        // OpenAI and SpiceAi only support Llm and Ml respectively.
-        if source == ModelSource::OpenAi || source == ModelSource::Anthropic {
+        if matches!(
+            source,
+            ModelSource::OpenAi | ModelSource::Anthropic | ModelSource::Xai
+        ) {
             return Some(ModelType::Llm);
         };
+
+        // SpiceAi only support Ml
         if source == ModelSource::SpiceAI {
             return Some(ModelType::Ml);
         };

@@ -431,6 +431,7 @@ fn make_a_stream(
                     // Appending the tool call chunks
                     // TODO: only concatenate, spiced tools
                     if let Some(ref tool_calls) = chat_choice.delta.tool_calls {
+                        println!("Some(ref tool_calls): {tool_calls:?}");
                         for tool_call_chunk in tool_calls {
                             let key = if let Ok(index) = chat_choice.index.try_into() {
                                 (index, tool_call_chunk.index)
@@ -482,9 +483,9 @@ fn make_a_stream(
 
                     // If a tool has finished (i.e. we have all chunks), process them.
                     if let Some(finish_reason) = &chat_choice.finish_reason {
+                        println!("tool_call_finish: {finish_reason:?} chunk {chat_choice:?}");
                         if matches!(finish_reason, FinishReason::ToolCalls) {
                             let tool_call_states_clone = Arc::clone(&tool_call_states);
-
                             let tool_calls_to_process = {
                                 match tool_call_states_clone.lock() {
                                     Ok(states_lock) => states_lock
@@ -553,13 +554,25 @@ fn make_a_stream(
                     }
                 }
 
-                if let Some(choice) = finished_choices.first() {
+                for choice in finished_choices {
                     if let Some(intermediate_chat_output) = &choice.delta.content {
                         chat_output.push_str(intermediate_chat_output);
                     }
 
-                    let mut resp2 = response.clone();
-                    resp2.choices = finished_choices;
+                    // let choice_is_calling_tool = tool_call_states
+                    //     .get_mut()
+                    //     .unwrap()
+                    //     .contains_key((choice.index, 0));
+                    let mut resp2: CreateChatCompletionStreamResponse = response.clone();
+                    // Problem here. We need to also ensure that we don't have a finish reason here if the choice has a tool message.
+                    if let Some(reason) = choice.finish_reason {
+                        println!(
+                            "We're sending end of stream for {}, because: {reason:?}.",
+                            choice.index.clone()
+                        );
+                        println!("Choice: {choice:?}")
+                    }
+                    resp2.choices = vec![choice]; // finished_choices;
                     if let Err(e) = sender_clone.send(Ok(resp2)).await {
                         if !sender_clone.is_closed() {
                             tracing::error!("Error sending error: {}", e);
