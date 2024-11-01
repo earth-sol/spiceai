@@ -24,16 +24,16 @@ use async_openai::{
 use async_trait::async_trait;
 use futures::stream::StreamExt;
 use futures::Stream;
+use llms::openai::DEFAULT_LLM_MODEL;
 use llms::{
-    anthropic::{Anthropic, AnthropicConfig},
+    anthropic::{Anthropic, AnthropicConfig, AnthropicModelVariant, DEFAULT_ANTHROPIC_MODEL},
     chat::{nsql::SqlGeneration, Chat, Error as LlmError, Result as ChatResult},
 };
-use llms::{openai::DEFAULT_LLM_MODEL, xai::Xai};
 use secrecy::{ExposeSecret, Secret, SecretString};
 use spicepod::component::model::{Model, ModelFileType, ModelSource};
-use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::{collections::HashMap, str::FromStr};
 use tracing_futures::Instrument;
 
 use super::tool_use::ToolUsingChat;
@@ -49,14 +49,6 @@ macro_rules! extract_secret {
     ($params:expr, $key:expr) => {
         $params.get($key).map(Secret::expose_secret).cloned()
     };
-}
-
-pub fn tool_use_option<S: ::std::hash::BuildHasher>(
-    params: &HashMap<String, SecretString, S>,
-) -> Result<Option<SpiceToolsOptions>, Box<dyn std::error::Error + Send + Sync>> {
-    extract_secret!(params, "spice_tools")
-        .map(|x| x.parse())
-        .transpose()
 }
 
 /// Attempt to derive a runnable Chat model from a given component from the Spicepod definition.
@@ -77,8 +69,10 @@ pub async fn try_to_chat_model<S: ::std::hash::BuildHasher>(
     let model = construct_model(&prefix, model_id, component, params)?;
 
     // Handle tool usage
-    let spice_tool_opt: Option<SpiceToolsOptions> =
-        tool_use_option(params).map_err(|_| LlmError::UnsupportedSpiceToolUseParameterError {})?;
+    let spice_tool_opt: Option<SpiceToolsOptions> = extract_secret!(params, "spice_tools")
+        .map(|x| x.parse())
+        .transpose()
+        .map_err(|_| LlmError::UnsupportedSpiceToolUseParameterError {})?;
 
     let spice_recursion_limit: Option<usize> = extract_secret!(params, "tool_recursion_limit")
         .map(|x| {
@@ -163,11 +157,6 @@ pub fn construct_model<S: ::std::hash::BuildHasher>(
             from: "spiceai".into(),
             task: "llm".into(),
         }),
-        ModelSource::Xai => {
-            let api_base = extract_secret!(params, "endpoint");
-            let api_key = extract_secret!(params, "xai_api_key");
-            Ok(Box::new(Xai::new(api_base, api_key)) as Box<dyn Chat>)
-        }
         ModelSource::Anthropic => {
             let api_base = extract_secret!(params, "endpoint");
             let api_key = extract_secret!(params, "anthropic_api_key");
@@ -184,13 +173,16 @@ pub fn construct_model<S: ::std::hash::BuildHasher>(
                 .with_auth_token(auth_token)
                 .with_base_url(api_base);
 
-            let anth = Anthropic::new(cfg, model_id.as_deref(), &component.name).map_err(|_| {
-                LlmError::FailedToLoadModel {
-                    source: format!("Unknown anthropic model: {:?}", model_id.clone()).into(),
-                }
+            let model_id = AnthropicModelVariant::from_str(
+                &model_id
+                    .clone()
+                    .unwrap_or(DEFAULT_ANTHROPIC_MODEL.to_string()),
+            )
+            .map_err(|_| LlmError::FailedToLoadModel {
+                source: format!("Unknown anthropic model: {:?}", model_id.clone()).into(),
             })?;
 
-            Ok(Box::new(anth) as Box<dyn Chat>)
+            Ok(Box::new(Anthropic::new(cfg, model_id, &component.name)) as Box<dyn Chat>)
         }
         ModelSource::OpenAi => {
             let api_base = extract_secret!(params, "endpoint");
