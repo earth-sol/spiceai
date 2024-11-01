@@ -22,7 +22,7 @@ use async_openai::{
         CreateChatCompletionStreamResponse, FinishReason, FunctionCallStream, Role,
     },
 };
-use futures::{future, Stream, StreamExt, TryStreamExt};
+use futures::{future, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, fmt, pin::Pin, sync::Arc, time::SystemTime};
@@ -85,7 +85,7 @@ impl ContentBlock {
                 refusal: None,
                 role: None,
             },
-            ContentBlock::ToolUse(ContentBlockToolUse { id, name, input }) => {
+            ContentBlock::ToolUse(ContentBlockToolUse { id, name, .. }) => {
                 ChatCompletionStreamResponseDelta {
                     content: None,
                     function_call: None,

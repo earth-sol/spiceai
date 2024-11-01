@@ -18,4 +18,3 @@ pub mod chat;
 pub mod chunking;
 pub mod embeddings;
 pub mod openai;
-pub mod xai;
