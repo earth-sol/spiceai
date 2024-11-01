@@ -126,7 +126,7 @@ impl Delta {
     pub fn into_completion(
         self,
         role: &Option<MessageRole>,
-        tool_content: Option<(i32, ContentBlockToolUse)>,
+        tool_content: Option<&ContentBlockToolUse>,
     ) -> ChatCompletionStreamResponseDelta {
         match (self, tool_content) {
             (Delta::TextDelta { text }, _) => ChatCompletionStreamResponseDelta {
@@ -142,29 +142,26 @@ impl Delta {
             },
             (
                 Delta::InputJsonDelta { partial_json },
-                Some((index, ContentBlockToolUse { id, name, .. })),
-            ) => {
-                println!("This is how it should happen partial_json={partial_json:?}, name={name:?}, index={index:?}");
-                ChatCompletionStreamResponseDelta {
-                    content: None,
-                    function_call: None,
-                    tool_calls: Some(vec![ChatCompletionMessageToolCallChunk {
-                        index: 0,
-                        id: Some(id),
-                        r#type: Some(ChatCompletionToolType::Function),
-                        function: Some(FunctionCallStream {
-                            name: Some(name),
-                            arguments: Some(partial_json),
-                        }),
-                    }]),
-                    refusal: None,
-                    role: match role {
-                        Some(MessageRole::Assistant) => Some(Role::Assistant),
-                        Some(MessageRole::User) => Some(Role::User),
-                        None => None,
-                    },
-                }
-            }
+                Some(ContentBlockToolUse { id, name, .. }),
+            ) => ChatCompletionStreamResponseDelta {
+                content: None,
+                function_call: None,
+                tool_calls: Some(vec![ChatCompletionMessageToolCallChunk {
+                    index: 0,
+                    id: Some(id.clone()),
+                    r#type: Some(ChatCompletionToolType::Function),
+                    function: Some(FunctionCallStream {
+                        name: Some(name.clone()),
+                        arguments: Some(partial_json),
+                    }),
+                }]),
+                refusal: None,
+                role: match role {
+                    Some(MessageRole::Assistant) => Some(Role::Assistant),
+                    Some(MessageRole::User) => Some(Role::User),
+                    None => None,
+                },
+            },
 
             // This should never happen, but we need to handle it as an 'empty' response.
             (Delta::InputJsonDelta { partial_json: _ }, None) => {
@@ -203,7 +200,7 @@ impl From<reqwest_eventsource::Error> for AnthropicStreamError {
             event_type: "error".to_string(),
             error: ErrorPayload {
                 error_type: "reqwest_eventsource_error".to_string(),
-                message: e.to_string(), // Here
+                message: e.to_string(),
             },
         }
     }
@@ -268,6 +265,7 @@ pub fn transform_stream(
     let state = Arc::new(Mutex::new(StreamState::default()));
 
     let transformed_stream = stream
+        // Must filter out unneeded messages early to avoid the below [`Stream::scan`] returning early
         .filter(|m| {
             future::ready(!matches!(
                 m,
@@ -277,11 +275,11 @@ pub fn transform_stream(
             ))
         })
         .then(move |item| {
-            let state = state.clone();
+            let inner_state = state.clone();
             let model = model.clone();
 
             async move {
-                let mut state_guard = state.lock().await;
+                let mut state = inner_state.lock().await;
 
                 match item {
                     Ok(MessageCreateStreamResponse::MessageStart {
@@ -293,31 +291,30 @@ pub fn transform_stream(
                                 ..
                             },
                     }) => {
-                        state_guard.role = MessageRole::from_opt(&inner_role);
-                        state_guard.id = Some(inner_id);
-                        state_guard.usage = Some(CompletionUsage {
+                        state.role = MessageRole::from_opt(&inner_role);
+                        state.id = Some(inner_id);
+                        state.usage = Some(CompletionUsage {
                             prompt_tokens: inner_usage.input_tokens,
                             completion_tokens: inner_usage.output_tokens,
                             total_tokens: inner_usage.input_tokens + inner_usage.output_tokens,
                         });
                         create_stream_response(
-                            &state_guard.id.clone().unwrap_or_default(),
+                            &state.id.clone().unwrap_or_default(),
                             &model,
                             None,
                             None,
-                       )
+                        )
                     }
                     Ok(MessageCreateStreamResponse::ContentBlockStart {
                         index,
                         content_block,
                     }) => {
                         if let ContentBlock::ToolUse(t) = &content_block {
-                            println!("Storing tool state for index={index}: {t:?}");
-                            state_guard.tool_id_to_content_block.insert(index, t.clone());
-                            state_guard.tool_id_to_tool_delta_idx.insert(index, 0);
+                            state.tool_id_to_content_block.insert(index, t.clone());
+                            state.tool_id_to_tool_delta_idx.insert(index, 0);
                         };
                         create_stream_response(
-                            &state_guard.id.clone().unwrap_or_default(),
+                            &state.id.clone().unwrap_or_default(),
                             &model,
                             None,
                             Some(ChatChoiceStream {
@@ -329,29 +326,21 @@ pub fn transform_stream(
                         )
                     }
                     Ok(MessageCreateStreamResponse::ContentBlockDelta { index, delta }) => {
-                        let tool_idx = {
-                            let current_idx = state_guard.tool_id_to_tool_delta_idx.entry(index).or_insert(0);
-                            let idx = *current_idx;
-                            *current_idx += 1;
-                            idx
-                        };
-
-                        println!(
-                            "ContentBlockDelta for index={index}: Current tool state={:#?}, tool_idx={tool_idx}",
-                            state_guard.tool_id_to_content_block
-                        );
-
-                        let tool_info = state_guard.tool_id_to_content_block.get(&index).map(|b| (tool_idx, b.clone()));
+                        let tool_idx = *state.tool_id_to_tool_delta_idx.get(&index).unwrap_or(&0);
+                        state.tool_id_to_tool_delta_idx.insert(index, tool_idx + 1);
 
                         create_stream_response(
-                            &state_guard.id.clone().unwrap_or_default(),
+                            &state.id.clone().unwrap_or_default(),
                             &model,
                             None,
                             Some(ChatChoiceStream {
                                 index: 0,
                                 logprobs: None,
                                 finish_reason: None,
-                                delta: delta.into_completion(&state_guard.role, tool_info),
+                                delta: delta.into_completion(
+                                    &state.role,
+                                    state.tool_id_to_content_block.get(&index),
+                                ),
                             }),
                         )
                     }
@@ -359,16 +348,15 @@ pub fn transform_stream(
                         delta: MessageDelta { stop_reason, .. },
                         usage: inner_usage,
                     }) => {
-                        if let Some(ref mut u) = state_guard.usage {
+                        if let Some(ref mut u) = state.usage {
                             u.prompt_tokens += inner_usage.input_tokens;
                             u.completion_tokens += inner_usage.output_tokens;
-                            u.total_tokens +=
-                                inner_usage.input_tokens + inner_usage.output_tokens;
+                            u.total_tokens += inner_usage.input_tokens + inner_usage.output_tokens;
                         }
                         create_stream_response(
-                            &state_guard.id.clone().unwrap_or_default(),
+                            &state.id.clone().unwrap_or_default(),
                             &model,
-                            state_guard.usage.clone(),
+                            state.usage.clone(),
                             Some(ChatChoiceStream {
                                 index: 0,
                                 logprobs: None,

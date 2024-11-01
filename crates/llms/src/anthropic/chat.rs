@@ -59,7 +59,6 @@ impl Chat for Anthropic {
         let mut anth_req = MessageCreateParams::try_from((self.model.clone(), req))?;
         anth_req.stream = Some(true);
 
-        // println!("anth_req: {}", serde_json::to_string(&anth_req).unwrap());
         let stream: Pin<
             Box<
                 dyn Stream<Item = Result<MessageCreateStreamResponse, AnthropicStreamError>> + Send,
