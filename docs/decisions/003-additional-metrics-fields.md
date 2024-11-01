@@ -23,7 +23,7 @@ Spice will add the following new fields to the metrics:
 * `user-agent-version`: The version of the originating library
 * `user-agent-os`: The operating system and architecture of the originating request
 * `spice-internal`: An optional field denoting whether this metric is being generated as part of any Spice internal benchmarks or tests
-* `build`: `dev` or `release` denoting if the current runtime is built in Release mode or not. 
+* `build`: `debug` or `release` denoting if the current runtime is built in Release mode or not. 
 
 **Why**:
 
