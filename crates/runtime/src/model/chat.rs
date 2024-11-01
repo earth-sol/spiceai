@@ -25,18 +25,15 @@ use async_trait::async_trait;
 use futures::stream::StreamExt;
 use futures::Stream;
 use llms::{
-    anthropic::{Anthropic, AnthropicConfig, AnthropicModelVariant, DEFAULT_ANTHROPIC_MODEL},
+    anthropic::{Anthropic, AnthropicConfig},
     chat::{nsql::SqlGeneration, Chat, Error as LlmError, Result as ChatResult},
 };
 use llms::{openai::DEFAULT_LLM_MODEL, xai::Xai};
 use secrecy::{ExposeSecret, Secret, SecretString};
-use spicepod::component::{
-    model::{Model, ModelFileType, ModelSource},
-    tool::Tool,
-};
+use spicepod::component::model::{Model, ModelFileType, ModelSource};
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::{collections::HashMap, str::FromStr};
 use tracing_futures::Instrument;
 
 use super::tool_use::ToolUsingChat;
@@ -169,7 +166,7 @@ pub fn construct_model<S: ::std::hash::BuildHasher>(
         ModelSource::Xai => {
             let api_base = extract_secret!(params, "endpoint");
             let api_key = extract_secret!(params, "xai_api_key");
-            Ok(Box::new(Xai::new(api_base, api_key) as Box<dyn Chat>))
+            Ok(Box::new(Xai::new(api_base, api_key)) as Box<dyn Chat>)
         }
         ModelSource::Anthropic => {
             let api_base = extract_secret!(params, "endpoint");
@@ -187,16 +184,13 @@ pub fn construct_model<S: ::std::hash::BuildHasher>(
                 .with_auth_token(auth_token)
                 .with_base_url(api_base);
 
-            let model_id = AnthropicModelVariant::from_str(
-                &model_id
-                    .clone()
-                    .unwrap_or(DEFAULT_ANTHROPIC_MODEL.to_string()),
-            )
-            .map_err(|_| LlmError::FailedToLoadModel {
-                source: format!("Unknown anthropic model: {:?}", model_id.clone()).into(),
+            let anth = Anthropic::new(cfg, model_id.as_deref(), &component.name).map_err(|_| {
+                LlmError::FailedToLoadModel {
+                    source: format!("Unknown anthropic model: {:?}", model_id.clone()).into(),
+                }
             })?;
 
-            Ok(Box::new(Anthropic::new(cfg, model_id, &component.name)) as Box<dyn Chat>)
+            Ok(Box::new(anth) as Box<dyn Chat>)
         }
         ModelSource::OpenAi => {
             let api_base = extract_secret!(params, "endpoint");

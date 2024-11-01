@@ -19,8 +19,8 @@ use async_openai::{
     error::OpenAIError,
     types::{
         ChatCompletionRequestAssistantMessage, ChatCompletionRequestAssistantMessageContent,
-        ChatCompletionRequestMessage, ChatCompletionRequestToolMessage,
-        ChatCompletionResponseStream, CreateChatCompletionRequest, CreateChatCompletionResponse,
+        ChatCompletionRequestMessage, ChatCompletionResponseStream, CreateChatCompletionRequest,
+        CreateChatCompletionResponse,
     },
     Client,
 };

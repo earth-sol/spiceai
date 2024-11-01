@@ -37,9 +37,9 @@ use async_openai::types::{
 use serde_json::json;
 
 use super::types::{
-    AnthropicModelVariant, ContentBlock, ContentParam, MessageCreateParams, MessageCreateResponse,
-    MessageParam, MessageRole, MetadataParam, ResponseContentBlock, StopReason, TextBlockParam,
-    ToolChoiceParam, ToolResultBlockParam, ToolUseBlockParam,
+    default_max_tokens, AnthropicModelVariant, ContentBlock, ContentParam, MessageCreateParams,
+    MessageCreateResponse, MessageParam, MessageRole, MetadataParam, ResponseContentBlock,
+    StopReason, TextBlockParam, ToolChoiceParam, ToolResultBlockParam, ToolUseBlockParam,
 };
 use super::types_stream::{transform_stream, AnthropicStreamError, MessageCreateStreamResponse};
 use super::Anthropic;
@@ -59,6 +59,7 @@ impl Chat for Anthropic {
         let mut anth_req = MessageCreateParams::try_from((self.model.clone(), req))?;
         anth_req.stream = Some(true);
 
+        // println!("anth_req: {}", serde_json::to_string(&anth_req).unwrap());
         let stream: Pin<
             Box<
                 dyn Stream<Item = Result<MessageCreateStreamResponse, AnthropicStreamError>> + Send,
@@ -326,7 +327,7 @@ impl TryFrom<(AnthropicModelVariant, CreateChatCompletionRequest)> for MessageCr
             temperature: value.temperature,
             max_tokens: value
                 .max_completion_tokens
-                .unwrap_or(model.default_max_tokens()),
+                .unwrap_or(default_max_tokens(&model)),
             stream: value.stream,
             metadata: value
                 .metadata

@@ -312,6 +312,9 @@ impl ToolUsingChat {
             req
         } else {
             runtime_tools.extend(req.tools.clone().unwrap_or_default());
+            // Ensure function names are unique. Tool-use recursion sometimes creates duplicates.
+            runtime_tools.sort_by(|a, b| a.function.name.cmp(&b.function.name));
+            runtime_tools.dedup_by(|a, b| a.function.name == b.function.name);
             let mut req = req.clone();
             req.tools = Some(runtime_tools);
             req
@@ -431,6 +434,7 @@ fn make_a_stream(
                     // Appending the tool call chunks
                     // TODO: only concatenate, spiced tools
                     if let Some(ref tool_calls) = chat_choice.delta.tool_calls {
+                        println!("Some(ref tool_calls): {tool_calls:?}");
                         for tool_call_chunk in tool_calls {
                             let key = if let Ok(index) = chat_choice.index.try_into() {
                                 (index, tool_call_chunk.index)
@@ -468,6 +472,10 @@ fn make_a_stream(
                                 }
                             });
 
+                            println!(
+                                "Tool key={key:?} --- tool_call_fn={:?}",
+                                tool_call_chunk.function.as_ref()
+                            );
                             if let Some(arguments) = tool_call_chunk
                                 .function
                                 .as_ref()
@@ -476,13 +484,16 @@ fn make_a_stream(
                                 state.function.arguments.push_str(arguments);
                             }
                         }
-                    } else if chat_choice.delta.content.is_some() {
+                    }
+                    if chat_choice.delta.content.is_some() {
                         finished_choices.push(chat_choice.clone());
                     }
 
                     // If a tool has finished (i.e. we have all chunks), process them.
                     if let Some(finish_reason) = &chat_choice.finish_reason {
+                        println!("tool_call_finish: {finish_reason:?}");
                         if matches!(finish_reason, FinishReason::ToolCalls) {
+                            println!("tool_call_finish: {finish_reason:?} chunk {chat_choice:?}");
                             let tool_call_states_clone = Arc::clone(&tool_call_states);
 
                             let tool_calls_to_process = {
@@ -521,11 +532,14 @@ fn make_a_stream(
                                 }
                             };
 
+                            println!("New messages: {new_messages:?}");
                             let mut new_req = req.clone();
                             new_req.messages.clone_from(&new_messages);
                             match model._chat_stream(new_req).await {
                                 Ok(mut s) => {
+                                    println!("In good recursion");
                                     while let Some(resp) = s.next().await {
+                                        println!("with resp: {resp:?}.");
                                         // TODO check if this works for choices > 1.
                                         if let Err(e) = sender_clone.send(resp).await {
                                             if !sender_clone.is_closed() {
