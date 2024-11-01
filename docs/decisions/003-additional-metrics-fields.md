@@ -27,7 +27,7 @@ Spice will add the following new fields to the metrics:
 
 **Why**:
 
-- As Spice grows and adds new features, the need to have more visibility into usage becomes more beneficial.
+- As Spice expands, greater visibility into usage becomes increasingly valuable.
 - Being able to separate internal Spice benchmarks versus actual user consumption helps to understand growth
 - Understanding which SDKs are used most will allow us to focus our efforts.
 - Any performance regressions specific to certain SDKs will be easier to identify.
