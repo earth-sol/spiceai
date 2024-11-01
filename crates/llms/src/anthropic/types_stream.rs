@@ -253,6 +253,13 @@ pub fn transform_stream(
     >,
     model: String,
 ) -> ChatCompletionResponseStream {
+    // As mentioned above, only first tool packet has tool metadata.
+    // Format:
+    //  First Message: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_01T1x1fJ34qAmk2tNTrN7Up6","name":"get_weather","input":{}}}
+    //  Subsequent Messages: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"o,"}}
+    //
+    // We need to keep track of the `.content_block` and the index of the tool delta to associate the tool call with the correct content block.
+    // Map `.index` to `.content_block`
     #[derive(Clone, Default)]
     struct StreamState {
         id: Option<String>,
@@ -348,6 +355,7 @@ pub fn transform_stream(
                         delta: MessageDelta { stop_reason, .. },
                         usage: inner_usage,
                     }) => {
+                        // Update usage
                         if let Some(ref mut u) = state.usage {
                             u.prompt_tokens += inner_usage.input_tokens;
                             u.completion_tokens += inner_usage.output_tokens;
