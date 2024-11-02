@@ -282,7 +282,7 @@ pub fn transform_stream(
             ))
         })
         .then(move |item| {
-            let inner_state = state.clone();
+            let inner_state = Arc::clone(&state);
             let model = model.clone();
 
             async move {

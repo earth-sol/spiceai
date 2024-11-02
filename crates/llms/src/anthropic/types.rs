@@ -300,7 +300,7 @@ pub struct MetadataParam {
 // 1. Anthropic API: claude-3-5-sonnet-20241022 or claude-3-5-sonnet-latest
 // 2. AWS Bedrock: anthropic.claude-3-5-sonnet-20241022-v2:0
 // 3. GCP Vertex AI: claude-3-5-sonnet-v2@20241022
-pub(crate) static ANTHROPIC_REGEX: &str = r#"(?x) # Enable verbose mode
+pub(crate) static ANTHROPIC_REGEX: &str = r"(?x) # Enable verbose mode
     (?:anthropic\.)?                              # Optional 'anthropic.' prefix for AWS
     claude-                                       # Required 'claude-' prefix
     (?:instant-)?                                 # Optional 'instant-' for legacy
@@ -314,17 +314,15 @@ pub(crate) static ANTHROPIC_REGEX: &str = r#"(?x) # Enable verbose mode
         -v\d+@\d{8}                               # GCP format: -v2@YYYYMMDD
         |
         @\d{8}                                    # Alternative GCP format: @YYYYMMDD
-    )?
-"#;
+    )?";
 pub type AnthropicModelVariant = String;
 
 pub(crate) fn validate_model_variant(model: &str) -> Result<AnthropicModelVariant, OpenAIError> {
     Regex::new(ANTHROPIC_REGEX)
-        .map_err(|e| OpenAIError::InvalidArgument(format!("Regex error: {}", e)))?
+        .map_err(|e| OpenAIError::InvalidArgument(format!("Regex error: {e}")))?
         .find(model)
         .ok_or(OpenAIError::InvalidArgument(format!(
-            "Invalid model variant: {}",
-            model
+            "Invalid model variant: {model}"
         )))?;
     Ok(model.to_string())
 }
