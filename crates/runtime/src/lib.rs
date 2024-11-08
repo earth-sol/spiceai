@@ -20,6 +20,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::{collections::HashMap, sync::Arc};
 
+use crate::auth::EndpointAuth;
 use crate::{dataconnector::DataConnector, datafusion::DataFusion};
 use ::datafusion::error::DataFusionError;
 use ::datafusion::sql::{sqlparser, TableReference};
@@ -71,6 +72,7 @@ use util::{retry, RetryError};
 
 use crate::extension::Extension;
 pub mod accelerated_table;
+pub mod auth;
 mod builder;
 pub mod component;
 pub mod config;
@@ -362,23 +364,20 @@ impl Runtime {
     ///
     /// It is recommended to start the servers in parallel to loading the Runtime components to speed up startup.
     pub async fn start_servers(
-        &self,
+        self: Arc<Self>,
         config: Config,
         tls_config: Option<Arc<TlsConfig>>,
+        endpoint_auth: EndpointAuth,
     ) -> Result<()> {
         self.register_metrics_table(self.prometheus_registry.is_some())
             .await?;
 
         let http_server_future = tokio::spawn(http::start(
             config.http_bind_address,
-            Arc::clone(&self.app),
-            Arc::clone(&self.df),
-            Arc::clone(&self.models),
-            Arc::clone(&self.llms),
-            Arc::clone(&self.embeds),
+            Arc::clone(&self),
             config.clone().into(),
-            self.metrics_endpoint,
             tls_config.clone(),
+            endpoint_auth.http_auth,
         ));
 
         // Spawn the metrics server in the background
@@ -946,11 +945,11 @@ impl Runtime {
         }
 
         // Only wrap data connector when necessary.
-        let connector = if ds.embeddings.is_empty() {
-            data_connector
-        } else {
+        let connector = if ds.has_embeddings() {
             let connector = EmbeddingConnector::new(data_connector, Arc::clone(&self.embeds));
             Arc::new(connector) as Arc<dyn DataConnector>
+        } else {
+            data_connector
         };
 
         // Test dataset connectivity by attempting to get a read provider.

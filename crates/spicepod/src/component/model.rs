@@ -132,6 +132,20 @@ impl Display for ModelType {
 
 impl Model {
     #[must_use]
+    pub fn new(from: impl Into<String>, name: impl Into<String>) -> Self {
+        Model {
+            from: from.into(),
+            name: name.into(),
+            description: None,
+            metadata: HashMap::default(),
+            files: Vec::default(),
+            params: HashMap::default(),
+            datasets: Vec::default(),
+            depends_on: Vec::default(),
+        }
+    }
+
+    #[must_use]
     pub fn get_all_file_paths(&self) -> Vec<String> {
         self.files.iter().map(|f| f.path.clone()).collect()
     }
@@ -207,8 +221,9 @@ impl Model {
         };
 
         // TODO: Need to scan filenames from HF for [`ModelSource::HuggingFace`]. Below is a hack
-        // to determine if it's an LLM from HF.
-        if source == ModelSource::HuggingFace && self.params.contains_key("model_type") {
+        // to determine if it's an LLM from HF by check if an ML files are set manually.
+        let no_ml_files = self.files.iter().all(|f| !is_ml_file(Path::new(&f.path)));
+        if source == ModelSource::HuggingFace && no_ml_files {
             return Some(ModelType::Llm);
         }
         let mut files = self.files.clone();

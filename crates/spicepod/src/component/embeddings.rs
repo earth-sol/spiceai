@@ -62,6 +62,18 @@ impl WithDependsOn<Embeddings> for Embeddings {
 
 impl Embeddings {
     #[must_use]
+    pub fn new(from: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            from: from.into(),
+            name: name.into(),
+            files: Vec::default(),
+            params: HashMap::default(),
+            datasets: Vec::default(),
+            depends_on: Vec::default(),
+        }
+    }
+
+    #[must_use]
     pub fn get_prefix(&self) -> Option<EmbeddingPrefix> {
         EmbeddingPrefix::try_from(self.from.as_str()).ok()
     }
@@ -165,6 +177,9 @@ pub struct EmbeddingChunkConfig {
 }
 
 /// Configuration for if and how a dataset's column should be embedded.
+///
+/// Prefer to use [`super::dataset::column::ColumnLevelEmbeddingConfig`] going
+/// forward. Support for [`ColumnEmbeddingConfig`] will be removed in future.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "schemars", derive(JsonSchema))]
 pub struct ColumnEmbeddingConfig {

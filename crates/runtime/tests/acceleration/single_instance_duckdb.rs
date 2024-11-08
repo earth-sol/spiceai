@@ -27,7 +27,7 @@ use spicepod::component::dataset::{
 };
 use std::sync::Arc;
 
-use crate::{get_test_datafusion, init_tracing, runtime_ready_check};
+use crate::{get_test_datafusion, init_tracing, utils::runtime_ready_check};
 
 use super::get_params;
 
@@ -85,11 +85,11 @@ async fn test_acceleration_duckdb_single_instance() -> Result<(), anyhow::Error>
 
     runtime_ready_check(&rt).await;
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     drop(rt);
     runtime::dataaccelerator::clear_registry().await;
     runtime::dataaccelerator::register_all().await;
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
     let pool =
         DuckDbConnectionPool::new_file(expected_path, &AccessMode::ReadWrite).expect("valid path");

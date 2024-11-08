@@ -28,7 +28,7 @@ use spicepod::component::{
     params::Params,
 };
 
-use crate::{init_tracing, wait_until_true};
+use crate::{init_tracing, utils::wait_until_true};
 
 #[cfg(feature = "postgres")]
 #[allow(clippy::too_many_lines)]
@@ -220,7 +220,7 @@ CREATE TABLE test (
         "|               |   Federated                                                                                                                                                                  |",
         "|               |  Projection: count(Int64(1))                                                                                                                                                 |",
         "|               |   Aggregate: groupBy=[[]], aggr=[[count(Int64(1))]]                                                                                                                          |",
-        "|               |     TableScan: abc                                                                                                                                                           |",
+        "|               |     TableScan: abc projection=[]                                                                                                                                             |",
         "| physical_plan | BytesProcessedExec                                                                                                                                                           |",
         "|               |   SchemaCastScanExec                                                                                                                                                         |",
         "|               |     VirtualExecutionPlan name=postgres compute_context=host=Tcp(\"localhost\"),port=20962,user=postgres, sql=SELECT count(1) FROM abc rewritten_sql=SELECT count(1) FROM \"abc\" |",

@@ -36,7 +36,7 @@ use runtime::config::Config as RuntimeConfig;
 use runtime::datafusion::DataFusion;
 use runtime::podswatcher::PodsWatcher;
 use runtime::spice_metrics;
-use runtime::{extension::ExtensionFactory, Runtime};
+use runtime::{auth::EndpointAuth, extension::ExtensionFactory, Runtime};
 use snafu::prelude::*;
 use spice_cloud::SpiceExtensionFactory;
 use spiced_tracing::LogVerbosity;
@@ -225,10 +225,13 @@ pub async fn run(args: Args) -> Result<()> {
     start_anonymous_telemetry(&args, telemetry_config.as_ref(), app_name.as_ref()).await;
 
     let cloned_rt = rt.clone();
-    let server_thread =
-        tokio::spawn(
-            async move { Box::pin(cloned_rt.start_servers(args.runtime, tls_config)).await },
-        );
+    let endpoint_auth = match app.as_ref() {
+        Some(app) => EndpointAuth::new(rt.secrets(), app).await,
+        None => EndpointAuth::no_auth(),
+    };
+    let server_thread = tokio::spawn(async move {
+        Box::pin(Arc::new(cloned_rt).start_servers(args.runtime, tls_config, endpoint_auth)).await
+    });
 
     tokio::select! {
         () = rt.load_components() => {},
