@@ -12,7 +12,7 @@ rm spicepod.yaml 2> /dev/null
 subset_args=("${@:2}")
 
 # Setup the TPC-DS or TPC-H dataset, passing all args except the query folder
-./setup-tpc-spicepod.bash "${subset_args[@]}" > /tmp/spice_tpc_run.log &
+./setup-tpc-spicepod.bash "${subset_args[@]}" &
 #./setup-tpc-spicepod.bash "${subset_args[@]}"
 PID=$!
 
