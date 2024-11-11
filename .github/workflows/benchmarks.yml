@@ -439,6 +439,10 @@ jobs:
           chmod +x spiced
           chmod +x spice
 
+          mkdir -p ~/.spice/bin
+          cp spiced ~/.spice/bin
+          cp spice ~/.spice/bin
+
           ./setup-and-query.sh ${{ matrix.bench }}
 
       - name: Cleanup
