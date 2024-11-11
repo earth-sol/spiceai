@@ -336,6 +336,9 @@ jobs:
     name: Run Arrow RC
     runs-on: spiceai-large-runners
 
+    env:
+      GOVER: 1.22.0
+
     # Require explicit runs for Arrow RC, don't include it as part of the general benchmark runs
     if: (github.event.inputs.selected_benchmark == 'arrow accelerator RC' && github.event_name == 'workflow_dispatch')
         
@@ -360,6 +363,11 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           os: 'linux'
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GOVER }}
 
       - name: Setup duckdb
         run: |
@@ -370,7 +378,7 @@ jobs:
       - name: Install make
         shell: bash
         run: sudo apt-get install -y make
-        
+
       - name: Install cc
         shell: bash
         run: |
