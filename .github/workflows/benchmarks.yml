@@ -400,7 +400,6 @@ jobs:
     if: (github.event.inputs.selected_benchmark == 'arrow accelerator RC' && github.event_name == 'workflow_dispatch')
     needs:
      - build-spice-rc
-    concurrency:
     strategy:
       fail-fast: false
       matrix:
