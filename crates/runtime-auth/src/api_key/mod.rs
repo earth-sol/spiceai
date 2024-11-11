@@ -16,7 +16,7 @@ limitations under the License.
 
 use axum::http;
 
-use crate::{error::Error, AuthVerdict, HttpAuth};
+use crate::{error::Error, AuthVerdict, FlightBasicAuth, GrpcAuth, HttpAuth};
 
 pub struct ApiKeyAuth {
     api_keys: Vec<String>,
@@ -31,12 +31,48 @@ impl ApiKeyAuth {
 
 impl HttpAuth for ApiKeyAuth {
     /// Checks the `X-API-Key` header for a valid API key
-    fn http(&self, request: &http::request::Parts) -> Result<AuthVerdict, Error> {
+    fn http_verify(&self, request: &http::request::Parts) -> Result<AuthVerdict, Error> {
         let api_key = request
             .headers
             .get("X-API-Key")
             .and_then(|value| value.to_str().ok())
             .unwrap_or_default();
+
+        if self.api_keys.iter().any(|key| key == api_key) {
+            Ok(AuthVerdict::Allow)
+        } else {
+            Ok(AuthVerdict::Deny)
+        }
+    }
+}
+
+impl FlightBasicAuth for ApiKeyAuth {
+    fn validate(&self, _username: &str, password: &str) -> Result<String, Error> {
+        if self.api_keys.iter().any(|key| key == password) {
+            Ok(password.to_string())
+        } else {
+            Err(Error::InvalidCredentials)
+        }
+    }
+
+    fn is_valid(&self, bearer_token: &str) -> Result<AuthVerdict, Error> {
+        if self.api_keys.iter().any(|key| key == bearer_token) {
+            Ok(AuthVerdict::Allow)
+        } else {
+            Ok(AuthVerdict::Deny)
+        }
+    }
+}
+
+impl GrpcAuth for ApiKeyAuth {
+    fn grpc_verify(&self, req: &tonic::Request<()>) -> Result<AuthVerdict, Error> {
+        let metadata = req.metadata();
+        let Some(api_key) = metadata.get("x-api-key") else {
+            return Ok(AuthVerdict::Deny);
+        };
+        let Ok(api_key) = api_key.to_str() else {
+            return Ok(AuthVerdict::Deny);
+        };
 
         if self.api_keys.iter().any(|key| key == api_key) {
             Ok(AuthVerdict::Allow)
@@ -67,7 +103,7 @@ mod tests {
         let auth = ApiKeyAuth::new(vec!["valid-key".to_string()]);
         let parts = create_request_parts(Some("valid-key"));
 
-        let result = auth.http(&parts);
+        let result = auth.http_verify(&parts);
         assert!(matches!(result, Ok(AuthVerdict::Allow)));
     }
 
@@ -76,7 +112,7 @@ mod tests {
         let auth = ApiKeyAuth::new(vec!["valid-key".to_string()]);
         let parts = create_request_parts(Some("invalid-key"));
 
-        let result = auth.http(&parts);
+        let result = auth.http_verify(&parts);
         assert!(matches!(result, Ok(AuthVerdict::Deny)));
     }
 
@@ -85,7 +121,7 @@ mod tests {
         let auth = ApiKeyAuth::new(vec!["valid-key".to_string()]);
         let parts = create_request_parts(None);
 
-        let result = auth.http(&parts);
+        let result = auth.http_verify(&parts);
         assert!(matches!(result, Ok(AuthVerdict::Deny)));
     }
 
@@ -98,7 +134,7 @@ mod tests {
         ]);
 
         let parts = create_request_parts(Some("key2"));
-        let result = auth.http(&parts);
+        let result = auth.http_verify(&parts);
         assert!(matches!(result, Ok(AuthVerdict::Allow)));
     }
 }
