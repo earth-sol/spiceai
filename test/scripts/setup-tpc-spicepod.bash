@@ -91,10 +91,19 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 # test if duckdb command exists
-if ! type "duckdb" 1> /dev/null 2>&1; then
+if [ -x "./duckdb" ]; then
+  echo "Using local DuckDB binary"
+  DUCKDB="./duckdb"
+elif command -v duckdb &> /dev/null; then
+  echo "Using system DuckDB binary"
+  DUCKDB="duckdb"
+else
   echo "'duckdb' is required"
   exit 1
 fi
+
+echo "Testing DuckDB"
+$DUCKDB --version
 
 dbname="$bench-sf$sf.db"
 dbname_accelerated_prefix="$bench-sf$sf-accelerated-"
