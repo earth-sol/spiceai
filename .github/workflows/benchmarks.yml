@@ -422,6 +422,9 @@ jobs:
         with:
           name: rc_spice
           path: ./tests/scripts
+      
+      - name: list artifacts
+        run: ls -la ./tests/scripts
 
       - name: Setup duckdb
         working-directory: ./test/scripts
