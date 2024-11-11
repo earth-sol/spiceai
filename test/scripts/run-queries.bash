@@ -39,9 +39,11 @@ done
 
 if [ ${#failed_queries[@]} -eq 0 ]; then
   echo "All queries passed!"
+  exit 0
 else
   echo "Failed queries:"
   for i in ${failed_queries[@]}; do
     echo $i
   done
+  exit 1
 fi

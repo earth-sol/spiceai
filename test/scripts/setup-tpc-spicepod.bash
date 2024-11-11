@@ -93,6 +93,7 @@ done
 # test if duckdb command exists
 if ! type "duckdb" 1> /dev/null 2>&1; then
   echo "'duckdb' is required"
+  exit 1
 fi
 
 dbname="$bench-sf$sf.db"
