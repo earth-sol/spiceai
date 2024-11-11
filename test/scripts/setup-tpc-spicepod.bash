@@ -252,7 +252,10 @@ if [ "$bench" = "tpcds" ]; then
   fi
 fi
 
-if [ -x "./spiced" ]; then
+echo $(pwd)
+ls -la .
+
+if [ -f "./spiced" ]; then
   echo "Using local spiced binary"
   SPICED="./spiced"
 elif command -v spiced &> /dev/null; then

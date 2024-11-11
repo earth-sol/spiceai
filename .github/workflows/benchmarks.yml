@@ -437,7 +437,9 @@ jobs:
         working-directory: ./test/scripts
         # Modify the path to include DuckDB and run the queries
         run: |
-          PATH=$(pwd):./build:$PATH ./setup-and-query.sh ${{ matrix.bench }}
+          chmod +x spiced
+          
+          ./setup-and-query.sh ${{ matrix.bench }}
 
       - name: Cleanup
         if: always()
