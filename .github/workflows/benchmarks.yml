@@ -419,6 +419,7 @@ jobs:
 
       - name: download artifacts
         uses: actions/download-artifact@v4
+        working-directory: ./test/scripts
         with:
           name: rc_spice
           path: ./build
