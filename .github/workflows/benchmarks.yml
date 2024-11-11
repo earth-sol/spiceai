@@ -366,6 +366,14 @@ jobs:
           sudo apt-get install -y wget unzip
           wget https://github.com/duckdb/duckdb/releases/download/v1.1.3/duckdb_cli-linux-amd64.zip
           unzip duckdb_cli-linux-amd64.zip
+
+      - name: Set up make
+        if: matrix.target_os == 'linux'
+        uses: ./.github/actions/setup-make
+
+      - name: Set up cc
+        if: matrix.target_os == 'linux'
+        uses: ./.github/actions/setup-cc
       
       - name: Install Spice
         run: |
