@@ -421,10 +421,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: rc_spice
-          path: ./tests/scripts
-      
-      - name: list artifacts
-        run: ls -la ./tests/scripts
+          path: .
 
       - name: Setup duckdb
         working-directory: ./test/scripts
@@ -437,8 +434,11 @@ jobs:
         working-directory: ./test/scripts
         # Modify the path to include DuckDB and run the queries
         run: |
+          echo $(pwd)
+          ls -la .
+          cp ../../spiced .
           chmod +x spiced
-          
+
           ./setup-and-query.sh ${{ matrix.bench }}
 
       - name: Cleanup
