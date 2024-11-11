@@ -369,7 +369,7 @@ jobs:
       
       - name: Install Spice
         run: |
-          rm -r ~/.spice
+          rm -r ~/.spice || true
           make install
 
       - name: Run Arrow RC
