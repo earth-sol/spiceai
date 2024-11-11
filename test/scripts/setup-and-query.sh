@@ -34,7 +34,7 @@ MAX_WAIT_TIME=600
 CHECK_INTERVAL=5
 
 while true; do
-    RESPONSE=$(curl http://localhost:8090/v1/ready)
+    RESPONSE=$(curl -s http://localhost:8090/v1/ready)
     RCODE=$?
 
     if [[ "$RESPONSE" == "Ready" ]]; then
@@ -43,8 +43,7 @@ while true; do
     fi
 
     if [[ $RCODE -eq 7 ]]; then
-        echo "spice is not running, check the log"
-        exit 1
+        echo "spice is not responding to HTTP queries, check the log"
     fi
 
     CURRENT_TIME=$(date +%s)
