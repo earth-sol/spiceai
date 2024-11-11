@@ -398,8 +398,9 @@ jobs:
 
     # Require explicit runs for Arrow RC, don't include it as part of the general benchmark runs
     if: (github.event.inputs.selected_benchmark == 'arrow accelerator RC' && github.event_name == 'workflow_dispatch')
-    needs:
-      - build-spice-rc
+    #needs:
+    #  - build-spice-rc
+    concurrency:
     strategy:
       fail-fast: false
       matrix:
@@ -417,12 +418,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: rc_spice
-          path: ./build
-
       - name: Setup duckdb
         run: |
           sudo apt-get install -y wget unzip
@@ -434,6 +429,12 @@ jobs:
         # Modify the path to include DuckDB and run the queries
         run: |
           PATH=$(pwd):./build:$PATH ./setup-and-query.sh ${{ matrix.bench }}
+
+      - name: download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: rc_spice
+          path: ./build
 
       - name: Cleanup
         if: always()

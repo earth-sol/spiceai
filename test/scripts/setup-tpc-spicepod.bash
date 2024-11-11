@@ -90,6 +90,8 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
+ls -la .
+
 # test if duckdb command exists
 if [ -x "./duckdb" ]; then
   echo "Using local DuckDB binary"
