@@ -118,7 +118,7 @@ if [ -f "$dbname" ]; then
   echo "Database '$dbname' already exists. Skipping creation, using existing database."
 else
   duckdbcommand=`generate_command $bench $sf`
-  duckdb -c "$duckdbcommand" "$dbname"
+  $DUCKDB -c "$duckdbcommand" "$dbname"
   echo "Created database '$dbname'"
 fi
 
