@@ -21,12 +21,23 @@ fi
 
 trap clean_up EXIT
 
+if [ -f "./spice" ]; then
+  echo "Using local spice binary"
+  SPICE="./spice"
+elif command -v spice &> /dev/null; then
+  echo "Using system spice binary"
+  SPICE="spice"
+else
+  echo "'spice' is required"
+  exit 1
+fi
+
 query_folder=$1;
 failed_queries=()
 for i in `ls -d $query_folder/**`; do
   echo "Running query in $i.."
   sed '/^--/d' < $i > $i.tmp # remove comments because we compact the query into one line
-  tr '\n' ' ' <  $i.tmp | spice sql > runqueries.tmp.txt
+  tr '\n' ' ' <  $i.tmp | $SPICE sql > runqueries.tmp.txt
 
   rm $i.tmp
   result=`cat runqueries.tmp.txt`

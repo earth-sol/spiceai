@@ -33,6 +33,8 @@ MAX_WAIT_TIME=600
 # Set the interval between checks (e.g., 5 seconds)
 CHECK_INTERVAL=5
 
+echo "Waiting for spice to load datasets..."
+
 while true; do
     RESPONSE=$(curl -s http://localhost:8090/v1/ready)
     RCODE=$?
@@ -59,7 +61,7 @@ while true; do
 done
 
 # Run the queries
-echo "Running $3 queries..."
+echo "Running $2 queries..."
 ./run-queries.bash $1
 EXIT_CODE=$?
 
