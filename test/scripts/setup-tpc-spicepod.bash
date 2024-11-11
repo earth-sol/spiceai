@@ -252,4 +252,18 @@ if [ "$bench" = "tpcds" ]; then
   fi
 fi
 
-spiced
+if [ -x "./spiced" ]; then
+  echo "Using local spiced binary"
+  SPICED="./spiced"
+elif command -v spiced &> /dev/null; then
+  echo "Using system spiced binary"
+  SPICED="spiced"
+else
+  echo "'spiced' is required"
+  exit 1
+fi
+
+echo "Testing Spiced"
+$SPICED --version
+
+$SPICED
