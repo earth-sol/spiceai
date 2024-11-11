@@ -15,11 +15,14 @@ subset_args=("${@:2}")
 ./setup-tpc-spicepod.bash "${subset_args[@]}" &
 #./setup-tpc-spicepod.bash "${subset_args[@]}"
 PID=$!
+ECODE=$?
 
-if [ $? -ne 0 ]; then
+if [ $ECODE -ne 0 ]; then
   echo "Failed to start spice"
   exit 1  # Exit with an error code
 fi
+
+echo "Setup script Exit code is $ECODE"
 
 # Start a timer
 START_TIME=$(date +%s)
@@ -31,12 +34,17 @@ MAX_WAIT_TIME=600
 CHECK_INTERVAL=5
 
 while true; do
-    RESPONSE=$(curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8090/v1/ready)
     RESPONSE=$(curl http://localhost:8090/v1/ready)
+    RCODE=$?
 
     if [[ "$RESPONSE" == "Ready" ]]; then
         echo "Datasets loaded!"
         break
+    fi
+
+    if [[ $RCODE -eq 7 ]]; then
+        echo "spice is not running, check the log"
+        exit 1
     fi
 
     CURRENT_TIME=$(date +%s)
