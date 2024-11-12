@@ -47,7 +47,7 @@ on:
           - 'sqlite accelerator (memory mode)'
           - 'sqlite accelerator (file mode)'
           - 'postgres accelerator'
-          - 'arrow accelerator RC'
+          - 'accelerator RC'
 
 env:
   FEATURES: 'postgres,spark,mysql,odbc,delta_lake,databricks,duckdb,sqlite'
@@ -339,7 +339,7 @@ jobs:
 
     env:
       GOVER: 1.22.0
-    if: (github.event.inputs.selected_benchmark == 'arrow accelerator RC' && github.event_name == 'workflow_dispatch')
+    if: (github.event.inputs.selected_benchmark == 'accelerator RC' && github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
 
@@ -389,29 +389,29 @@ jobs:
           path: |
             spice
             spiced
-  run-arrow-rc:
-    name: Run Arrow RC
+
+  run-accelerator-rc:
+    name: Run Accelerator RC
     runs-on: spiceai-large-runners
 
     env:
       GOVER: 1.22.0
 
-    # Require explicit runs for Arrow RC, don't include it as part of the general benchmark runs
-    if: (github.event.inputs.selected_benchmark == 'arrow accelerator RC' && github.event_name == 'workflow_dispatch')
+    # Require explicit runs for Accelerator RC, don't include it as part of the general benchmark runs
+    if: (github.event.inputs.selected_benchmark == 'accelerator RC' && github.event_name == 'workflow_dispatch')
     needs:
      - build-spice-rc
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: 'arrow accelerator RC (tpch SF 1)'
-            bench: '../../crates/runtime/benches/queries/tpch tpch 1'
-          # - name: 'arrow accelerator RC (tpch SF 10)'
-          #   bench: '../../crates/runtime/benches/queries/tpch tpch 10'
+          - name: 'arrow accelerator RC (tpch SF 10)'
+            bench: '../../crates/runtime/benches/queries/tpch tpch 10'
+          - name: 'arrow accelerator RC (tpds SF 10)'
+            bench: '../../crates/runtime/benches/queries/tpcds tpcds 10'
           # - name: 'arrow accelerator RC (tpch SF 100)'
           #   bench: '../../crates/runtime/benches/queries/tpch tpch 100'
-          # - name: 'arrow accelerator RC (tpds SF 10)'
-          #   bench: '../../crates/runtime/benches/queries/tpcds tpcds 10'
+
           # - name: 'arrow accelerator RC (tpds SF 100)'
           #   bench: '../../crates/runtime/benches/queries/tpcds tpcds 100'
     steps:
