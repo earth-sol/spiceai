@@ -33,7 +33,7 @@ use url::Url;
 
 use crate::Runtime;
 
-use super::{parameters, SpiceModelTool};
+use super::{utils::parameters, SpiceModelTool};
 
 pub struct CalendarTool {
     name: String,
