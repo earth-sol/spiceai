@@ -16,9 +16,9 @@ limitations under the License.
 
 use async_trait::async_trait;
 use schemars::JsonSchema;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use spicepod::component::tool::Tool;
 use std::{collections::HashMap, sync::Arc};
 
 use data_components::sharepoint::calendar::CalendarClient;
@@ -39,6 +39,26 @@ pub struct CalendarTool {
     name: String,
     description: Option<String>,
     client: CalendarClient,
+}
+
+impl CalendarTool {
+    pub fn try_new(
+        name: Option<&str>,
+        description: Option<&str>,
+        params: &HashMap<String, SecretString>,
+    ) -> Result<CalendarTool, Box<dyn std::error::Error + Send + Sync>> {
+        let name = name.unwrap_or("get_calendar_events").to_string();
+        let description = description
+            .unwrap_or("Get the events from a user's schedule")
+            .to_string();
+
+        let client = client_from_params(params)?;
+        Ok(Self {
+            name,
+            description: Some(description),
+            client,
+        })
+    }
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize)]
@@ -82,14 +102,18 @@ impl SpiceModelTool for CalendarTool {
 }
 
 fn client_from_params(
-    params: &HashMap<String, String>,
+    params: &HashMap<String, SecretString>,
 ) -> Result<CalendarClient, Box<dyn std::error::Error + Send + Sync>> {
-    let client_id = params.get("client_id").expect("client_id").as_str();
+    let client_id = params
+        .get("client_id")
+        .expect("client_id")
+        .expose_secret()
+        .as_str();
 
-    let tenant_id = params.get("tenant_id").expect("tenant_id");
+    let tenant_id = params.get("tenant_id").expect("tenant_id").expose_secret();
 
-    let client_secret = params.get("client_secret");
-    let auth_code = params.get("auth_code");
+    let client_secret = params.get("client_secret").map(SecretString::expose_secret);
+    let auth_code = params.get("auth_code").map(SecretString::expose_secret);
 
     let graph_client = match (client_secret, auth_code) {
         (Some(client_secret), None) => GraphClient::from(
@@ -118,17 +142,4 @@ fn client_from_params(
         }
     };
     Ok(CalendarClient::new(Arc::new(graph_client)))
-}
-
-impl TryFrom<&Tool> for CalendarTool {
-    type Error = Box<dyn std::error::Error + Send + Sync>;
-
-    fn try_from(value: &Tool) -> Result<Self, Self::Error> {
-        let client = client_from_params(&value.params)?;
-        Ok(CalendarTool {
-            name: "get_calendar_events".to_string(),
-            description: Some("Get the events from a user's schedule".to_string()),
-            client,
-        })
-    }
 }

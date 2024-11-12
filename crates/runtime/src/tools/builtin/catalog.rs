@@ -19,7 +19,7 @@ use secrecy::{ExposeSecret, SecretString};
 use spicepod::component::tool::Tool;
 use std::{collections::HashMap, sync::Arc};
 
-use crate::tools::{catalog::SpiceToolCatalog, factory::ToolFactory};
+use crate::tools::{calendar::CalendarTool, catalog::SpiceToolCatalog, factory::ToolFactory};
 
 use super::{
     document_similarity::DocumentSimilarityTool,
@@ -44,6 +44,9 @@ impl BuiltinToolCatalog {
     ) -> Option<Arc<dyn SpiceModelTool>> {
         let name = name.unwrap_or(id);
         match id {
+            "calendar" => CalendarTool::try_new(Some(name), description.as_deref(), params)
+                .map(|t| Arc::new(t) as Arc<dyn SpiceModelTool>)
+                .ok(),
             "get_readiness" => Some(Arc::new(GetReadinessTool::new(name, description))),
             "document_similarity" => Some(Arc::new(DocumentSimilarityTool::new(name, description))),
             "table_schema" => Some(Arc::new(TableSchemaTool::new(name, description))),
