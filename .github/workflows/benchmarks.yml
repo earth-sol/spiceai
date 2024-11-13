@@ -356,7 +356,7 @@ jobs:
           git config --global user.email 'bench-snapshot-update-bot@spice.ai'
           git checkout -b bench-snapshot-update/${GITHUB_RUN_ID}
           git add '*.snap'
-          git commit -m "Update benchmark snapshots for ${{ matrix.name }} and ${{ matrix.bench }}""
+          git commit -m "Update benchmark snapshots for ${{ matrix.name }} and ${{ matrix.bench }}"
           git pull --rebase origin bench-snapshot-update/${{ github.run_id }}
           git push origin bench-snapshot-update/${GITHUB_RUN_ID}
         env:
