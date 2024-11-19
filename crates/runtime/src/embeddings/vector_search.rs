@@ -591,16 +591,10 @@ impl VectorSearch {
             additional_columns,
         } = req;
 
-        let tables = data_source_opt
-            .as_ref()
-            .map(|ts| {
-                ts.iter()
-                    .map(TableReference::from)
-                    .filter(|t| self.df.table_exists(t.clone()))
-                    .collect()
-            })
-            .clone()
-            .unwrap_or(self.df.get_user_table_names());
+        let tables = match data_source_opt {
+            Some(ts) => ts.iter().map(TableReference::from).collect(),
+            None => self.user_tables_with_embeddings().await?,
+        };
 
         if tables.is_empty() {
             return Err(Error::DataSourcesNotFound {
@@ -697,12 +691,37 @@ impl VectorSearch {
         }
     }
 
+    pub async fn user_tables_with_embeddings(&self) -> Result<Vec<TableReference>> {
+        let tables = self.df.get_user_table_names();
+        let mut tables_with_embeddings = Vec::new();
+
+        for t in tables {
+            let table_provider = self
+                .df
+                .get_table(&t)
+                .await
+                .context(DataSourcesNotFoundSnafu {
+                    data_source: vec![t.clone()],
+                })?;
+            if get_embedding_table(&table_provider).await.is_some() {
+                tables_with_embeddings.push(TableReference::from(t));
+            }
+        }
+        Ok(tables_with_embeddings)
+    }
+
     /// For the data sources that assumedly exist in the [`DataFusion`] instance, find the embedding models used in each data source.
     async fn find_relevant_embedding_models(
         &self,
         data_sources: &[TableReference],
     ) -> Result<HashMap<TableReference, Vec<ModelKey>>> {
         let mut embeddings_to_run = HashMap::new();
+
+        tracing::debug!(
+            "Finding relevant embedding models for data sources: {:#?}",
+            data_sources
+        );
+
         for data_source in data_sources {
             let table = self
                 .df
@@ -820,6 +839,11 @@ impl VectorSearch {
         query: &str,
         data_sources: &[TableReference],
     ) -> Result<HashMap<TableReference, Vec<Vec<f32>>>> {
+        tracing::debug!(
+            "Calculating embeddings for data sources: {:#?}",
+            data_sources
+        );
+
         // Determine which embedding models need to be run. If a table does not have an embedded column, return an error.
         let embeddings_to_run: HashMap<TableReference, Vec<ModelKey>> =
             self.find_relevant_embedding_models(data_sources).await?;
