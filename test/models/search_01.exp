@@ -5,18 +5,18 @@ set timeout 5:
 
 spawn spice search
 
-proc perform_search {search_term} {
+proc perform_search {search_term expected_term} {
     global timeout
 
     send "$search_term\r"
 
     expect {
-        "Rank " {
+        -re $expected_term {
             # allow stream to complete
             sleep 2
-            send_user "Search returned results\n"
+            send_user "Search returned expected result\n"
         }
-        # if there is ERROR message before Rank N, then search failed
+        # if there is ERROR message before the expected term, then search failed
         " ERROR " {
             # allow stream to complete
             sleep 2
@@ -30,10 +30,10 @@ proc perform_search {search_term} {
     }
 }
 expect "search>"
-perform_search "local_model"
+perform_search "local_model" {Rank 1}
 
 expect "search>"
-perform_search "another search term"
+perform_search "friends" {Rank 1}
 
 # Signal to exit (Ctrl+C)
 send \x03
