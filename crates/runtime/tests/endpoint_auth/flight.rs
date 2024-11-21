@@ -80,10 +80,10 @@ async fn test_flight_auth() -> Result<(), anyhow::Error> {
     let client = FlightServiceClient::new(channel);
 
     let result =
-        flightrepl::get_records(client.clone(), "SELECT 1", Some(&"valid".to_string())).await;
+        flightrepl::get_records(client.clone(), "SELECT 1", Some(&"valid".to_string()), "test_flight_auth/1.0").await;
     assert!(result.is_ok());
 
-    let Err(e) = flightrepl::get_records(client, "SELECT 1", None).await else {
+    let Err(e) = flightrepl::get_records(client, "SELECT 1", None, "test_flight_auth/1.0").await else {
         panic!("expected error");
     };
     match e {
