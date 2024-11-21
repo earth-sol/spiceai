@@ -66,7 +66,7 @@ pub(crate) fn get_user_agent() -> String {
         .to_string();
 
     format!(
-        "flightrepl {} ({os_type}/{os_release} {os_arch})",
+        "flightrepl/{} ({os_type}/{os_release} {os_arch})",
         env!("CARGO_PKG_VERSION")
     )
 }

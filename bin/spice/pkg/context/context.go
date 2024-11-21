@@ -50,6 +50,7 @@ type RuntimeContext struct {
 	isCloud         bool
 	httpClient      *http.Client
 	apiKey          string
+	userAgent	    string
 }
 
 func NewContext() *RuntimeContext {
@@ -57,6 +58,7 @@ func NewContext() *RuntimeContext {
 		httpEndpoint:    "http://127.0.0.1:8090",
 		metricsEndpoint: "http://127.0.0.1:9090",
 		httpClient:      &http.Client{},
+		userAgent:       util.GetSpiceUserAgent("spice"),
 	}
 	err := rtcontext.Init()
 	if err != nil {
@@ -322,9 +324,22 @@ func (c *RuntimeContext) SetApiKey(apiKey string) {
 	c.apiKey = apiKey
 }
 
+func (c *RuntimeContext) SetUserAgent(userAgent string) {
+	c.userAgent = userAgent
+}
+
+func (c *RuntimeContext) GetUserAgent() string {
+	return c.userAgent
+}
+
+func (c *RuntimeContext) SetUserAgentClient(client string) {
+	c.userAgent = util.GetSpiceUserAgent(client)
+}
+
 func (c *RuntimeContext) GetHeaders() http.Header {
 	headers := make(http.Header)
 	headers.Set("Content-Type", "application/json")
+
 
 	if c.isCloud {
 		apiKey := os.Getenv("SPICE_API_KEY")
