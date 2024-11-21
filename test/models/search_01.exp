@@ -30,10 +30,10 @@ proc perform_search {search_term expected_term} {
     }
 }
 expect "search>"
-perform_search "local_model" {Rank 1}
+perform_search "Spice runtime error" {Rank 1,.*spice\.public\.issues}
 
 expect "search>"
-perform_search "friends" {Rank 1}
+perform_search "friends" {Rank 1,.*spice\.public\.catalog_page}
 
 # Signal to exit (Ctrl+C)
 send \x03
