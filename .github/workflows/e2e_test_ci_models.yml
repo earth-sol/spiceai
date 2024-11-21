@@ -39,13 +39,19 @@ jobs:
                 target_os: "linux",
                 target_arch: "x86_64",
                 target_arch_go: "amd64"
+              }, {
+                name: "macOS aarch64 (Apple Silicon)",
+                builder: "macos-14",
+                runner: "macos-14",
+                target_os: "darwin",
+                target_arch: "aarch64",
+                target_arch_go: "arm64"
               }
             ];
 
             return context.eventName === 'pull_request' ? matrix.slice(0, 1) : matrix;
 
   build:
-    # if: false
     name: Build ${{ matrix.target.name }} binaries
     runs-on: ${{ matrix.target.builder }}
     needs: setup-matrix
@@ -187,6 +193,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y expect
+
+      - name: Install expect (macOS)
+        if: matrix.target.target_os == 'darwin'
+        run: |
+          brew install expect
 
       - name: Test vector search
         run: |
