@@ -132,7 +132,8 @@ macro_rules! handle_error {
 impl Query {
     #[allow(clippy::too_many_lines)]
     pub async fn run(self) -> Result<QueryResult> {
-        crate::metrics::telemetry::track_query_count();
+        let tcontext = Arc::clone(&self.tracker.telemetry_context);
+        crate::metrics::telemetry::track_query_count(&*tcontext);
 
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "sql_query", input = %self.sql, runtime_query = false);
         let inner_span = span.clone();
@@ -146,7 +147,7 @@ impl Query {
             // Sets the protocol as an extension on DataFusion, to allow recovering it to track telemetry
             session
                 .config_mut()
-                .set_extension(Arc::new(tracker.protocol));
+                .set_extension(Arc::clone(&tracker.telemetry_context));
 
             let plan = match session.create_logical_plan(&ctx.sql).await {
                 Ok(plan) => plan,
@@ -369,7 +370,7 @@ fn attach_query_tracker_to_stream(
             }
         }
 
-        crate::metrics::telemetry::track_bytes_returned(num_output_bytes, ctx.protocol.as_arc_str());
+        crate::metrics::telemetry::track_bytes_returned(num_output_bytes, &*ctx.telemetry_context);
 
         ctx
             .schema(schema_copy)

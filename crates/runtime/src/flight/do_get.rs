@@ -23,11 +23,10 @@ use arrow_flight::{
 };
 use prost::Message;
 use tonic::{Request, Response, Status};
+use util::user_agent::SpiceUserAgent;
 
 use crate::{
-    datafusion::query::Protocol,
-    flight::{metrics, util::attach_cache_metadata},
-    timing::TimedStream,
+    datafusion::query::Protocol, flight::{metrics, util::{attach_cache_metadata, extract_flight_user_agent}}, metrics::telemetry::TelemetryContext, timing::TimedStream
 };
 
 use super::{flightsql, to_tonic_err, Service};
@@ -36,18 +35,20 @@ pub(crate) async fn handle(
     flight_svc: &Service,
     request: Request<Ticket>,
 ) -> Result<Response<<Service as FlightService>::DoGetStream>, Status> {
+    let user_agent = extract_flight_user_agent(&request);
+
     let msg: Any = match Message::decode(&*request.get_ref().ticket) {
         Ok(msg) => msg,
-        Err(_) => return Box::pin(do_get_simple(flight_svc, request)).await,
+        Err(_) => return Box::pin(do_get_simple(flight_svc, request, user_agent)).await,
     };
 
     match Command::try_from(msg).map_err(to_tonic_err)? {
         Command::CommandStatementQuery(command) => {
-            Box::pin(flightsql::statement_query::do_get(flight_svc, command)).await
+            Box::pin(flightsql::statement_query::do_get(flight_svc, command, user_agent)).await
         }
         Command::CommandPreparedStatementQuery(command) => {
             Box::pin(flightsql::prepared_statement_query::do_get(
-                flight_svc, command,
+                flight_svc, command, user_agent
             ))
             .await
         }
@@ -75,7 +76,14 @@ pub(crate) async fn handle(
 async fn do_get_simple(
     flight_svc: &Service,
     request: Request<Ticket>,
+    user_agent: SpiceUserAgent,
 ) -> Result<Response<<Service as FlightService>::DoGetStream>, Status> {
+
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::Flight,
+        user_agent,
+    };
+
     let start = metrics::track_flight_request("do_get", Some("sql_query"));
     let datafusion = Arc::clone(&flight_svc.datafusion);
     let ticket = request.into_inner();
@@ -85,7 +93,7 @@ async fn do_get_simple(
             let (output, from_cache) = Box::pin(Service::sql_to_flight_stream(
                 datafusion,
                 sql,
-                Protocol::Flight,
+                telemetry_context,
             ))
             .await?;
 

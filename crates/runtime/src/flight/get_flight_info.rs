@@ -22,17 +22,20 @@ use arrow_flight::{
 };
 use prost::Message;
 use tonic::{Request, Response, Status};
+use util::user_agent::SpiceUserAgent;
 
-use crate::{datafusion::query::Protocol, flight::metrics};
+use crate::{datafusion::query::Protocol, flight::metrics, metrics::telemetry::TelemetryContext};
 
-use super::{flightsql, to_tonic_err, Service};
+use super::{flightsql, to_tonic_err, util::extract_flight_user_agent, Service};
 
 pub(crate) async fn handle(
     flight_svc: &Service,
     request: Request<FlightDescriptor>,
 ) -> Result<Response<FlightInfo>, Status> {
+    let user_agent = extract_flight_user_agent(&request);
+
     let Ok(message) = Any::decode(&*request.get_ref().cmd) else {
-        return get_flight_info_simple(flight_svc, request).await;
+        return get_flight_info_simple(flight_svc, request, user_agent).await;
     };
 
     match Command::try_from(message).map_err(to_tonic_err)? {
@@ -40,7 +43,7 @@ pub(crate) async fn handle(
             flightsql::statement_query::get_flight_info(flight_svc, token, request).await
         }
         Command::CommandPreparedStatementQuery(handle) => {
-            flightsql::prepared_statement_query::get_flight_info(flight_svc, handle, request).await
+            flightsql::prepared_statement_query::get_flight_info(flight_svc, handle, request, user_agent).await
         }
         Command::CommandGetCatalogs(token) => {
             Ok(flightsql::get_catalogs::get_flight_info(token, request))
@@ -70,7 +73,13 @@ pub(crate) async fn handle(
 async fn get_flight_info_simple(
     flight_svc: &Service,
     request: Request<FlightDescriptor>,
+    user_agent: SpiceUserAgent,
 ) -> Result<Response<FlightInfo>, Status> {
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::Flight,
+        user_agent,
+    };
+
     tracing::trace!("get_flight_info_simple: {request:?}");
     let _start = metrics::track_flight_request("get_flight_info", Some("sql_query"));
 
@@ -78,7 +87,7 @@ async fn get_flight_info_simple(
 
     let sql: &str = std::str::from_utf8(&fd.cmd).map_err(to_tonic_err)?;
     let arrow_schema =
-        Service::get_arrow_schema(Arc::clone(&flight_svc.datafusion), sql, Protocol::Flight)
+        Service::get_arrow_schema(Arc::clone(&flight_svc.datafusion), sql, telemetry_context)
             .await
             .map_err(to_tonic_err)?;
 

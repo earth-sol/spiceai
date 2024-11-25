@@ -23,7 +23,7 @@ use arrow_ipc::writer::IpcWriteOptions;
 use datafusion::sql::TableReference;
 use tonic::{Request, Response, Status};
 
-use crate::{datafusion::query::Protocol, flight::metrics};
+use crate::{datafusion::query::Protocol, flight::{metrics, util::extract_flight_user_agent}, metrics::telemetry::TelemetryContext};
 
 use super::{to_tonic_err, Service};
 
@@ -31,6 +31,11 @@ pub(crate) async fn handle(
     flight_svc: &Service,
     request: Request<FlightDescriptor>,
 ) -> Result<Response<SchemaResult>, Status> {
+    let user_agent = extract_flight_user_agent(&request);
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::Flight,
+        user_agent,
+    };
     let _start = metrics::track_flight_request("get_schema", None);
     tracing::trace!("get_schema: {request:?}");
 
@@ -42,7 +47,7 @@ pub(crate) async fn handle(
             let arrow_schema = Service::get_arrow_schema(
                 Arc::clone(&flight_svc.datafusion),
                 sql,
-                Protocol::Flight,
+                telemetry_context,
             )
             .await
             .map_err(to_tonic_err)?;

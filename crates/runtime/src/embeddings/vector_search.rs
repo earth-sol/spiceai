@@ -36,10 +36,12 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{Instrument, Span};
+use util::user_agent::SpiceUserAgent;
 
 use crate::accelerated_table::AcceleratedTable;
 use crate::datafusion::query::{write_to_json_string, Protocol};
 use crate::datafusion::{SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA};
+use crate::metrics::telemetry::TelemetryContext;
 use crate::{datafusion::DataFusion, model::EmbeddingModelStore};
 use crate::{embedding_col, offset_col};
 
@@ -559,9 +561,16 @@ impl VectorSearch {
         };
         tracing::trace!("running SQL: {query}");
 
+        let telemetry_context = TelemetryContext {
+            protocol: Protocol::Internal,
+            user_agent: SpiceUserAgent::default()
+                .with_client_name("vector_search")
+                .with_client_version_from_cargo()
+        };
+
         let batches: Vec<RecordBatch> = self
             .df
-            .query_builder(&query, Protocol::Internal)
+            .query_builder(&query, Some(telemetry_context))
             .build()
             .run()
             .await

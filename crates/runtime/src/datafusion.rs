@@ -32,6 +32,7 @@ use crate::dataupdate::{
     DataUpdate, StreamingDataUpdate, StreamingDataUpdateExecutionPlan, UpdateType,
 };
 use crate::federated_table::FederatedTable;
+use crate::metrics::telemetry::TelemetryContext;
 use crate::secrets::Secrets;
 use crate::{status, view};
 
@@ -242,8 +243,9 @@ pub struct DataFusion {
 
 impl DataFusion {
     #[must_use]
-    pub fn builder(status: Arc<status::RuntimeStatus>) -> DataFusionBuilder {
-        DataFusionBuilder::new(status)
+    pub fn builder(status: Arc<status::RuntimeStatus>, default_telemetry_context: Option<TelemetryContext>) -> DataFusionBuilder {
+        let default_telemetry_context = default_telemetry_context.unwrap_or_default();
+        DataFusionBuilder::new(status, default_telemetry_context)
     }
 
     #[must_use]
@@ -1163,8 +1165,9 @@ impl DataFusion {
     pub fn query_builder<'a>(
         self: &Arc<Self>,
         sql: &'a str,
-        protocol: Protocol,
+        telemetry_context: Option<TelemetryContext>,
     ) -> QueryBuilder<'a> {
-        QueryBuilder::new(sql, Arc::clone(self), protocol)
+        let telemetry_context = telemetry_context.unwrap_or_default();
+        QueryBuilder::new(sql, Arc::clone(self), telemetry_context)
     }
 }

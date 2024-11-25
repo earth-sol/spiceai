@@ -21,6 +21,8 @@ use datafusion::sql::TableReference;
 use opentelemetry::KeyValue;
 use tokio::time::Instant;
 
+use crate::metrics::telemetry::TelemetryContext;
+
 use super::{error_code::ErrorCode, metrics, Protocol};
 
 pub(crate) struct QueryTracker {
@@ -35,7 +37,7 @@ pub(crate) struct QueryTracker {
     pub(crate) query_duration_timer: Instant,
     pub(crate) query_execution_duration_timer: Instant,
     pub(crate) datasets: Arc<HashSet<TableReference>>,
-    pub(crate) protocol: Protocol,
+    pub(crate) telemetry_context: Arc<TelemetryContext>
 }
 
 impl QueryTracker {
@@ -82,9 +84,11 @@ impl QueryTracker {
                     .map(ToString::to_string)
                     .collect::<Vec<String>>()
                     .join(","),
-            ),
-            KeyValue::new("protocol", self.protocol.as_arc_str()),
+            )
         ];
+
+        labels.extend(self.telemetry_context.to_dimensions());
+
         crate::metrics::telemetry::track_query_duration(query_duration, &labels);
         crate::metrics::telemetry::track_query_execution_duration(
             query_execution_duration,
@@ -153,6 +157,6 @@ fn trace_query(query_tracker: &QueryTracker, captured_output: &str) {
         .map(ToString::to_string)
         .collect::<Vec<String>>()
         .join(",");
-    tracing::info!(target: "task_history", protocol = ?query_tracker.protocol, datasets = datasets_str, "labels");
+    tracing::info!(target: "task_history", protocol = ?query_tracker.telemetry_context.protocol, datasets = datasets_str, "labels");
     tracing::info!(target: "task_history", captured_output = %captured_output);
 }

@@ -17,8 +17,10 @@ limitations under the License.
 use arrow_flight::flight_service_server::FlightService;
 use tonic::{
     metadata::{Ascii, MetadataValue},
+    Request,
     Response,
 };
+use util::user_agent::SpiceUserAgent;
 
 use crate::flight::Service;
 
@@ -41,4 +43,20 @@ pub fn attach_cache_metadata(
             }
         }
     }
+}
+
+pub fn extract_flight_user_agent<T>(request: &Request<T>) -> SpiceUserAgent {
+    let user_agent_string = request
+            .metadata()
+            .get("user-agent")
+            .map(|ua| ua.to_str().unwrap_or(""))
+            .unwrap_or_default()
+            .to_string();
+
+    SpiceUserAgent::try_from(user_agent_string).unwrap_or_else(|_| {
+        SpiceUserAgent::default()
+            .with_client_name("Flight")
+            .with_client_version("1.0")
+            .with_client_system("gRPC")
+    })
 }

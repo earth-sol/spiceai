@@ -14,10 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 use crate::{
-    datafusion::DataFusion,
-    http::v1::{sql_to_http_response, ArrowFormat},
-    model::LLMModelStore,
-    tools::{
+    datafusion::{query::Protocol, DataFusion}, http::v1::{sql_to_http_response, ArrowFormat}, metrics::telemetry::TelemetryContext, model::LLMModelStore, tools::{
         builtin::{
             sample::{
                 distinct::DistinctColumnsParams, random::RandomSampleParams, tool::SampleDataTool,
@@ -26,22 +23,21 @@ use crate::{
             table_schema::{TableSchemaTool, TableSchemaToolParams},
         },
         utils::create_tool_use_messages,
-    },
-    Runtime,
+    }, Runtime
 };
 use async_openai::types::ChatCompletionRequestMessage;
 use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Extension, Json,
+    debug_handler, http::StatusCode, response::{IntoResponse, Response}, Extension, Json
 };
 use axum_extra::TypedHeader;
 use datafusion::sql::TableReference;
 use headers_accept::Accept;
 
+use http::HeaderMap;
 use itertools::Itertools;
 use llms::chat::nsql::default::DefaultSqlGeneration;
 use serde::{Deserialize, Serialize};
+use util::user_agent::SpiceUserAgent;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::Span;
@@ -129,13 +125,21 @@ fn return_sql_only(accept: &Option<TypedHeader<Accept>>) -> bool {
         .is_some_and(|a| accept_header_types(a).contains(&"application/sql".to_string()))
 }
 
+#[debug_handler]
 pub(crate) async fn post(
     Extension(df): Extension<Arc<DataFusion>>,
     Extension(rt): Extension<Arc<Runtime>>,
     Extension(llms): Extension<Arc<RwLock<LLMModelStore>>>,
     accept: Option<TypedHeader<Accept>>,
+    headers: HeaderMap,
     Json(payload): Json<Request>,
 ) -> Response {
+    let user_agent = headers
+        .get("user-agent")
+        .map(|ua| ua.to_str().unwrap_or_default())
+        .unwrap_or_default()
+        .to_string();
+
     let span = tracing::span!(target: "task_history", tracing::Level::INFO, "nsql", input = %payload.query, model = %payload.model, "labels");
 
     // Default to all available tables if specific table(s) are not provided.
@@ -221,6 +225,7 @@ pub(crate) async fn post(
                 Arc::clone(&df),
                 &cleaned_query,
                 ArrowFormat::from_accept_header(&accept),
+                user_agent
             )
             .instrument(span.clone())
             .await

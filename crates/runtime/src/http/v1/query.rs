@@ -16,23 +16,29 @@ limitations under the License.
 use std::sync::Arc;
 
 use axum::{
-    body::Bytes,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Extension,
+    body::Bytes, debug_handler, http::StatusCode, response::{IntoResponse, Response}, Extension
 };
 use axum_extra::TypedHeader;
 use headers_accept::Accept;
+use http::HeaderMap;
 
-use crate::datafusion::DataFusion;
+use crate::datafusion::{query::Protocol, DataFusion};
 
 use super::{sql_to_http_response, ArrowFormat};
 
+#[debug_handler]
 pub(crate) async fn post(
     Extension(df): Extension<Arc<DataFusion>>,
     accept: Option<TypedHeader<Accept>>,
+    headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    let user_agent = headers
+        .get("user-agent")
+        .map(|ua| ua.to_str().unwrap_or_default())
+        .unwrap_or_default()
+        .to_string();
+
     let query = match String::from_utf8(body.to_vec()) {
         Ok(query) => query,
         Err(e) => {
@@ -41,5 +47,5 @@ pub(crate) async fn post(
         }
     };
 
-    sql_to_http_response(df, &query, ArrowFormat::from_accept_header(&accept)).await
+    sql_to_http_response(df, &query, ArrowFormat::from_accept_header(&accept), user_agent).await
 }

@@ -19,6 +19,7 @@ use crate::datafusion::error::SpiceExternalError;
 use crate::datafusion::query::{self, Protocol, QueryBuilder};
 use crate::datafusion::DataFusion;
 use crate::dataupdate::DataUpdate;
+use crate::metrics::telemetry::TelemetryContext;
 use crate::metrics as runtime_metrics;
 use crate::tls::TlsConfig;
 use arrow::array::RecordBatch;
@@ -43,6 +44,7 @@ use tokio::sync::broadcast::Sender;
 use tokio::sync::RwLock;
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 use tonic::{Request, Response, Status, Streaming};
+
 
 mod actions;
 mod do_exchange;
@@ -155,9 +157,9 @@ impl Service {
     async fn get_arrow_schema(
         datafusion: Arc<DataFusion>,
         sql: &str,
-        protocol: Protocol,
+        telemetry_context: TelemetryContext
     ) -> Result<Schema, Status> {
-        let query = QueryBuilder::new(sql, datafusion, protocol).build();
+        let query = QueryBuilder::new(sql, datafusion, telemetry_context).build();
 
         let schema = query.get_schema().await.map_err(handle_datafusion_error)?;
         Ok(schema)
@@ -175,10 +177,9 @@ impl Service {
     async fn sql_to_flight_stream(
         datafusion: Arc<DataFusion>,
         sql: &str,
-        protocol: Protocol,
+        telemetry_context: TelemetryContext,
     ) -> Result<(BoxStream<'static, Result<FlightData, Status>>, Option<bool>), Status> {
-        let query = QueryBuilder::new(sql, Arc::clone(&datafusion), protocol)
-            .protocol(protocol)
+        let query = QueryBuilder::new(sql, Arc::clone(&datafusion), telemetry_context)
             .build();
 
         let query_result = query.run().await.map_err(handle_query_error)?;
@@ -324,6 +325,7 @@ pub async fn start(
     tls_config: Option<Arc<TlsConfig>>,
     endpoint_auth: EndpointAuth,
 ) -> Result<()> {
+    
     let service = Service {
         datafusion: Arc::clone(&df),
         channel_map: Arc::new(RwLock::new(HashMap::new())),

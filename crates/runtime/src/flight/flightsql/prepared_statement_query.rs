@@ -23,23 +23,29 @@ use arrow_flight::{
 };
 use prost::Message;
 use tonic::{Request, Response, Status};
+use util::user_agent::SpiceUserAgent;
 
 use crate::{
-    datafusion::query::Protocol,
-    flight::{metrics, to_tonic_err, util::attach_cache_metadata, Service},
-    timing::TimedStream,
+    datafusion::query::Protocol, flight::{metrics, to_tonic_err, util::attach_cache_metadata, Service}, metrics::telemetry::TelemetryContext, timing::TimedStream
 };
 
 /// Create a prepared statement from given SQL statement.
 pub(crate) async fn do_action_create_prepared_statement(
     flight_svc: &Service,
     statement: sql::ActionCreatePreparedStatementRequest,
+    user_agent: String
 ) -> Result<sql::ActionCreatePreparedStatementResult, Status> {
+    let user_agent = SpiceUserAgent::try_from(user_agent).unwrap_or_default();
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::FlightSQL,
+        user_agent
+    };
+    
     tracing::trace!("do_action_create_prepared_statement: {statement:?}");
     let arrow_schema = Service::get_arrow_schema(
         Arc::clone(&flight_svc.datafusion),
         &statement.query,
-        Protocol::FlightSQL,
+        telemetry_context
     )
     .await
     .map_err(to_tonic_err)?;
@@ -57,7 +63,13 @@ pub(crate) async fn get_flight_info(
     flight_svc: &Service,
     handle: sql::CommandPreparedStatementQuery,
     request: Request<FlightDescriptor>,
+    user_agent: SpiceUserAgent
 ) -> Result<Response<FlightInfo>, Status> {
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::FlightSQL,
+        user_agent
+    };
+
     let _start = metrics::track_flight_request("get_flight_info", Some("prepared_statement_query"));
 
     tracing::trace!("get_flight_info: {handle:?}");
@@ -71,7 +83,7 @@ pub(crate) async fn get_flight_info(
     };
 
     let arrow_schema =
-        Service::get_arrow_schema(Arc::clone(&flight_svc.datafusion), sql, Protocol::FlightSQL)
+        Service::get_arrow_schema(Arc::clone(&flight_svc.datafusion), sql, telemetry_context)
             .await
             .map_err(to_tonic_err)?;
 
@@ -95,7 +107,13 @@ pub(crate) async fn get_flight_info(
 pub(crate) async fn do_get(
     flight_svc: &Service,
     query: sql::CommandPreparedStatementQuery,
+    user_agent: SpiceUserAgent
 ) -> Result<Response<<Service as FlightService>::DoGetStream>, Status> {
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::FlightSQL,
+        user_agent
+    };
+
     let start = metrics::track_flight_request("do_get", Some("prepared_statement_query"));
     let datafusion = Arc::clone(&flight_svc.datafusion);
     tracing::trace!("do_get: {query:?}");
@@ -104,7 +122,7 @@ pub(crate) async fn do_get(
             let (output, from_cache) = Box::pin(Service::sql_to_flight_stream(
                 datafusion,
                 sql,
-                Protocol::FlightSQL,
+                telemetry_context,
             ))
             .await?;
             let timed_output = TimedStream::new(output, move || start);

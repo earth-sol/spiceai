@@ -40,7 +40,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::datafusion::query::Protocol;
+use crate::{datafusion::query::Protocol, metrics::telemetry::TelemetryContext};
 
 #[derive(Debug, Default)]
 pub struct BytesProcessedOptimizerRule {}
@@ -274,10 +274,10 @@ impl ExecutionPlan for BytesProcessedExec {
         let mut stream = self.input_exec.execute(partition, Arc::clone(&context))?;
         let schema = stream.schema();
 
-        let protocol: Protocol = context
+        let telemetry_context = context
             .session_config()
-            .get_extension::<Protocol>()
-            .map_or_else(|| Protocol::Internal, |x| *x);
+            .get_extension::<TelemetryContext>()
+            .map_or_else(|| TelemetryContext::new(), |x| *x);
 
         let bytes_processed_stream = stream! {
             let mut bytes_processed = 0u64;
@@ -292,7 +292,7 @@ impl ExecutionPlan for BytesProcessedExec {
                     }
                 }
             }
-            crate::metrics::telemetry::track_bytes_processed(bytes_processed, protocol.as_arc_str());
+            crate::metrics::telemetry::track_bytes_processed(bytes_processed, &telemetry_context);
         };
 
         let stream_adapter = RecordBatchStreamAdapter::new(schema, bytes_processed_stream);

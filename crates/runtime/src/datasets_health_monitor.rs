@@ -390,7 +390,7 @@ mod test {
     }
 
     fn create_test_datafusion() -> Arc<DataFusion> {
-        let df = Arc::new(DataFusion::builder(RuntimeStatus::new()).build());
+        let df = Arc::new(DataFusion::builder(RuntimeStatus::new(), None).build());
 
         let catalog = df.ctx.catalog("spice").expect("default catalog is spice");
 

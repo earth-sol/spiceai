@@ -23,11 +23,10 @@ use arrow_flight::{
 };
 use prost::Message;
 use tonic::{Request, Response, Status};
+use util::user_agent::SpiceUserAgent;
 
 use crate::{
-    datafusion::query::Protocol,
-    flight::{metrics::track_flight_request, to_tonic_err, util::attach_cache_metadata, Service},
-    timing::TimedStream,
+    datafusion::query::Protocol, flight::{metrics::track_flight_request, to_tonic_err, util::attach_cache_metadata, Service}, metrics::telemetry::TelemetryContext, timing::TimedStream
 };
 
 /// Get a `FlightInfo` for executing a SQL query.
@@ -37,12 +36,32 @@ pub(crate) async fn get_flight_info(
     request: Request<FlightDescriptor>,
 ) -> Result<Response<FlightInfo>, Status> {
     tracing::trace!("get_flight_info: {query:?}");
+
+    let user_agent_string = request
+            .metadata()
+            .get("user-agent")
+            .map(|ua| ua.to_str().unwrap_or(""))
+            .unwrap_or_default()
+            .to_string();
+
+    let user_agent = SpiceUserAgent::try_from(user_agent_string).unwrap_or_else(|_| {
+        SpiceUserAgent::default()
+            .with_client_name("Flight")
+            .with_client_version("1.0")
+            .with_client_system("gRPC")
+    });
+
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::FlightSQL,
+        user_agent
+    };
+
     let _start = track_flight_request("get_flight_info", Some("statement_query"));
 
     let sql = query.query.as_str();
 
     let arrow_schema =
-        Service::get_arrow_schema(Arc::clone(&flight_svc.datafusion), sql, Protocol::FlightSQL)
+        Service::get_arrow_schema(Arc::clone(&flight_svc.datafusion), sql, telemetry_context)
             .await
             .map_err(to_tonic_err)?;
 
@@ -64,14 +83,20 @@ pub(crate) async fn get_flight_info(
 pub(crate) async fn do_get(
     flight_svc: &Service,
     cmd: sql::CommandStatementQuery,
+    user_agent: SpiceUserAgent,
 ) -> Result<Response<<Service as FlightService>::DoGetStream>, Status> {
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::FlightSQL,
+        user_agent
+    };
+
     let start = track_flight_request("do_get", Some("statement_query"));
     let datafusion = Arc::clone(&flight_svc.datafusion);
     tracing::trace!("do_get_statement: {cmd:?}");
     let (output, from_cache) = Box::pin(Service::sql_to_flight_stream(
         datafusion,
         &cmd.query,
-        Protocol::FlightSQL,
+        telemetry_context,
     ))
     .await?;
     let timed_output = TimedStream::new(output, move || start);
