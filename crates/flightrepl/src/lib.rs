@@ -15,7 +15,6 @@ limitations under the License.
 */
 
 use std::error::Error;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -42,8 +41,7 @@ use rustyline::validate::{ValidationContext, ValidationResult, Validator};
 use rustyline::{Completer, ConditionalEventHandler, Helper, Highlighter, Hinter, KeyEvent};
 use rustyline::{Editor, EventHandler, Modifiers};
 use serde_json::json;
-use tonic::metadata::errors::InvalidMetadataValue;
-use tonic::metadata::{Ascii, AsciiMetadataKey, MetadataValue};
+use tonic::metadata::{Ascii, MetadataValue};
 use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::{Code, IntoRequest, Status};
 
@@ -154,6 +152,7 @@ impl ConditionalEventHandler for KeyEventHandler {
 #[allow(clippy::missing_errors_doc)]
 pub async fn run(repl_config: ReplConfig) -> Result<(), Box<dyn std::error::Error>> {
     let mut repl_flight_endpoint = repl_config.repl_flight_endpoint;
+    let user_agent = repl_config.user_agent.unwrap_or_else(get_user_agent);
     let channel = if let Some(tls_root_certificate_file) = repl_config.tls_root_certificate_file {
         let tls_root_certificate = std::fs::read(tls_root_certificate_file)?;
         let tls_root_certificate = tonic::transport::Certificate::from_pem(tls_root_certificate);
@@ -162,11 +161,13 @@ pub async fn run(repl_config: ReplConfig) -> Result<(), Box<dyn std::error::Erro
             repl_flight_endpoint = "https://localhost:50051".to_string();
         }
         Channel::from_shared(repl_flight_endpoint.clone())?
+            .user_agent(user_agent.clone())?
             .tls_config(client_tls_config)?
             .connect()
             .await
     } else {
         Channel::from_shared(repl_flight_endpoint.clone())?
+            .user_agent(user_agent.clone())?
             .connect()
             .await
     };
@@ -177,8 +178,6 @@ pub async fn run(repl_config: ReplConfig) -> Result<(), Box<dyn std::error::Erro
             "Unable to connect to spiced at {repl_flight_endpoint}. Is it running?"
         ))
     })?;
-
-    let user_agent = repl_config.user_agent.unwrap_or_else(get_user_agent);
 
     // The encoder/decoder size is limited to 500MB.
     let client = FlightServiceClient::new(channel)
@@ -264,14 +263,7 @@ pub async fn run(repl_config: ReplConfig) -> Result<(), Box<dyn std::error::Erro
         let _ = rl.add_history_entry(line);
 
         let start_time = Instant::now();
-        match get_records(
-            client.clone(),
-            line,
-            repl_config.api_key.as_ref(),
-            &user_agent,
-        )
-        .await
-        {
+        match get_records(client.clone(), line, repl_config.api_key.as_ref()).await {
             Ok((_, 0, from_cache)) => {
                 println!("No results{}.", if from_cache { " (cached)" } else { "" });
             }
@@ -304,7 +296,6 @@ pub async fn get_records(
     mut client: FlightServiceClient<Channel>,
     line: &str,
     api_key: Option<&String>,
-    user_agent: &str,
 ) -> Result<(Vec<RecordBatch>, usize, bool), FlightError> {
     let sql_command = CommandStatementQuery {
         query: line.to_string(),
@@ -316,7 +307,6 @@ pub async fn get_records(
         FlightDescriptor::new_cmd(sql_command_bytes).into_request(),
         api_key,
     );
-
     let mut flight_info = client.get_flight_info(request).await?.into_inner();
     let Some(endpoint) = flight_info.endpoint.pop() else {
         return Err(FlightError::Tonic(Status::internal("No endpoint")));
@@ -324,16 +314,7 @@ pub async fn get_records(
     let Some(ticket) = endpoint.ticket else {
         return Err(FlightError::Tonic(Status::internal("No ticket")));
     };
-    let mut request = add_api_key(ticket.into_request(), api_key);
-    let user_agent_key = AsciiMetadataKey::from_str("User-Agent")
-        .map_err(|e| FlightError::ExternalError(e.into()))?;
-    let user_agent_value = user_agent
-        .parse()
-        .map_err(|e: InvalidMetadataValue| FlightError::ExternalError(e.into()))?;
-
-    request
-        .metadata_mut()
-        .insert(user_agent_key, user_agent_value);
+    let request = add_api_key(ticket.into_request(), api_key);
 
     let response = client.do_get(request).await?;
     let from_cache = response
