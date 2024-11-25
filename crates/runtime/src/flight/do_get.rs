@@ -26,7 +26,13 @@ use tonic::{Request, Response, Status};
 use util::user_agent::SpiceUserAgent;
 
 use crate::{
-    datafusion::query::Protocol, flight::{metrics, util::{attach_cache_metadata, extract_flight_user_agent}}, metrics::telemetry::TelemetryContext, timing::TimedStream
+    datafusion::query::Protocol,
+    flight::{
+        metrics,
+        util::{attach_cache_metadata, extract_flight_user_agent},
+    },
+    metrics::telemetry::TelemetryContext,
+    timing::TimedStream,
 };
 
 use super::{flightsql, to_tonic_err, Service};
@@ -35,7 +41,11 @@ pub(crate) async fn handle(
     flight_svc: &Service,
     request: Request<Ticket>,
 ) -> Result<Response<<Service as FlightService>::DoGetStream>, Status> {
-    let user_agent = extract_flight_user_agent(&request);
+    let user_agent = if flight_svc.user_agent_collection_state.is_enabled() {
+        Some(extract_flight_user_agent(&request))
+    } else {
+        None
+    };
 
     let msg: Any = match Message::decode(&*request.get_ref().ticket) {
         Ok(msg) => msg,
@@ -44,11 +54,14 @@ pub(crate) async fn handle(
 
     match Command::try_from(msg).map_err(to_tonic_err)? {
         Command::CommandStatementQuery(command) => {
-            Box::pin(flightsql::statement_query::do_get(flight_svc, command, user_agent)).await
+            Box::pin(flightsql::statement_query::do_get(
+                flight_svc, command, user_agent,
+            ))
+            .await
         }
         Command::CommandPreparedStatementQuery(command) => {
             Box::pin(flightsql::prepared_statement_query::do_get(
-                flight_svc, command, user_agent
+                flight_svc, command, user_agent,
             ))
             .await
         }
@@ -76,9 +89,8 @@ pub(crate) async fn handle(
 async fn do_get_simple(
     flight_svc: &Service,
     request: Request<Ticket>,
-    user_agent: SpiceUserAgent,
+    user_agent: Option<SpiceUserAgent>,
 ) -> Result<Response<<Service as FlightService>::DoGetStream>, Status> {
-
     let telemetry_context = TelemetryContext {
         protocol: Protocol::Flight,
         user_agent,

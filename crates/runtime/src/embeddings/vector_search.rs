@@ -563,9 +563,11 @@ impl VectorSearch {
 
         let telemetry_context = TelemetryContext {
             protocol: Protocol::Internal,
-            user_agent: SpiceUserAgent::default()
-                .with_client_name("vector_search")
-                .with_client_version_from_cargo()
+            user_agent: Some(
+                SpiceUserAgent::default()
+                    .with_client_name("vector_search")
+                    .with_client_version_from_cargo(),
+            ),
         };
 
         let batches: Vec<RecordBatch> = self

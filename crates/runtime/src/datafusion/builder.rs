@@ -36,7 +36,10 @@ use datafusion::{
 use datafusion_federation::FederationAnalyzerRule;
 use tokio::sync::RwLock as TokioRwLock;
 
-use crate::{embeddings, metrics::telemetry::TelemetryContext, object_store_registry::default_runtime_env, status};
+use crate::{
+    embeddings, metrics::telemetry::TelemetryContext, object_store_registry::default_runtime_env,
+    status,
+};
 
 use super::{
     extension::{bytes_processed::BytesProcessedOptimizerRule, SpiceQueryPlanner},
@@ -53,7 +56,10 @@ pub struct DataFusionBuilder {
 
 impl DataFusionBuilder {
     #[must_use]
-    pub fn new(status: Arc<status::RuntimeStatus>, default_telemetry_context: TelemetryContext) -> Self {
+    pub fn new(
+        status: Arc<status::RuntimeStatus>,
+        default_telemetry_context: TelemetryContext,
+    ) -> Self {
         let mut df_config = SessionConfig::new()
             .with_information_schema(true)
             .with_create_default_catalog_and_schema(false);
@@ -74,8 +80,7 @@ impl DataFusionBuilder {
             .execution
             .skip_physical_aggregate_schema_check = true;
 
-        df_config
-            .set_extension(Arc::new(default_telemetry_context));
+        df_config.set_extension(Arc::new(default_telemetry_context));
 
         Self {
             config: df_config,

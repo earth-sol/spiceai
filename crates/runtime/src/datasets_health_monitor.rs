@@ -28,11 +28,12 @@ use opentelemetry::KeyValue;
 use snafu::{ResultExt, Snafu};
 use tokio::sync::Mutex;
 use tracing_futures::Instrument;
+use util::user_agent::SpiceUserAgent;
 
 use crate::{
     component::dataset::Dataset,
     datafusion::{query::Protocol, DataFusion},
-    metrics,
+    metrics::{self, telemetry::TelemetryContext},
 };
 
 const DATASETS_AVAILABILITY_CHECK_INTERVAL_SECONDS: u64 = 60; // every minute
@@ -160,6 +161,15 @@ impl DatasetsHealthMonitor {
     pub async fn get_recently_accessed_datasets(
         df: Arc<DataFusion>,
     ) -> Result<Arc<HashSet<String>>> {
+        let telemetry_context = TelemetryContext {
+            protocol: Protocol::Internal,
+            user_agent: Some(
+                SpiceUserAgent::default()
+                    .with_client_name("datasets_health_monitor")
+                    .with_client_version_from_cargo(),
+            ),
+        };
+
         let query = format!(
             "
 SELECT labels.datasets AS datasets
@@ -169,7 +179,7 @@ AND NOW() < end_time + INTERVAL '{DATASET_UNAVAILABLE_THRESHOLD_MINUTES}' MINUTE
 AND labels.error_code IS NULL"
         );
         let query_result = df
-            .query_builder(&query, Protocol::Internal)
+            .query_builder(&query, Some(telemetry_context))
             .build()
             .run()
             .await

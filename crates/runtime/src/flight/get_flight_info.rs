@@ -32,7 +32,11 @@ pub(crate) async fn handle(
     flight_svc: &Service,
     request: Request<FlightDescriptor>,
 ) -> Result<Response<FlightInfo>, Status> {
-    let user_agent = extract_flight_user_agent(&request);
+    let user_agent = if flight_svc.user_agent_collection_state.is_enabled() {
+        Some(extract_flight_user_agent(&request))
+    } else {
+        None
+    };
 
     let Ok(message) = Any::decode(&*request.get_ref().cmd) else {
         return get_flight_info_simple(flight_svc, request, user_agent).await;
@@ -43,7 +47,10 @@ pub(crate) async fn handle(
             flightsql::statement_query::get_flight_info(flight_svc, token, request).await
         }
         Command::CommandPreparedStatementQuery(handle) => {
-            flightsql::prepared_statement_query::get_flight_info(flight_svc, handle, request, user_agent).await
+            flightsql::prepared_statement_query::get_flight_info(
+                flight_svc, handle, request, user_agent,
+            )
+            .await
         }
         Command::CommandGetCatalogs(token) => {
             Ok(flightsql::get_catalogs::get_flight_info(token, request))
@@ -73,7 +80,7 @@ pub(crate) async fn handle(
 async fn get_flight_info_simple(
     flight_svc: &Service,
     request: Request<FlightDescriptor>,
-    user_agent: SpiceUserAgent,
+    user_agent: Option<SpiceUserAgent>,
 ) -> Result<Response<FlightInfo>, Status> {
     let telemetry_context = TelemetryContext {
         protocol: Protocol::Flight,

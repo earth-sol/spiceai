@@ -29,6 +29,7 @@ pub mod tools;
 
 use std::sync::Arc;
 
+use crate::metrics::telemetry::TelemetryContext;
 use crate::{
     component::dataset::Dataset,
     datafusion::query::{Protocol, QueryBuilder},
@@ -44,7 +45,6 @@ use headers_accept::Accept;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use util::user_agent::SpiceUserAgent;
-use crate::metrics::telemetry::TelemetryContext;
 
 use crate::{datafusion::DataFusion, status::ComponentStatus};
 
@@ -107,22 +107,35 @@ fn dataset_status(df: &DataFusion, ds: &Dataset) -> ComponentStatus {
 }
 
 // Runs query and converts query results to HTTP response (as JSON).
-pub async fn sql_to_http_response(df: Arc<DataFusion>, sql: &str, format: ArrowFormat, user_agent: String) -> Response {
-    let user_agent = if let Ok(spice_user_agent) = SpiceUserAgent::try_from(user_agent) {
-        spice_user_agent
+pub async fn sql_to_http_response(
+    df: Arc<DataFusion>,
+    sql: &str,
+    format: ArrowFormat,
+    user_agent: Option<String>,
+) -> Response {
+    let user_agent = if let Some(user_agent) = user_agent {
+        let mut ua = if let Ok(spice_user_agent) = SpiceUserAgent::try_from(user_agent) {
+            spice_user_agent
+        } else {
+            SpiceUserAgent::default()
+                    .with_client_name("HTTP")
+                    .with_client_version("1.0")
+                    .with_client_system("HTTP")
+        };
+
+        if ua.client_system.is_none() {
+            ua = ua.with_client_system("HTTP");
+        }
+        Some(ua)
     } else {
-        SpiceUserAgent::default()
-            .with_client_name("HTTP")
-            .with_client_version("1.0")
-            .with_client_system("HTTP")
+        None
     };
     let telemetry_context = TelemetryContext {
         protocol: Protocol::Http,
-        user_agent
+        user_agent,
     };
 
-    let query = QueryBuilder::new(sql, Arc::clone(&df), telemetry_context)
-        .build();
+    let query = QueryBuilder::new(sql, Arc::clone(&df), telemetry_context).build();
 
     let (data, is_data_from_cache) = match query.run().await {
         Ok(query_result) => match query_result.data.try_collect::<Vec<RecordBatch>>().await {

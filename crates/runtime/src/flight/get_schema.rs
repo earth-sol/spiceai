@@ -23,7 +23,11 @@ use arrow_ipc::writer::IpcWriteOptions;
 use datafusion::sql::TableReference;
 use tonic::{Request, Response, Status};
 
-use crate::{datafusion::query::Protocol, flight::{metrics, util::extract_flight_user_agent}, metrics::telemetry::TelemetryContext};
+use crate::{
+    datafusion::query::Protocol,
+    flight::{metrics, util::extract_flight_user_agent},
+    metrics::telemetry::TelemetryContext,
+};
 
 use super::{to_tonic_err, Service};
 
@@ -31,7 +35,11 @@ pub(crate) async fn handle(
     flight_svc: &Service,
     request: Request<FlightDescriptor>,
 ) -> Result<Response<SchemaResult>, Status> {
-    let user_agent = extract_flight_user_agent(&request);
+    let user_agent = if flight_svc.user_agent_collection_state.is_enabled() {
+        Some(extract_flight_user_agent(&request))
+    } else {
+        None
+    };
     let telemetry_context = TelemetryContext {
         protocol: Protocol::Flight,
         user_agent,

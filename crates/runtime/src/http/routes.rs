@@ -14,14 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::config;
+use crate::datafusion::query::Protocol;
 use crate::embeddings::vector_search;
+use crate::metrics::telemetry::TelemetryContext;
 use crate::Runtime;
+use crate::{config, metrics::telemetry::UserAgentCollectionState};
 
 use axum::routing::patch;
 use opentelemetry::KeyValue;
 use spicepod::component::runtime::CorsConfig;
 use std::sync::Arc;
+use util::user_agent::SpiceUserAgent;
 
 use axum::{
     body::Body,
@@ -44,6 +47,7 @@ pub(crate) fn routes(
     vector_search: Arc<vector_search::VectorSearch>,
     auth_layer: Option<AuthLayer>,
     cors_config: &CorsConfig,
+    user_agent_collection_state: Arc<UserAgentCollectionState>,
 ) -> Router {
     let mut authenticated_router = Router::new()
         .route("/v1/sql", post(v1::query::post))
@@ -82,6 +86,7 @@ pub(crate) fn routes(
         .layer(Extension(Arc::clone(&rt.app)))
         .layer(Extension(Arc::clone(&rt.df)))
         .layer(Extension(Arc::clone(rt)))
+        .layer(Extension(user_agent_collection_state))
         .layer(Extension(rt.metrics_endpoint))
         .layer(Extension(config));
 
@@ -102,7 +107,18 @@ pub(crate) fn routes(
         .layer(cors_layer(cors_config))
 }
 
-async fn track_metrics(req: Request<Body>, next: Next) -> impl IntoResponse {
+async fn track_metrics(
+    Extension(user_agent_collection_state): Extension<Arc<UserAgentCollectionState>>,
+    headers: http::HeaderMap,
+    req: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    let user_agent = headers
+        .get("user-agent")
+        .map(|ua| ua.to_str().unwrap_or_default())
+        .unwrap_or_default()
+        .to_string();
+
     let start = Instant::now();
     let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
         matched_path.as_str().to_owned()
@@ -116,11 +132,20 @@ async fn track_metrics(req: Request<Body>, next: Next) -> impl IntoResponse {
     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
     let status = response.status().as_u16().to_string();
 
-    let labels = [
+    let mut labels = vec![
         KeyValue::new("method", method.to_string()),
         KeyValue::new("path", path),
         KeyValue::new("status", status),
     ];
+
+    if user_agent_collection_state.is_enabled() {
+        let user_agent: SpiceUserAgent = user_agent.try_into().unwrap_or_default();
+        let telemetry_context = TelemetryContext {
+            protocol: Protocol::Http,
+            user_agent: Some(user_agent),
+        };
+        labels.extend(telemetry_context.to_dimensions());
+    }
 
     metrics::REQUESTS_TOTAL.add(1, &labels);
     metrics::REQUESTS_DURATION_MS.record(latency_ms, &labels);

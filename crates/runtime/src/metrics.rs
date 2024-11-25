@@ -243,7 +243,7 @@ pub(crate) mod tools {
 }
 
 pub(crate) mod telemetry {
-    use std::{sync::Arc, time::Duration};
+    use std::time::Duration;
 
     use opentelemetry::{metrics::Histogram, KeyValue};
     use util::user_agent::SpiceUserAgent;
@@ -307,9 +307,9 @@ pub(crate) mod telemetry {
             .init()
     });
 
-    pub fn track_query_duration(duration: Duration, dimensions: &Vec<KeyValue>) {
-        telemetry::track_query_duration(duration, &dimensions);
-        QUERY_DURATION_MS.record(duration.as_secs_f64() * 1000.0, &dimensions);
+    pub fn track_query_duration(duration: Duration, dimensions: &[KeyValue]) {
+        telemetry::track_query_duration(duration, dimensions);
+        QUERY_DURATION_MS.record(duration.as_secs_f64() * 1000.0, dimensions);
     }
 
     static QUERY_EXECUTION_DURATION_MS: LazyLock<Histogram<f64>> = LazyLock::new(|| {
@@ -322,49 +322,77 @@ pub(crate) mod telemetry {
         .init()
     });
 
-    pub fn track_query_execution_duration(duration: Duration, dimensions: &Vec<KeyValue>) {
-        telemetry::track_query_execution_duration(duration, &dimensions);
-        QUERY_EXECUTION_DURATION_MS.record(duration.as_secs_f64() * 1000.0, &dimensions);
+    pub fn track_query_execution_duration(duration: Duration, dimensions: &[KeyValue]) {
+        telemetry::track_query_execution_duration(duration, dimensions);
+        QUERY_EXECUTION_DURATION_MS.record(duration.as_secs_f64() * 1000.0, dimensions);
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum UserAgentCollectionState {
+        Enabled,
+        Disabled,
+    }
+
+    impl UserAgentCollectionState {
+        pub fn is_enabled(&self) -> bool {
+            matches!(self, UserAgentCollectionState::Enabled)
+        }
     }
 
     #[derive(Clone, Debug)]
     pub struct TelemetryContext {
         pub protocol: Protocol,
-        pub user_agent: SpiceUserAgent
+        pub user_agent: Option<SpiceUserAgent>,
     }
 
     impl TelemetryContext {
+        #[must_use]
         pub fn new() -> Self {
             Self {
                 protocol: Protocol::Internal,
-                user_agent: SpiceUserAgent::default()
+                user_agent: Some(SpiceUserAgent::default()),
             }
         }
 
+        #[must_use]
         pub fn to_dimensions(&self) -> Vec<KeyValue> {
-            let mut labels = vec![
-                KeyValue::new("protocol", self.protocol.as_arc_str()),
-                KeyValue::new("user_agent", self.user_agent.to_string()),
-                KeyValue::new("client.name", self.user_agent.client_name.to_string()),
-                KeyValue::new("client.version", self.user_agent.client_version.to_string()),
-            ];
+            let mut labels = vec![KeyValue::new("protocol", self.protocol.as_arc_str())];
 
-            if let Some(client_system) = &self.user_agent.client_system {
-                labels.push(KeyValue::new("client.system", client_system.to_string()));
-            }
-            if let Some(platform_name) = &self.user_agent.platform_name {
-                labels.push(KeyValue::new("platform.name", platform_name.to_string()));
-            }
-            if let Some(platform_version) = &self.user_agent.platform_version {
-                labels.push(KeyValue::new("platform.version", platform_version.to_string()));
-            }
-            if let Some(platform_system) = &self.user_agent.platform_system {
-                labels.push(KeyValue::new("platform.system", platform_system.to_string()));
+            if let Some(user_agent) = &self.user_agent {
+                labels.push(KeyValue::new("user_agent", user_agent.to_string()));
+                labels.push(KeyValue::new(
+                    "client.name",
+                    user_agent.client_name.to_string(),
+                ));
+                labels.push(KeyValue::new(
+                    "client.version",
+                    user_agent.client_version.to_string(),
+                ));
+
+                if let Some(client_system) = &user_agent.client_system {
+                    labels.push(KeyValue::new("client.system", client_system.to_string()));
+                }
+                if let Some(platform_name) = &user_agent.platform_name {
+                    labels.push(KeyValue::new("platform.name", platform_name.to_string()));
+                }
+                if let Some(platform_version) = &user_agent.platform_version {
+                    labels.push(KeyValue::new(
+                        "platform.version",
+                        platform_version.to_string(),
+                    ));
+                }
+                if let Some(platform_system) = &user_agent.platform_system {
+                    labels.push(KeyValue::new(
+                        "platform.system",
+                        platform_system.to_string(),
+                    ));
+                }
+
+                for (key, value) in &user_agent.extensions {
+                    labels.push(KeyValue::new(key.to_string(), value.to_string()));
+                }
             }
 
-            for (key, value) in &self.user_agent.extensions {
-                labels.push(KeyValue::new(key.to_string(), value.to_string()));
-            }
             labels
         }
     }
@@ -375,3 +403,5 @@ pub(crate) mod telemetry {
         }
     }
 }
+
+pub use telemetry::TelemetryContext;

@@ -16,11 +16,11 @@ limitations under the License.
 
 use crate::auth::EndpointAuth;
 use crate::datafusion::error::SpiceExternalError;
-use crate::datafusion::query::{self, Protocol, QueryBuilder};
+use crate::datafusion::query::{self, QueryBuilder};
 use crate::datafusion::DataFusion;
 use crate::dataupdate::DataUpdate;
-use crate::metrics::telemetry::TelemetryContext;
 use crate::metrics as runtime_metrics;
+use crate::metrics::telemetry::{TelemetryContext, UserAgentCollectionState};
 use crate::tls::TlsConfig;
 use arrow::array::RecordBatch;
 use arrow::datatypes::Schema;
@@ -45,7 +45,6 @@ use tokio::sync::RwLock;
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 use tonic::{Request, Response, Status, Streaming};
 
-
 mod actions;
 mod do_exchange;
 mod do_get;
@@ -67,6 +66,7 @@ pub struct Service {
     datafusion: Arc<DataFusion>,
     channel_map: Arc<RwLock<HashMap<TableReference, Arc<Sender<DataUpdate>>>>>,
     basic_auth: Option<Arc<dyn FlightBasicAuth + Send + Sync>>,
+    user_agent_collection_state: Arc<UserAgentCollectionState>,
 }
 
 #[tonic::async_trait]
@@ -157,7 +157,7 @@ impl Service {
     async fn get_arrow_schema(
         datafusion: Arc<DataFusion>,
         sql: &str,
-        telemetry_context: TelemetryContext
+        telemetry_context: TelemetryContext,
     ) -> Result<Schema, Status> {
         let query = QueryBuilder::new(sql, datafusion, telemetry_context).build();
 
@@ -179,8 +179,7 @@ impl Service {
         sql: &str,
         telemetry_context: TelemetryContext,
     ) -> Result<(BoxStream<'static, Result<FlightData, Status>>, Option<bool>), Status> {
-        let query = QueryBuilder::new(sql, Arc::clone(&datafusion), telemetry_context)
-            .build();
+        let query = QueryBuilder::new(sql, Arc::clone(&datafusion), telemetry_context).build();
 
         let query_result = query.run().await.map_err(handle_query_error)?;
 
@@ -324,12 +323,13 @@ pub async fn start(
     df: Arc<DataFusion>,
     tls_config: Option<Arc<TlsConfig>>,
     endpoint_auth: EndpointAuth,
+    user_agent_collection_state: Arc<UserAgentCollectionState>,
 ) -> Result<()> {
-    
     let service = Service {
         datafusion: Arc::clone(&df),
         channel_map: Arc::new(RwLock::new(HashMap::new())),
         basic_auth: endpoint_auth.flight_basic_auth.as_ref().map(Arc::clone),
+        user_agent_collection_state,
     };
     let svc = FlightServiceServer::new(service);
 

@@ -20,7 +20,8 @@ use prost::Message;
 use tonic::{Request, Response, Status};
 
 use crate::{
-    flight::{flightsql::prepared_statement_query, metrics, to_tonic_err, Service}, metrics::telemetry::TelemetryContext, timing::TimedStream
+    flight::{flightsql::prepared_statement_query, metrics, to_tonic_err, Service},
+    timing::TimedStream,
 };
 
 use arrow_flight::{
@@ -91,11 +92,11 @@ pub(crate) async fn do_action(
     request: Request<Action>,
 ) -> Result<Response<<Service as FlightService>::DoActionStream>, Status> {
     let user_agent = request
-            .metadata()
-            .get("user-agent")
-            .map(|ua| ua.to_str().unwrap_or(""))
-            .unwrap_or_default()
-            .to_string();
+        .metadata()
+        .get("user-agent")
+        .map(|ua| ua.to_str().unwrap_or(""))
+        .unwrap_or_default()
+        .to_string();
 
     let action_type = ActionType::from_str(request.get_ref().r#type.as_str());
 
@@ -113,9 +114,10 @@ pub(crate) async fn do_action(
                         "Unable to unpack ActionCreatePreparedStatementRequest.",
                     )
                 })?;
-            let stmt =
-                prepared_statement_query::do_action_create_prepared_statement(flight_svc, cmd, user_agent)
-                    .await?;
+            let stmt = prepared_statement_query::do_action_create_prepared_statement(
+                flight_svc, cmd, user_agent,
+            )
+            .await?;
             futures::stream::iter(vec![Ok(arrow_flight::Result {
                 body: stmt.as_any().encode_to_vec().into(),
             })])

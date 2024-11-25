@@ -133,7 +133,7 @@ impl Query {
     #[allow(clippy::too_many_lines)]
     pub async fn run(self) -> Result<QueryResult> {
         let tcontext = Arc::clone(&self.tracker.telemetry_context);
-        crate::metrics::telemetry::track_query_count(&*tcontext);
+        crate::metrics::telemetry::track_query_count(&tcontext);
 
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "sql_query", input = %self.sql, runtime_query = false);
         let inner_span = span.clone();
@@ -370,7 +370,7 @@ fn attach_query_tracker_to_stream(
             }
         }
 
-        crate::metrics::telemetry::track_bytes_returned(num_output_bytes, &*ctx.telemetry_context);
+        crate::metrics::telemetry::track_bytes_returned(num_output_bytes, &ctx.telemetry_context);
 
         ctx
             .schema(schema_copy)

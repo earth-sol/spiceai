@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use crate::{
     datafusion::query::Protocol,
+    metrics::telemetry::TelemetryContext,
     tools::{utils::parameters, SpiceModelTool},
     Runtime,
 };
@@ -29,6 +30,7 @@ use serde_json::Value;
 use snafu::ResultExt;
 use tracing::Span;
 use tracing_futures::Instrument;
+use util::user_agent::SpiceUserAgent;
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize)]
 pub struct SqlToolParams {
@@ -78,13 +80,22 @@ impl SpiceModelTool for SqlTool {
         arg: &str,
         rt: Arc<Runtime>,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let telemetry_context = TelemetryContext {
+            protocol: Protocol::Internal,
+            user_agent: Some(
+                SpiceUserAgent::default()
+                    .with_client_name("tool_sql")
+                    .with_client_version_from_cargo(),
+            ),
+        };
+
         let span: Span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::sql", tool = self.name(), input = arg);
         let tool_use_result: Result<Value, Box<dyn std::error::Error + Send + Sync>> = async {
             let req: SqlToolParams = serde_json::from_str(arg)?;
 
             let query_result = rt
                 .datafusion()
-                .query_builder(&req.query, Protocol::Internal)
+                .query_builder(&req.query, Some(telemetry_context))
                 .build()
                 .run()
                 .await

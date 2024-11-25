@@ -19,10 +19,7 @@ use opentelemetry::{
     metrics::{Counter, Histogram},
     KeyValue,
 };
-use std::{
-    sync::{Arc, LazyLock},
-    time::Duration,
-};
+use std::{sync::LazyLock, time::Duration};
 
 #[cfg(feature = "anonymous_telemetry")]
 pub mod anonymous;

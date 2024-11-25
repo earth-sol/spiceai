@@ -20,12 +20,16 @@ use std::{
 };
 
 use super::SampleFrom;
-use crate::datafusion::{query::Protocol, DataFusion};
+use crate::{
+    datafusion::{query::Protocol, DataFusion},
+    metrics::telemetry::TelemetryContext,
+};
 use arrow::{array::RecordBatch, compute::concat_batches};
 use futures::TryStreamExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use util::user_agent::SpiceUserAgent;
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize)]
 pub struct RandomSampleParams {
@@ -50,6 +54,15 @@ impl SampleFrom for RandomSampleParams {
         &self,
         df: Arc<DataFusion>,
     ) -> Result<RecordBatch, Box<dyn std::error::Error + Send + Sync>> {
+        let telemetry_context = TelemetryContext {
+            protocol: Protocol::Internal,
+            user_agent: Some(
+                SpiceUserAgent::default()
+                    .with_client_name("tool_random")
+                    .with_client_version_from_cargo(),
+            ),
+        };
+
         let batches = df
             .query_builder(
                 &format!(
@@ -57,7 +70,7 @@ impl SampleFrom for RandomSampleParams {
                     limit = self.limit,
                     tbl = self.tbl,
                 ),
-                Protocol::Internal,
+                Some(telemetry_context),
             )
             .build()
             .run()

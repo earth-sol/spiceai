@@ -31,7 +31,7 @@ use tokio_rustls::TlsAcceptor;
 use crate::{
     config,
     embeddings::vector_search::{self, parse_explicit_primary_keys},
-    metrics as runtime_metrics,
+    metrics::{self as runtime_metrics, telemetry::UserAgentCollectionState},
     tls::TlsConfig,
     Runtime,
 };
@@ -57,6 +57,7 @@ pub(crate) async fn start<A>(
     config: Arc<config::Config>,
     tls_config: Option<Arc<TlsConfig>>,
     auth_provider: Option<Arc<dyn HttpAuth + Send + Sync>>,
+    user_agent_collection_state: Arc<UserAgentCollectionState>,
 ) -> Result<()>
 where
     A: ToSocketAddrs + Debug,
@@ -77,6 +78,7 @@ where
         vsearch,
         auth_provider.map(AuthLayer::new),
         &cors_config,
+        user_agent_collection_state,
     );
     drop(app);
 

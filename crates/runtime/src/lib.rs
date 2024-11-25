@@ -27,6 +27,7 @@ use builder::RuntimeBuilder;
 use config::Config;
 use datasets_health_monitor::DatasetsHealthMonitor;
 use extension::ExtensionFactory;
+use metrics::telemetry::UserAgentCollectionState;
 use model::{EmbeddingModelStore, LLMModelStore};
 use model_components::model::Model;
 pub use notify::Error as NotifyError;
@@ -60,7 +61,7 @@ mod flight;
 mod http;
 mod init;
 pub mod internal_table;
-mod metrics;
+pub mod metrics;
 mod metrics_server;
 pub mod model;
 pub mod object_store_registry;
@@ -336,9 +337,16 @@ impl Runtime {
         config: Config,
         tls_config: Option<Arc<TlsConfig>>,
         endpoint_auth: EndpointAuth,
+        user_agent_collection_enabled: bool,
     ) -> Result<()> {
         self.register_metrics_table(self.prometheus_registry.is_some())
             .await?;
+        let user_agent_collection_enabled = if user_agent_collection_enabled {
+            UserAgentCollectionState::Enabled
+        } else {
+            UserAgentCollectionState::Disabled
+        };
+        let user_agent_collection_state = Arc::new(user_agent_collection_enabled);
 
         let http_auth = endpoint_auth.http_auth.clone();
         let http_server_future = tokio::spawn(http::start(
@@ -347,6 +355,7 @@ impl Runtime {
             config.clone().into(),
             tls_config.clone(),
             http_auth,
+            Arc::clone(&user_agent_collection_state),
         ));
 
         // Spawn the metrics server in the background
@@ -367,6 +376,7 @@ impl Runtime {
             Arc::clone(&self.df),
             tls_config.clone(),
             endpoint_auth.clone(),
+            Arc::clone(&user_agent_collection_state),
         ));
         let open_telemetry_server_future = tokio::spawn(opentelemetry::start(
             config.open_telemetry_bind_address,

@@ -23,7 +23,7 @@ use tokio::time::Instant;
 
 use crate::metrics::telemetry::TelemetryContext;
 
-use super::{error_code::ErrorCode, metrics, Protocol};
+use super::{error_code::ErrorCode, metrics};
 
 pub(crate) struct QueryTracker {
     pub(crate) schema: Option<SchemaRef>,
@@ -37,7 +37,7 @@ pub(crate) struct QueryTracker {
     pub(crate) query_duration_timer: Instant,
     pub(crate) query_execution_duration_timer: Instant,
     pub(crate) datasets: Arc<HashSet<TableReference>>,
-    pub(crate) telemetry_context: Arc<TelemetryContext>
+    pub(crate) telemetry_context: Arc<TelemetryContext>,
 }
 
 impl QueryTracker {
@@ -84,7 +84,7 @@ impl QueryTracker {
                     .map(ToString::to_string)
                     .collect::<Vec<String>>()
                     .join(","),
-            )
+            ),
         ];
 
         labels.extend(self.telemetry_context.to_dimensions());

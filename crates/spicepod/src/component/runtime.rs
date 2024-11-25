@@ -107,8 +107,38 @@ pub struct TracingConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schemars", derive(JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub enum UserAgentCollectionType {
+    Disabled,
+    Full,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schemars", derive(JsonSchema))]
 pub struct TelemetryConfig {
+    #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default)]
+    pub user_agent_collection: Option<UserAgentCollectionType>,
+}
+
+impl TelemetryConfig {
+    #[must_use]
+    pub fn user_agent_collection_enabled(&self) -> bool {
+        self.user_agent_collection
+            .as_ref()
+            .map_or(true, |c| c != &UserAgentCollectionType::Disabled)
+    }
+}
+
+impl Default for TelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            user_agent_collection: Some(UserAgentCollectionType::Full),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

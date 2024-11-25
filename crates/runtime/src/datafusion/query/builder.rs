@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::{datafusion::DataFusion, metrics::telemetry::TelemetryContext};
 
-use super::{tracker::QueryTracker, Protocol, Query};
+use super::{tracker::QueryTracker, Query};
 
 pub struct QueryBuilder<'a> {
     df: Arc<DataFusion>,
@@ -70,7 +70,7 @@ impl<'a> QueryBuilder<'a> {
                 query_duration_timer: Instant::now(),
                 query_execution_duration_timer: Instant::now(),
                 datasets: Arc::new(HashSet::default()),
-                telemetry_context: Arc::new(self.telemetry_context)
+                telemetry_context: Arc::new(self.telemetry_context),
             },
         }
     }

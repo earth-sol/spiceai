@@ -18,9 +18,9 @@ use std::collections::HashMap;
 use std::fmt;
 /**
  * `SpiceUserAgent` represents a Spice user agent.
- * 
+ *
  * The Spice user agent is a string that identifies the client making a request to Spice
- * 
+ *
  * The Spice user agent string has the following format:
  * `<client_name>/<client_version> (<client_system>) <platform_name>/<platform_version> (<platform_system>) <extension_key>/<extension_value>`
  */
@@ -150,16 +150,13 @@ impl Default for SpiceUserAgent {
 
 impl fmt::Display for SpiceUserAgent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}/{}",
-            self.client_name,
-            self.client_version,
-        )?;
+        write!(f, "{}/{}", self.client_name, self.client_version,)?;
         if let Some(client_system) = &self.client_system {
             write!(f, " ({client_system})")?;
         }
-        if let (Some(platform_name), Some(platform_version)) = (&self.platform_name, &self.platform_version) {
+        if let (Some(platform_name), Some(platform_version)) =
+            (&self.platform_name, &self.platform_version)
+        {
             write!(f, " {platform_name}/{platform_version}")?;
             if let Some(platform_system) = &self.platform_system {
                 write!(f, " ({platform_system})")?;
@@ -168,7 +165,7 @@ impl fmt::Display for SpiceUserAgent {
         for (key, value) in &self.extensions {
             write!(f, " {key}/{value}")?;
         }
-        
+
         Ok(())
     }
 }
@@ -179,12 +176,18 @@ impl TryFrom<String> for SpiceUserAgent {
     fn try_from(s: String) -> Result<Self, Self::Error> {
         tracing::trace!("Parsing SpiceUserAgent from string: {}", s);
         let mut parts = s.split_whitespace();
-        
+
         // Parse client info
         let client = parts.next().ok_or("Missing client info")?;
         let mut client_parts = client.split('/');
-        let client_name = client_parts.next().ok_or("Missing client name")?.to_string();
-        let client_version = client_parts.next().ok_or("Missing client version")?.to_string();
+        let client_name = client_parts
+            .next()
+            .ok_or("Missing client name")?
+            .to_string();
+        let client_version = client_parts
+            .next()
+            .ok_or("Missing client version")?
+            .to_string();
 
         let mut agent = SpiceUserAgent::default()
             .with_client_name(&client_name)
@@ -192,23 +195,35 @@ impl TryFrom<String> for SpiceUserAgent {
 
         // Parse optional parts
         let mut extensions = HashMap::new();
-        
+        let mut system_string = String::new();
+
         for part in parts {
             if part.starts_with('(') && part.ends_with(')') {
                 // This is a system field
-                let system = part[1..part.len()-1].to_string();
+                let system = part[1..part.len() - 1].to_string();
                 if agent.client_system.is_none() {
                     agent = agent.with_client_system(&system);
-                } else if agent.platform_system.is_none(){
+                } else if agent.platform_system.is_none() {
                     agent = agent.with_platform_system(&system);
                 }
+            } else if part.starts_with('(') {
+                let system = part[1..part.len()].to_string();
+                system_string = system;
+            } else if !system_string.is_empty() && part.ends_with(')') {
+                let system = part[0..part.len() - 1].to_string();
+                system_string.push_str(&format!(" {}", &system));
+                if agent.client_system.is_none() {
+                    agent = agent.with_client_system(&system_string);
+                } else if agent.platform_system.is_none() {
+                    agent = agent.with_platform_system(&system_string);
+                }
+                system_string = String::new();
             } else if part.contains('/') {
                 let mut kv = part.split('/');
                 if let (Some(key), Some(value)) = (kv.next(), kv.next()) {
                     // Check if this is platform info
                     if agent.platform_name.is_none() {
-                        agent = agent.with_platform_name(key)
-                            .with_platform_version(value);
+                        agent = agent.with_platform_name(key).with_platform_version(value);
                     } else {
                         extensions.insert(key.to_string(), value.to_string());
                     }
@@ -216,9 +231,13 @@ impl TryFrom<String> for SpiceUserAgent {
             }
         }
 
-        if let (Some(platform_name), Some(platform_version)) = (&agent.platform_name, &agent.platform_version) {
+        if let (Some(platform_name), Some(platform_version)) =
+            (&agent.platform_name, &agent.platform_version)
+        {
             if agent.platform_system.is_none() {
-                agent.extensions.insert(platform_name.to_string(), platform_version.to_string());
+                agent
+                    .extensions
+                    .insert(platform_name.to_string(), platform_version.to_string());
                 agent.platform_name = None;
                 agent.platform_version = None;
             }
@@ -237,7 +256,7 @@ pub fn get_os_type() -> String {
     let os_type = std::env::consts::OS;
     match os_type {
         "" => "unknown".to_string(),
-        "macos" => "Darwin".to_string(),    
+        "macos" => "Darwin".to_string(),
         "linux" => "Linux".to_string(),
         "windows" => "Windows".to_string(),
         "ios" => "iOS".to_string(),
@@ -322,10 +341,15 @@ mod test {
                 vec![
                     ("key1".to_string(), "value1".to_string()),
                     ("key2".to_string(), "value2".to_string()),
-                ].into_iter().collect()
+                ]
+                .into_iter()
+                .collect(),
             );
 
-        assert_eq!(agent.to_string(), "spice/0.1.0 (macos) spiced/0.1.0 (macos) key1/value1 key2/value2");
+        assert_eq!(
+            agent.to_string(),
+            "spice/0.1.0 (macos) spiced/0.1.0 (macos) key1/value1 key2/value2"
+        );
     }
 
     #[test]
@@ -341,28 +365,33 @@ mod test {
                 vec![
                     ("key1".to_string(), "value1".to_string()),
                     ("key2".to_string(), "value2".to_string()),
-                ].into_iter().collect()
+                ]
+                .into_iter()
+                .collect(),
             );
 
         let agent_str = agent.to_string();
-        let parsed_agent = SpiceUserAgent::try_from(agent_str).expect("Failed to parse agent string");
+        let parsed_agent =
+            SpiceUserAgent::try_from(agent_str).expect("Failed to parse agent string");
 
         assert_eq!(agent, parsed_agent);
 
         let agent_str = "spice/0.1.0 key1/value1";
-        let parsed_agent = SpiceUserAgent::try_from(agent_str.to_string()).expect("Failed to parse agent string");
+        let parsed_agent =
+            SpiceUserAgent::try_from(agent_str.to_string()).expect("Failed to parse agent string");
         let agent = SpiceUserAgent::default()
             .with_client_name("spice")
             .with_client_version("0.1.0")
             .with_extensions(
-                vec![
-                    ("key1".to_string(), "value1".to_string()),
-                ].into_iter().collect()
+                vec![("key1".to_string(), "value1".to_string())]
+                    .into_iter()
+                    .collect(),
             );
         assert_eq!(agent, parsed_agent);
 
         let agent_str = "spice/0.1.0 (macos) spiced/0.1.0 (macos) key1/value1 key2/value2";
-        let parsed_agent = SpiceUserAgent::try_from(agent_str.to_string()).expect("Failed to parse agent string");
+        let parsed_agent =
+            SpiceUserAgent::try_from(agent_str.to_string()).expect("Failed to parse agent string");
         let agent = SpiceUserAgent::default()
             .with_client_name("spice")
             .with_client_version("0.1.0")
@@ -374,7 +403,9 @@ mod test {
                 vec![
                     ("key1".to_string(), "value1".to_string()),
                     ("key2".to_string(), "value2".to_string()),
-                ].into_iter().collect()
+                ]
+                .into_iter()
+                .collect(),
             );
         assert_eq!(agent, parsed_agent);
     }
@@ -389,7 +420,9 @@ mod test {
                 vec![
                     ("key1".to_string(), "value1".to_string()),
                     ("key2".to_string(), "value2".to_string()),
-                ].into_iter().collect()
+                ]
+                .into_iter()
+                .collect(),
             );
         let platform = SpiceUserAgent::default()
             .with_platform_name("spiced")
@@ -408,8 +441,22 @@ mod test {
                 vec![
                     ("key1".to_string(), "value1".to_string()),
                     ("key2".to_string(), "value2".to_string()),
-                ].into_iter().collect()
+                ]
+                .into_iter()
+                .collect(),
             );
         assert_eq!(expected, merged);
+    }
+
+    #[test]
+    fn test_flightrepl() {
+        let agent_str = "flightrepl/1.0.0-rc.1 (Darwin/24.1.0 aarch64) tonic/0.12.3".to_string();
+        let actual: SpiceUserAgent = agent_str.try_into().expect("unable to parse agent string");
+        let expected = SpiceUserAgent::default()
+            .with_client_name("flightrepl")
+            .with_client_version("1.0.0-rc.1")
+            .with_client_system("Darwin/24.1.0 aarch64")
+            .with_extension("tonic", "0.12.3");
+        assert_eq!(expected, actual);
     }
 }

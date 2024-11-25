@@ -53,7 +53,7 @@ use datafusion::sql::sqlparser::dialect::PostgreSqlDialect;
 use datafusion::sql::{sqlparser, TableReference};
 use datafusion_federation::FederatedTableProviderAdaptor;
 use itertools::Itertools;
-use query::{Protocol, QueryBuilder};
+use query::QueryBuilder;
 use snafu::prelude::*;
 use tokio::spawn;
 use tokio::sync::oneshot;
@@ -243,7 +243,10 @@ pub struct DataFusion {
 
 impl DataFusion {
     #[must_use]
-    pub fn builder(status: Arc<status::RuntimeStatus>, default_telemetry_context: Option<TelemetryContext>) -> DataFusionBuilder {
+    pub fn builder(
+        status: Arc<status::RuntimeStatus>,
+        default_telemetry_context: Option<TelemetryContext>,
+    ) -> DataFusionBuilder {
         let default_telemetry_context = default_telemetry_context.unwrap_or_default();
         DataFusionBuilder::new(status, default_telemetry_context)
     }
