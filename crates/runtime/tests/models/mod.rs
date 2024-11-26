@@ -25,7 +25,7 @@ use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
 use rand::Rng;
 use reqwest::Client;
-use runtime::{config::Config, datafusion::query::Protocol, Runtime};
+use runtime::{config::Config, Runtime};
 use secrecy::SecretString;
 use spicepod::component::{
     dataset::{acceleration::Acceleration, Dataset},
@@ -340,7 +340,7 @@ async fn get_executed_tasks(
     let query = format!("SELECT task, input FROM runtime.task_history WHERE start_time >= '{}' ORDER BY start_time, task;", since.to_rfc3339());
     let query_result = rt
         .datafusion()
-        .query_builder(&query, Protocol::Internal)
+        .query_builder(&query, None)
         .build()
         .run()
         .await?;

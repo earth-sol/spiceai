@@ -66,6 +66,7 @@ async fn test_flight_auth() -> Result<(), anyhow::Error> {
             api_config,
             None,
             EndpointAuth::default().with_flight_basic_auth(api_key_auth),
+            false,
         ))
         .await
     });
@@ -85,17 +86,11 @@ async fn test_flight_auth() -> Result<(), anyhow::Error> {
         .expect("to connect to flight endpoint");
     let client = FlightServiceClient::new(channel);
 
-    let result = flightrepl::get_records(
-        client.clone(),
-        "SELECT 1",
-        Some(&"valid".to_string()),
-        "test_flight_auth/1.0",
-    )
-    .await;
+    let result =
+        flightrepl::get_records(client.clone(), "SELECT 1", Some(&"valid".to_string())).await;
     assert!(result.is_ok());
 
-    let Err(e) = flightrepl::get_records(client, "SELECT 1", None, "test_flight_auth/1.0").await
-    else {
+    let Err(e) = flightrepl::get_records(client, "SELECT 1", None).await else {
         panic!("expected error");
     };
     match e {

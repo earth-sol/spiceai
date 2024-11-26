@@ -22,9 +22,14 @@ use datafusion::{
     parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
 };
 
-use runtime::{datafusion::DataFusion, status, Runtime};
+use runtime::{
+    datafusion::{query::Protocol, DataFusion},
+    metrics::TelemetryContext,
+    status, Runtime,
+};
 use tracing::subscriber::DefaultGuard;
 use tracing_subscriber::EnvFilter;
+use util::user_agent::SpiceUserAgent;
 mod abfs;
 mod acceleration;
 mod catalog;
@@ -38,6 +43,7 @@ mod endpoint_auth;
 mod federation;
 mod github;
 mod graphql;
+mod metrics;
 #[cfg(feature = "mysql")]
 mod mysql;
 #[cfg(feature = "odbc")]
@@ -61,7 +67,16 @@ mod rehydration;
 ///
 /// 1) Sets the number of `target_partitions` to 3, by default its the number of CPU cores available.
 fn get_test_datafusion(status: Arc<status::RuntimeStatus>) -> Arc<DataFusion> {
-    let mut df = DataFusion::builder(status).build();
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::Internal,
+        user_agent: Some(
+            SpiceUserAgent::default()
+                .with_client_name("integration")
+                .with_client_version_from_cargo(),
+        ),
+    };
+
+    let mut df = DataFusion::builder(status, Some(telemetry_context)).build();
 
     // Set the target partitions to 3 to make RepartitionExec show consistent partitioning across machines with different CPU counts.
     let mut new_state = df.ctx.state();

@@ -239,6 +239,7 @@ pub struct DataFusion {
     cache_provider: RwLock<Option<Arc<QueryResultsCacheProvider>>>,
 
     pending_sink_tables: TokioRwLock<Vec<PendingSinkRegistration>>,
+    default_telemetry_context: TelemetryContext,
 }
 
 impl DataFusion {
@@ -1170,7 +1171,7 @@ impl DataFusion {
         sql: &'a str,
         telemetry_context: Option<TelemetryContext>,
     ) -> QueryBuilder<'a> {
-        let telemetry_context = telemetry_context.unwrap_or_default();
-        QueryBuilder::new(sql, Arc::clone(self), telemetry_context)
+        let telemetry_context = telemetry_context.unwrap_or(self.default_telemetry_context.clone());
+        QueryBuilder::new(sql, Arc::clone(self), Some(telemetry_context))
     }
 }

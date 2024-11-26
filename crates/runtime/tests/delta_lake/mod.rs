@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write};
+use std::{fs::File, io::Write, sync::Arc};
 
 use app::AppBuilder;
 use datafusion::assert_batches_eq;
@@ -53,7 +53,13 @@ async fn query_delta_lake_with_partitions() -> Result<(), String> {
         ))
         .build();
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let status = runtime::status::RuntimeStatus::new();
+    let df = crate::get_test_datafusion(Arc::clone(&status));
+    let rt = Runtime::builder()
+        .with_app(app)
+        .with_datafusion(df)
+        .build()
+        .await;
 
     // Set a timeout for the test
     tokio::select! {

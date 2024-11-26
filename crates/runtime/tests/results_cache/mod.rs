@@ -14,16 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use std::sync::Arc;
+
 use app::AppBuilder;
 use arrow::array::RecordBatch;
 use futures::TryStreamExt;
-use runtime::{
-    datafusion::query::{Protocol, QueryBuilder},
-    Runtime,
-};
+use runtime::{datafusion::query::QueryBuilder, status, Runtime};
 use spicepod::component::{dataset::Dataset, params::Params, runtime::ResultsCache};
 
-use crate::init_tracing;
+use crate::{get_test_datafusion, init_tracing};
 
 fn make_s3_tpch_dataset(name: &str) -> Dataset {
     let mut test_dataset = Dataset::new(
@@ -53,7 +52,14 @@ async fn results_cache_system_queries() -> Result<(), String> {
         .with_dataset(make_s3_tpch_dataset("customer"))
         .build();
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let status = status::RuntimeStatus::new();
+    let df = get_test_datafusion(Arc::clone(&status));
+
+    let rt = Runtime::builder()
+        .with_app(app)
+        .with_datafusion(df)
+        .build()
+        .await;
 
     rt.load_components().await;
 
@@ -76,7 +82,7 @@ async fn execute_query_and_check_cache_status(
     query: &str,
     expected_cache_status: Option<bool>,
 ) -> Result<Vec<RecordBatch>, String> {
-    let query = QueryBuilder::new(query, rt.datafusion(), Protocol::Http).build();
+    let query = QueryBuilder::new(query, rt.datafusion(), None).build();
 
     let query_result = query
         .run()

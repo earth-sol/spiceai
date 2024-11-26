@@ -200,7 +200,7 @@ pub async fn run(args: Args) -> Result<()> {
     let telemetry_config = runtime_config.and_then(|rt| rt.telemetry.clone());
     let user_agent_collection_enabled = telemetry_config
         .as_ref()
-        .map_or(true, |c| c.user_agent_collection_enabled());
+        .map_or(true, TelemetryConfig::user_agent_collection_enabled);
 
     let mut builder = Runtime::builder()
         .with_app_opt(app.clone())

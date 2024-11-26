@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use anyhow::anyhow;
 use app::{App, AppBuilder};
 use futures::StreamExt;
 use opentelemetry::global;
@@ -26,10 +25,7 @@ use opentelemetry_sdk::{
 use otel_arrow::OtelArrowExporter;
 use rand::Rng;
 use reqwest::Client;
-use runtime::{
-    auth::EndpointAuth, config::Config, datafusion::query::Protocol, metrics::TelemetryContext,
-    spice_metrics, status, Runtime,
-};
+use runtime::{auth::EndpointAuth, config::Config, spice_metrics, status, Runtime};
 use spicepod::component::{
     dataset::Dataset,
     params::Params,
@@ -40,7 +36,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use util::user_agent::SpiceUserAgent;
 
 use crate::{get_test_datafusion, init_tracing};
 

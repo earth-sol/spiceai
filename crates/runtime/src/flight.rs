@@ -159,7 +159,7 @@ impl Service {
         sql: &str,
         telemetry_context: TelemetryContext,
     ) -> Result<Schema, Status> {
-        let query = QueryBuilder::new(sql, datafusion, telemetry_context).build();
+        let query = QueryBuilder::new(sql, datafusion, Some(telemetry_context)).build();
 
         let schema = query.get_schema().await.map_err(handle_datafusion_error)?;
         Ok(schema)
@@ -179,7 +179,8 @@ impl Service {
         sql: &str,
         telemetry_context: TelemetryContext,
     ) -> Result<(BoxStream<'static, Result<FlightData, Status>>, Option<bool>), Status> {
-        let query = QueryBuilder::new(sql, Arc::clone(&datafusion), telemetry_context).build();
+        let query =
+            QueryBuilder::new(sql, Arc::clone(&datafusion), Some(telemetry_context)).build();
 
         let query_result = query.run().await.map_err(handle_query_error)?;
 

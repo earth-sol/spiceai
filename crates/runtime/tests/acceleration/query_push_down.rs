@@ -19,10 +19,7 @@ use std::time::Duration;
 use app::AppBuilder;
 use datafusion::assert_batches_eq;
 use futures::StreamExt;
-use runtime::{
-    datafusion::query::{self, Protocol},
-    Runtime,
-};
+use runtime::{datafusion::query, Runtime};
 use spicepod::component::{
     dataset::{acceleration::Acceleration, Dataset},
     params::Params,
@@ -148,7 +145,7 @@ CREATE TABLE test (
         wait_until_true(Duration::from_secs(30), || async {
             let mut query_result = rt
                 .datafusion()
-                .query_builder("SELECT * FROM abc LIMIT 1", Protocol::Internal)
+                .query_builder("SELECT * FROM abc LIMIT 1", None)
                 .build()
                 .run()
                 .await
@@ -166,10 +163,7 @@ CREATE TABLE test (
         wait_until_true(Duration::from_secs(30), || async {
             let mut query_result = match rt
                 .datafusion()
-                .query_builder(
-                    "SELECT * FROM non_federated_abc LIMIT 1",
-                    Protocol::Internal,
-                )
+                .query_builder("SELECT * FROM non_federated_abc LIMIT 1", None)
                 .build()
                 .run()
                 .await

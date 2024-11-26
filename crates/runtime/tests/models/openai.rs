@@ -29,6 +29,10 @@ use spicepod::component::{
     model::Model,
 };
 
+use runtime::datafusion::query::Protocol;
+use runtime::metrics::TelemetryContext;
+use util::user_agent::SpiceUserAgent;
+
 use crate::{
     init_tracing, init_tracing_with_task_history,
     models::{
@@ -66,7 +70,7 @@ async fn openai_test_nsql() -> Result<(), anyhow::Error> {
 
     let rt_ref_copy = Arc::clone(&rt);
     tokio::spawn(async move {
-        Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth())).await
+        Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth(), true)).await
     });
 
     tokio::select! {
@@ -195,11 +199,25 @@ async fn openai_test_search() -> Result<(), anyhow::Error> {
 
     let api_config = create_api_bindings_config();
     let http_base_url = format!("http://{}", api_config.http_bind_address);
-    let rt = Arc::new(Runtime::builder().with_app(app).build().await);
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::Internal,
+        user_agent: Some(
+            SpiceUserAgent::default()
+                .with_client_name("integration")
+                .with_client_version_from_cargo(),
+        ),
+    };
+    let rt = Arc::new(
+        Runtime::builder()
+            .with_app(app)
+            .with_default_telemetry_context(telemetry_context)
+            .build()
+            .await,
+    );
 
     let rt_ref_copy = Arc::clone(&rt);
     tokio::spawn(async move {
-        Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth())).await
+        Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth(), true)).await
     });
 
     tokio::select! {
@@ -257,11 +275,25 @@ async fn openai_test_embeddings() -> Result<(), anyhow::Error> {
 
     let api_config = create_api_bindings_config();
     let http_base_url = format!("http://{}", api_config.http_bind_address);
-    let rt = Arc::new(Runtime::builder().with_app(app).build().await);
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::Internal,
+        user_agent: Some(
+            SpiceUserAgent::default()
+                .with_client_name("integration")
+                .with_client_version_from_cargo(),
+        ),
+    };
+    let rt = Arc::new(
+        Runtime::builder()
+            .with_app(app)
+            .with_default_telemetry_context(telemetry_context)
+            .build()
+            .await,
+    );
 
     let rt_ref_copy = Arc::clone(&rt);
     tokio::spawn(async move {
-        Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth())).await
+        Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth(), true)).await
     });
 
     tokio::select! {
@@ -349,7 +381,7 @@ async fn openai_test_chat_completion() -> Result<(), anyhow::Error> {
 
     let rt_ref_copy = Arc::clone(&rt);
     tokio::spawn(async move {
-        Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth())).await
+        Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth(), false)).await
     });
 
     tokio::select! {

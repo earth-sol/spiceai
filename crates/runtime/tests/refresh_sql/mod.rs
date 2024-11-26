@@ -22,13 +22,12 @@ use app::AppBuilder;
 use runtime::{
     accelerated_table::{refresh::RefreshOverrides, AcceleratedTable},
     component::dataset::acceleration::RefreshMode,
-    datafusion::query::Protocol,
-    Runtime,
+    status, Runtime,
 };
 use spicepod::component::dataset::{acceleration::Acceleration, Dataset};
 
 use crate::{
-    init_tracing,
+    get_test_datafusion, init_tracing,
     utils::{runtime_ready_check, wait_until_true},
 };
 
@@ -55,7 +54,14 @@ async fn spiceai_integration_test_refresh_sql_pushdown() -> Result<(), String> {
         ))
         .build();
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let status = status::RuntimeStatus::new();
+    let df = get_test_datafusion(Arc::clone(&status));
+
+    let rt = Runtime::builder()
+        .with_app(app)
+        .with_datafusion(df)
+        .build()
+        .await;
 
     rt.load_components().await;
 
@@ -118,7 +124,14 @@ async fn spiceai_integration_test_refresh_sql_override_append() -> Result<(), an
         ))
         .build();
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let status = status::RuntimeStatus::new();
+    let df = get_test_datafusion(Arc::clone(&status));
+
+    let rt = Runtime::builder()
+        .with_app(app)
+        .with_datafusion(df)
+        .build()
+        .await;
 
     tokio::select! {
         () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
@@ -131,10 +144,7 @@ async fn spiceai_integration_test_refresh_sql_override_append() -> Result<(), an
 
     let query = rt
         .datafusion()
-        .query_builder(
-            "SELECT * FROM nation WHERE n_regionkey = 0",
-            Protocol::Internal,
-        )
+        .query_builder("SELECT * FROM nation WHERE n_regionkey = 0", None)
         .build()
         .run()
         .await?;
@@ -161,10 +171,7 @@ async fn spiceai_integration_test_refresh_sql_override_append() -> Result<(), an
         wait_until_true(Duration::from_secs(10), || async {
             let Ok(query) = rt
                 .datafusion()
-                .query_builder(
-                    "SELECT * FROM nation WHERE n_regionkey = 0",
-                    Protocol::Internal,
-                )
+                .query_builder("SELECT * FROM nation WHERE n_regionkey = 0", None)
                 .build()
                 .run()
                 .await
@@ -186,7 +193,7 @@ async fn spiceai_integration_test_refresh_sql_override_append() -> Result<(), an
         .datafusion()
         .query_builder(
             "SELECT * FROM nation WHERE n_regionkey = 0 ORDER BY n_nationkey DESC",
-            Protocol::Internal,
+            None,
         )
         .build()
         .run()

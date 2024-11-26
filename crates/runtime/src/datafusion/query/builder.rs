@@ -31,7 +31,12 @@ pub struct QueryBuilder<'a> {
 }
 
 impl<'a> QueryBuilder<'a> {
-    pub fn new(sql: &'a str, df: Arc<DataFusion>, telemetry_context: TelemetryContext) -> Self {
+    pub fn new(
+        sql: &'a str,
+        df: Arc<DataFusion>,
+        telemetry_context: Option<TelemetryContext>,
+    ) -> Self {
+        let telemetry_context = telemetry_context.unwrap_or(df.default_telemetry_context.clone());
         Self {
             df,
             sql,

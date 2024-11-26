@@ -223,6 +223,12 @@ impl AppBuilder {
     }
 
     #[must_use]
+    pub fn with_runtime(mut self, runtime: Runtime) -> AppBuilder {
+        self.runtime = runtime;
+        self
+    }
+
+    #[must_use]
     pub fn build(self) -> App {
         App {
             name: self.name,

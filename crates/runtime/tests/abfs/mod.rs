@@ -14,16 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use std::sync::Arc;
+
 use anyhow::anyhow;
 use app::AppBuilder;
 use azure_storage_blobs::prelude::*;
 use bollard::secret::HealthConfig;
 use datafusion::assert_batches_eq;
-use runtime::Runtime;
+use runtime::{status, Runtime};
 use spicepod::component::{dataset::Dataset, params::Params as DatasetParams};
 use tracing::instrument;
 
-use crate::docker::{ContainerRunnerBuilder, RunningContainer};
+use crate::{
+    docker::{ContainerRunnerBuilder, RunningContainer},
+    get_test_datafusion,
+};
 
 #[instrument]
 pub async fn start_azurite_docker_container() -> Result<RunningContainer<'static>, anyhow::Error> {
@@ -129,7 +134,14 @@ async fn run_queries() -> Result<(), anyhow::Error> {
         .with_dataset(abfs_dataset)
         .build();
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let status = status::RuntimeStatus::new();
+    let df = get_test_datafusion(Arc::clone(&status));
+
+    let rt = Runtime::builder()
+        .with_app(app)
+        .with_datafusion(df)
+        .build()
+        .await;
 
     // Set a timeout for the test
     tokio::select! {

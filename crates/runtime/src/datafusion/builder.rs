@@ -52,6 +52,7 @@ pub struct DataFusionBuilder {
     config: SessionConfig,
     status: Arc<status::RuntimeStatus>,
     cache_provider: Option<Arc<QueryResultsCacheProvider>>,
+    default_telemetry_context: TelemetryContext,
 }
 
 impl DataFusionBuilder {
@@ -80,12 +81,13 @@ impl DataFusionBuilder {
             .execution
             .skip_physical_aggregate_schema_check = true;
 
-        df_config.set_extension(Arc::new(default_telemetry_context));
+        df_config.set_extension(Arc::new(default_telemetry_context.clone()));
 
         Self {
             config: df_config,
             status,
             cache_provider: None,
+            default_telemetry_context,
         }
     }
 
@@ -154,6 +156,7 @@ impl DataFusionBuilder {
             cache_provider: RwLock::new(self.cache_provider),
             pending_sink_tables: TokioRwLock::new(Vec::new()),
             accelerated_tables: TokioRwLock::new(HashSet::new()),
+            default_telemetry_context: self.default_telemetry_context,
         }
     }
 }

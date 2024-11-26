@@ -14,12 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use std::sync::Arc;
+
 use app::AppBuilder;
 use futures::StreamExt;
-use runtime::{datafusion::query::Protocol, Runtime};
+use runtime::{status, Runtime};
 use spicepod::component::{dataset::Dataset, params::Params};
 
-use crate::init_tracing;
+use crate::{get_test_datafusion, init_tracing};
 
 pub fn get_s3_dataset() -> Dataset {
     let mut dataset = Dataset::new("s3://spiceai-demo-datasets/taxi_trips/2024/", "taxi_trips");
@@ -59,7 +61,14 @@ async fn s3_federation() -> Result<(), anyhow::Error> {
         .with_dataset(get_s3_dataset())
         .build();
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let status = status::RuntimeStatus::new();
+    let df = get_test_datafusion(Arc::clone(&status));
+
+    let rt = Runtime::builder()
+        .with_datafusion(df)
+        .with_app(app)
+        .build()
+        .await;
 
     // Set a timeout for the test
     tokio::select! {
@@ -71,7 +80,7 @@ async fn s3_federation() -> Result<(), anyhow::Error> {
 
     let mut query_result = rt
         .datafusion()
-        .query_builder("SELECT * FROM taxi_trips LIMIT 10", Protocol::Internal)
+        .query_builder("SELECT * FROM taxi_trips LIMIT 10", None)
         .build()
         .run()
         .await
@@ -96,7 +105,14 @@ async fn s3_hive_partitioning() -> Result<(), anyhow::Error> {
         .with_dataset(get_s3_hive_partitioned_dataset("hive_data_no_infer", false))
         .build();
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let status = status::RuntimeStatus::new();
+    let df = get_test_datafusion(Arc::clone(&status));
+
+    let rt = Runtime::builder()
+        .with_app(app)
+        .with_datafusion(df)
+        .build()
+        .await;
 
     // Set a timeout for the test
     tokio::select! {
@@ -108,7 +124,7 @@ async fn s3_hive_partitioning() -> Result<(), anyhow::Error> {
 
     let mut query_result = rt
         .datafusion()
-        .query_builder("SELECT * FROM hive_data ORDER BY id", Protocol::Internal)
+        .query_builder("SELECT * FROM hive_data ORDER BY id", None)
         .build()
         .run()
         .await
@@ -124,10 +140,7 @@ async fn s3_hive_partitioning() -> Result<(), anyhow::Error> {
 
     query_result = rt
         .datafusion()
-        .query_builder(
-            "SELECT * FROM hive_data_no_infer ORDER BY id",
-            Protocol::Internal,
-        )
+        .query_builder("SELECT * FROM hive_data_no_infer ORDER BY id", None)
         .build()
         .run()
         .await

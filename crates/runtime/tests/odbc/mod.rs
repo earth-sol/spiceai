@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::time::Duration;
-
 use app::AppBuilder;
 use runtime::Runtime;
+use std::sync::Arc;
+use std::time::Duration;
 use tracing::instrument;
 
 use crate::{init_tracing, utils::wait_until_true};
@@ -71,7 +71,14 @@ async fn databricks_odbc() -> Result<(), String> {
         ))
         .build();
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let status = runtime::status::RuntimeStatus::new();
+    let df = crate::get_test_datafusion(Arc::clone(&status));
+
+    let rt = Runtime::builder()
+        .with_app(app)
+        .with_datafusion(df)
+        .build()
+        .await;
 
     // Set a timeout for the test
     tokio::select! {
@@ -122,8 +129,13 @@ async fn databricks_odbc_with_acceleration() -> Result<(), String> {
                 engine,
             ))
             .build();
-
-        let rt = Runtime::builder().with_app(app).build().await;
+        let status = runtime::status::RuntimeStatus::new();
+        let df = crate::get_test_datafusion(Arc::clone(&status));
+        let rt = Runtime::builder()
+            .with_app(app)
+            .with_datafusion(df)
+            .build()
+            .await;
 
         // Set a timeout for the test
         tokio::select! {

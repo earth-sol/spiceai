@@ -77,6 +77,7 @@ async fn test_tls_endpoints() -> Result<(), anyhow::Error> {
             api_config,
             Some(Arc::new(tls_config)),
             EndpointAuth::no_auth(),
+            false,
         ))
         .await
     });

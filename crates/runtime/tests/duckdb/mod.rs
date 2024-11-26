@@ -17,9 +17,10 @@ limitations under the License.
 use crate::init_tracing;
 use app::AppBuilder;
 use datafusion::assert_batches_eq;
-use runtime::Runtime;
+use runtime::{datafusion::query::Protocol, metrics::TelemetryContext, Runtime};
 use scopeguard::defer;
 use spicepod::component::dataset::Dataset;
+use util::user_agent::SpiceUserAgent;
 
 fn make_duckdb_dataset(ds_name: &str, fn_name: &str, path_str: &str) -> Dataset {
     let mut dataset = Dataset::new(
@@ -77,7 +78,20 @@ async fn duckdb_from_functions() -> Result<(), String> {
         ))
         .build();
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let telemetry_context = TelemetryContext {
+        protocol: Protocol::Internal,
+        user_agent: Some(
+            SpiceUserAgent::default()
+                .with_client_name("integration")
+                .with_client_version_from_cargo(),
+        ),
+    };
+
+    let rt = Runtime::builder()
+        .with_app(app)
+        .with_default_telemetry_context(telemetry_context)
+        .build()
+        .await;
 
     // Set a timeout for the test
     tokio::select! {

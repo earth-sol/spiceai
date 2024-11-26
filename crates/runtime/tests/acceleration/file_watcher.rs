@@ -17,7 +17,7 @@ limitations under the License.
 use app::AppBuilder;
 use arrow::array::RecordBatch;
 use futures::TryStreamExt;
-use runtime::{datafusion::query::Protocol, status, Runtime};
+use runtime::{status, Runtime};
 use spicepod::component::{
     dataset::{
         acceleration::{Acceleration, Mode, RefreshMode},
@@ -98,7 +98,7 @@ async fn test_file_watcher() -> Result<(), anyhow::Error> {
 
     let result: Vec<RecordBatch> = rt
         .datafusion()
-        .query_builder("SELECT * FROM names ORDER BY id", Protocol::Internal)
+        .query_builder("SELECT * FROM names ORDER BY id", None)
         .build()
         .run()
         .await
@@ -126,7 +126,7 @@ async fn test_file_watcher() -> Result<(), anyhow::Error> {
 
     let result: Vec<RecordBatch> = rt
         .datafusion()
-        .query_builder("SELECT * FROM names ORDER BY id", Protocol::Internal)
+        .query_builder("SELECT * FROM names ORDER BY id", None)
         .build()
         .run()
         .await

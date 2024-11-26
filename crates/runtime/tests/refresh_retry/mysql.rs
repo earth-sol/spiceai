@@ -162,7 +162,14 @@ async fn mysql_refresh_retries() -> Result<(), String> {
         .with_dataset(ds_default_retries)
         .build();
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let status = runtime::status::RuntimeStatus::new();
+    let df = crate::get_test_datafusion(Arc::clone(&status));
+
+    let rt = Runtime::builder()
+        .with_app(app)
+        .with_datafusion(df)
+        .build()
+        .await;
 
     tokio::select! {
         () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {

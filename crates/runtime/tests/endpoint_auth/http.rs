@@ -68,6 +68,7 @@ async fn test_http_auth() -> Result<(), anyhow::Error> {
             api_config,
             None,
             EndpointAuth::default().with_http_auth(api_key_auth),
+            false,
         ))
         .await
     });

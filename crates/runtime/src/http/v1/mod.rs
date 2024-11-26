@@ -118,9 +118,9 @@ pub async fn sql_to_http_response(
             spice_user_agent
         } else {
             SpiceUserAgent::default()
-                    .with_client_name("HTTP")
-                    .with_client_version("1.0")
-                    .with_client_system("HTTP")
+                .with_client_name("HTTP")
+                .with_client_version("1.0")
+                .with_client_system("HTTP")
         };
 
         if ua.client_system.is_none() {
@@ -135,7 +135,7 @@ pub async fn sql_to_http_response(
         user_agent,
     };
 
-    let query = QueryBuilder::new(sql, Arc::clone(&df), telemetry_context).build();
+    let query = QueryBuilder::new(sql, Arc::clone(&df), Some(telemetry_context)).build();
 
     let (data, is_data_from_cache) = match query.run().await {
         Ok(query_result) => match query_result.data.try_collect::<Vec<RecordBatch>>().await {

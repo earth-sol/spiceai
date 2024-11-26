@@ -35,7 +35,7 @@ use datafusion_table_providers::sql::arrow_sql_gen::statement::{
 };
 use futures::TryStreamExt;
 use mysql_async::{prelude::Queryable, Params, Row};
-use runtime::{datafusion::query::Protocol, spice_data_base_path, status, Runtime};
+use runtime::{spice_data_base_path, status, Runtime};
 use spicepod::component::dataset::{
     acceleration::{Acceleration, IndexType, Mode},
     Dataset,
@@ -246,7 +246,7 @@ fn resolve_local_db_file_path(
 async fn run_query(query: &str, rt: &Runtime) -> Result<Vec<RecordBatch>, anyhow::Error> {
     let query_result = rt
         .datafusion()
-        .query_builder(query, Protocol::Internal)
+        .query_builder(query, None)
         .build()
         .run()
         .await
