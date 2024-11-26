@@ -12141,6 +12141,7 @@ dependencies = [
  "rand 0.8.5",
  "tokio",
  "tracing",
+ "winver",
 ]
 
 [[package]]
