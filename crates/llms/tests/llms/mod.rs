@@ -17,7 +17,9 @@ use async_openai::types::CreateChatCompletionRequest;
 use jsonpath_rust::JsonPath;
 use llms::chat::Chat;
 use serde_json::json;
+use tracing_subscriber::EnvFilter;
 use std::{
+    future::Future,
     str::FromStr,
     sync::{Arc, LazyLock},
 };
@@ -148,18 +150,6 @@ static TEST_CASES: LazyLock<Vec<TestCase>> = LazyLock::new(|| {
     ]
 });
 
-/// Model instantiations to test.
-#[allow(clippy::expect_used)]
-static TEST_MODELS: LazyLock<Vec<(&'static str, Arc<dyn Chat>)>> = LazyLock::new(|| {
-    vec![
-        (
-            "anthropic",
-            create::create_anthropic(None).expect("failed to create anthropic model"),
-        ),
-        ("openai", create::create_openai("gpt-4o-mini")),
-    ]
-});
-
 /// A mapping of model names (in [`TEST_MODELS`]) and test names (in [`TEST_CASES`]) to skip.
 static TEST_DENY_LIST: LazyLock<Vec<(&'static str, &'static str)>> =
     LazyLock::new(|| vec![("anthropic", "placeholder")]);
@@ -168,7 +158,7 @@ static TEST_DENY_LIST: LazyLock<Vec<(&'static str, &'static str)>> =
 #[allow(clippy::expect_used, clippy::expect_fun_call)]
 async fn run_test_case(
     test: &TestCase,
-    model_name: &'static str,
+    model_name: &str,
     model: Arc<dyn Chat>,
 ) -> Result<(), anyhow::Error> {
     let test_name = test.name;
@@ -196,24 +186,68 @@ async fn run_test_case(
     Ok(())
 }
 
-#[tokio::test]
-#[allow(clippy::expect_used, clippy::expect_fun_call)]
-async fn run_all_tests() {
-    // Set ENV variables before we lazy load `TEST_MODELS`.
-    let _ = dotenvy::from_filename(".env").expect("failed to load .env file");
+async fn run_tests_for_model<F, Fut>(model_name: &str, create_model: F) -> Result<(), anyhow::Error>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<Arc<dyn Chat>, anyhow::Error>>,
+{
+    // Load environment variables
+    dotenvy::from_filename(".env").expect("failed to load .env file");
+
+    let model = create_model().await?;
 
     for ts in TEST_CASES.iter() {
-        for (model_name, model) in TEST_MODELS.iter() {
-            if crate::llms::TEST_DENY_LIST
-                .iter()
-                .any(|(m, t)| m == model_name && *t == ts.name)
-            {
-                tracing::info!("Skipping test {model_name}/{}", ts.name);
-                continue;
-            }
-            run_test_case(ts, model_name, Arc::clone(model))
-                .await
-                .expect(format!("Failed to run test {model_name}/{}", ts.name).as_str());
+        if crate::llms::TEST_DENY_LIST
+            .iter()
+            .any(|(m, t)| *m == model_name && *t == ts.name)
+        {
+            tracing::info!("Skipping test {model_name}/{}", ts.name);
+            continue;
         }
+        run_test_case(ts, model_name, Arc::clone(&model)).await?;
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_anthropic_model() {
+    init_tracing(None);
+    run_tests_for_model("anthropic", || async {
+        create::create_anthropic(None).map_err(anyhow::Error::from)
+    })
+    .await
+    .expect("should pass");
+}
+
+#[tokio::test]
+async fn test_openai_model() {
+    init_tracing(None);
+    run_tests_for_model("openai", || async {
+        Ok(create::create_openai("gpt-4o-mini"))
+    })
+    .await
+    .expect("should pass");
+}
+
+#[tokio::test]
+async fn test_local_model() {
+    init_tracing(None);
+    run_tests_for_model("phi-3-mini", || async { create::create_local().await })
+        .await
+        .expect("should pass");
+}
+
+fn init_tracing(default_level: Option<&str>) -> tracing::subscriber::DefaultGuard {
+    let filter = match (default_level, std::env::var("SPICED_LOG").ok()) {
+        (_, Some(log)) => EnvFilter::new(log),
+        (Some(level), None) => EnvFilter::new(level),
+        _ => EnvFilter::new("llms=TRACE,DEBUG"),
+    };
+
+    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(filter)
+        .with_ansi(true)
+        .finish();
+    tracing::subscriber::set_default(subscriber)
 }
