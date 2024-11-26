@@ -151,8 +151,12 @@ static TEST_CASES: LazyLock<Vec<TestCase>> = LazyLock::new(|| {
 });
 
 /// A mapping of model names (in [`TEST_MODELS`]) and test names (in [`TEST_CASES`]) to skip.
-static TEST_DENY_LIST: LazyLock<Vec<(&'static str, &'static str)>> =
-    LazyLock::new(|| vec![("phi-3-mini", "tool_use")]);
+static TEST_DENY_LIST: LazyLock<Vec<(&'static str, &'static str)>> = LazyLock::new(|| {
+    vec![
+        // local model does not support tools
+        ("phi-3-mini", "tool_use"),
+    ]
+});
 
 /// Run a single [`TestCase`] for a model.
 #[allow(clippy::expect_used, clippy::expect_fun_call)]
