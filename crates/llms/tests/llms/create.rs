@@ -14,7 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::Context;
 use async_openai::error::OpenAIError;
@@ -41,7 +44,7 @@ pub(crate) fn create_anthropic(model_id: Option<&str>) -> Result<Arc<dyn Chat>, 
 }
 
 pub(crate) async fn create_local() -> Result<Arc<dyn Chat>, anyhow::Error> {
-    let temp_dir = local_model_dir("Phi-3-mini-4k-instruct").await;
+    let temp_dir = local_model_dir("Phi-3-mini-4k-instruct").await?;
 
     download_hf_model_artifacts(
         "microsoft/Phi-3-mini-4k-instruct",
@@ -56,8 +59,7 @@ pub(crate) async fn create_local() -> Result<Arc<dyn Chat>, anyhow::Error> {
         ],
         &temp_dir,
     )
-    .await
-    .expect("Failed to download test model artifacts");
+    .await?;
 
     let model_weights = [
         temp_dir
@@ -84,22 +86,17 @@ pub(crate) async fn create_local() -> Result<Arc<dyn Chat>, anyhow::Error> {
 }
 
 /// Creates a directory for the specified model under `.spice/test_models`.
-#[must_use]
-pub async fn local_model_dir(model_name: &str) -> PathBuf {
+pub async fn local_model_dir(model_name: &str) -> Result<PathBuf, anyhow::Error> {
     let working_dir = std::env::current_dir().unwrap_or_else(|_| ".".into());
     let model_dir = working_dir.join(".spice/test_models").join(model_name);
 
     // Remove the directory if it already exists
     if model_dir.exists() {
-        fs::remove_dir_all(&model_dir)
-            .await
-            .expect("Failed to remove existing model directory");
+        fs::remove_dir_all(&model_dir).await?;
     }
-    fs::create_dir_all(&model_dir)
-        .await
-        .expect("Failed to create model directory");
+    fs::create_dir_all(&model_dir).await?;
 
-    model_dir
+    Ok(model_dir)
 }
 
 /// For a given `HuggingFace` repo, downloads the specified file and save them into provided folder
@@ -108,7 +105,7 @@ async fn download_hf_model_artifacts(
     revision: Option<&str>,
     hf_token: Option<String>,
     files: Vec<&str>,
-    target_dir: &PathBuf,
+    target_dir: &Path,
 ) -> Result<(), anyhow::Error> {
     let api = ApiBuilder::new()
         .with_progress(false)

@@ -17,12 +17,12 @@ use async_openai::types::CreateChatCompletionRequest;
 use jsonpath_rust::JsonPath;
 use llms::chat::Chat;
 use serde_json::json;
-use tracing_subscriber::EnvFilter;
 use std::{
     future::Future,
     str::FromStr,
     sync::{Arc, LazyLock},
 };
+use tracing_subscriber::EnvFilter;
 
 mod create;
 
@@ -192,7 +192,7 @@ where
     Fut: Future<Output = Result<Arc<dyn Chat>, anyhow::Error>>,
 {
     // Load environment variables
-    dotenvy::from_filename(".env").expect("failed to load .env file");
+    dotenvy::from_filename(".env")?;
 
     let model = create_model().await?;
 
