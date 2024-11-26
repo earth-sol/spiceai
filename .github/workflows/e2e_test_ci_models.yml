@@ -6,10 +6,10 @@ on:
       - trunk
       - release-*
     paths-ignore:
-      - 'docs/**'
-      - 'README.md'
-      - 'version.txt'
-      - 'acknowledgements.md'
+      - "docs/**"
+      - "README.md"
+      - "version.txt"
+      - "acknowledgements.md"
 
   workflow_dispatch:
 
@@ -121,7 +121,7 @@ jobs:
             spiced
 
   test_openai_model:
-    name: 'openai model (${{ matrix.target.target_os }}-${{ matrix.target.target_arch }})'
+    name: "openai model (${{ matrix.target.target_os }}-${{ matrix.target.target_arch }})"
     timeout-minutes: 5
     runs-on: ${{ matrix.target.runner }}
     needs:
@@ -151,46 +151,6 @@ jobs:
         with:
           build-path: ./build
 
-      - name: Init spice app
+      - name: Run all E2E model tests
         run: |
-          cp ./test/models/spicepod.yml ./spicepod.yaml
-          cat ./spicepod.yaml
-
-      - name: Start spice runtime
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SPICE_OPENAI_API_KEY: ${{ secrets.SPICE_SECRET_OPENAI_API_KEY }}
-        run: |
-          spice run &> spice.log &
-
-      - name: Wait for Spice runtime is ready
-        timeout-minutes: 1
-        run: |
-          while [[ "$(curl -s http://localhost:8090/v1/ready)" != "ready" ]]; do sleep 1; done
-      
-      - name: Install expect (linux)
-        if: matrix.target.target_os == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y expect
-
-      - name: Install expect (macOS)
-        if: matrix.target.target_os == 'darwin'
-        run: |
-          brew install expect
-
-      - name: Test vector search
-        run: |
-          ./test/models/search_01.exp
-
-      - name: Test chat
-        run: |
-          ./test/models/chat_01.exp
-
-      - name: Stop spice and check logs
-        if: always()
-        run: |
-          killall spice || true
-          cat spice.log
-
-  
+          ./test/scripts/e2e-models.sh
