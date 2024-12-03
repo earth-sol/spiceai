@@ -62,7 +62,7 @@ async fn spiceai_integration_test_catalog() -> Result<(), anyhow::Error> {
 
             let mut result = rt
                 .datafusion()
-                .query_builder("SELECT * FROM spiceai.eth.recent_blocks LIMIT 10")
+                .query_builder("SELECT * FROM spiceai.eth.blocks LIMIT 10")
                 .build()
                 .run()
                 .await?;

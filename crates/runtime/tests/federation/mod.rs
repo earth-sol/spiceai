@@ -36,6 +36,8 @@ fn make_spiceai_dataset(path: &str, name: &str) -> Dataset {
 
 #[tokio::test]
 #[allow(clippy::too_many_lines)]
+// TODO: Re-enable these tests once eth.recent_blocks has values
+#[ignore]
 async fn spiceai_integration_test_single_source_federation_push_down() -> Result<(), String> {
     type QueryTests<'a> = Vec<(&'a str, &'a str, Option<Box<ValidateFn>>)>;
     let _ = rustls::crypto::CryptoProvider::install_default(
