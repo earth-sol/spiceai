@@ -23,151 +23,163 @@ pub fn build_app(app_builder: AppBuilder, bench_name: &str) -> Result<AppBuilder
     match bench_name {
         "tpch" => Ok(app_builder
             .with_dataset(make_dataset(
-                "benchmarks/tpch/customer/",
+                "benchmarks/tpch_sf1/customer/",
                 "customer",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpch/lineitem/",
+                "benchmarks/tpch_sf1/lineitem/",
                 "lineitem",
                 bench_name,
             ))
-            .with_dataset(make_dataset("benchmarks/tpch/part/", "part", bench_name))
             .with_dataset(make_dataset(
-                "benchmarks/tpch/partsupp/",
+                "benchmarks/tpch_sf1/part/",
+                "part",
+                bench_name,
+            ))
+            .with_dataset(make_dataset(
+                "benchmarks/tpch_sf1/partsupp/",
                 "partsupp",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpch/orders/",
+                "benchmarks/tpch_sf1/orders/",
                 "orders",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpch/nation/",
+                "benchmarks/tpch_sf1/nation/",
                 "nation",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpch/region/",
+                "benchmarks/tpch_sf1/region/",
                 "region",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpch/supplier/",
+                "benchmarks/tpch_sf1/supplier/",
                 "supplier",
                 bench_name,
             ))),
         "tpcds" => Ok(app_builder
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/call_center/",
+                "benchmarks/tpcds_sf1/call_center/",
                 "call_center",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/catalog_page/",
+                "benchmarks/tpcds_sf1/catalog_page/",
                 "catalog_page",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/catalog_sales/",
+                "benchmarks/tpcds_sf1/catalog_sales/",
                 "catalog_sales",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/catalog_returns/",
+                "benchmarks/tpcds_sf1/catalog_returns/",
                 "catalog_returns",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/income_band/",
+                "benchmarks/tpcds_sf1/income_band/",
                 "income_band",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/inventory/",
+                "benchmarks/tpcds_sf1/inventory/",
                 "inventory",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/store_sales/",
+                "benchmarks/tpcds_sf1/store_sales/",
                 "store_sales",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/store_returns/",
+                "benchmarks/tpcds_sf1/store_returns/",
                 "store_returns",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/web_sales/",
+                "benchmarks/tpcds_sf1/web_sales/",
                 "web_sales",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/web_returns/",
+                "benchmarks/tpcds_sf1/web_returns/",
                 "web_returns",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/customer/",
+                "benchmarks/tpcds_sf1/customer/",
                 "customer",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/customer_address/",
+                "benchmarks/tpcds_sf1/customer_address/",
                 "customer_address",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/customer_demographics/",
+                "benchmarks/tpcds_sf1/customer_demographics/",
                 "customer_demographics",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/date_dim/",
+                "benchmarks/tpcds_sf1/date_dim/",
                 "date_dim",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/household_demographics/",
+                "benchmarks/tpcds_sf1/household_demographics/",
                 "household_demographics",
                 bench_name,
             ))
-            .with_dataset(make_dataset("benchmarks/tpcds/item/", "item", bench_name))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/promotion/",
+                "benchmarks/tpcds_sf1/item/",
+                "item",
+                bench_name,
+            ))
+            .with_dataset(make_dataset(
+                "benchmarks/tpcds_sf1/promotion/",
                 "promotion",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/reason/",
+                "benchmarks/tpcds_sf1/reason/",
                 "reason",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/ship_mode/",
+                "benchmarks/tpcds_sf1/ship_mode/",
                 "ship_mode",
                 bench_name,
             ))
-            .with_dataset(make_dataset("benchmarks/tpcds/store/", "store", bench_name))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/time_dim/",
+                "benchmarks/tpcds_sf1/store/",
+                "store",
+                bench_name,
+            ))
+            .with_dataset(make_dataset(
+                "benchmarks/tpcds_sf1/time_dim/",
                 "time_dim",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/warehouse/",
+                "benchmarks/tpcds_sf1/warehouse/",
                 "warehouse",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/web_page/",
+                "benchmarks/tpcds_sf1/web_page/",
                 "web_page",
                 bench_name,
             ))
             .with_dataset(make_dataset(
-                "benchmarks/tpcds/web_site/",
+                "benchmarks/tpcds_sf1/web_site/",
                 "web_site",
                 bench_name,
             ))),
