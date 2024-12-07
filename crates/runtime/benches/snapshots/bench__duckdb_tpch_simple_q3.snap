@@ -3,17 +3,17 @@ source: crates/runtime/benches/bench.rs
 expression: records_pretty
 snapshot_kind: text
 ---
-+----------------------------------+-----------+
-| l_comment                        | l_partkey |
-+----------------------------------+-----------+
-| avely outside the a              | 82430     |
-| ithely final excu                | 175931    |
-|  quickly regular pl              | 87375     |
-| structions sleep blithely even,  | 70020     |
-| eans nag careful                 | 92488     |
-| uests affix across t             | 51519     |
-|  express deposits. special pe    | 50645     |
-| uriously acros                   | 161751    |
-| bove the unusual reques          | 183057    |
-| y deposits. f                    | 145148    |
-+----------------------------------+-----------+
++--------------------------------------------+-----------+
+| l_comment                                  | l_partkey |
++--------------------------------------------+-----------+
+|  requests affix quickly. express pi        | 171488    |
+| e carefully after the blithely pending dep | 48783     |
+|  the slow accounts use fur                 | 79751     |
+| e the furiously regular pack               | 14594     |
+| ainst the slyly special deposits.          | 160092    |
+| ar accounts detect. furiously ironic sa    | 41115     |
+| detect around                              | 60095     |
+| . quickly un                               | 11541     |
+| sly final excuses cajole arou              | 78631     |
+| ed instructions ha                         | 176997    |
++--------------------------------------------+-----------+
