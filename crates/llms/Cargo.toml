@@ -11,11 +11,11 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-snafu.workspace = true
-
 async-openai.workspace = true
 async-stream.workspace = true
 async-trait.workspace = true
+aws-config = { version = "1.1.7", features = ["behavior-version-latest"] }
+aws-sdk-bedrockruntime = "1.64.0"
 bytes.workspace = true
 futures = { workspace = true }
 hf-hub.workspace = true
@@ -27,10 +27,12 @@ schemars = "0.8.19"
 secrecy.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+snafu.workspace = true
 tokenizers = { version = "0.20.0" }
 tokio.workspace = true
 tracing.workspace = true
 tracing-futures.workspace = true
+uuid.workspace = true
 
 ## For Chunking
 text-splitter = { git = "https://github.com/spiceai/text-splitter.git", rev = "b33e4748576b9a81d436d3f28a6706f860fc45ba", features = [
