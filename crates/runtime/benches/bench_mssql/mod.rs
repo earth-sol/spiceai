@@ -32,9 +32,6 @@ pub(crate) async fn run(
 
     let mut errors = Vec::new();
 
-    // wait 30 seconds for MS SQL container to start and restore
-    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-
     for (query_name, query) in test_queries {
         if let Err(e) = super::run_query_and_record_result(
             rt,
@@ -58,6 +55,9 @@ pub(crate) async fn run(
 }
 
 pub fn build_app(app_builder: AppBuilder, bench_name: &str) -> Result<AppBuilder, String> {
+    // wait for 30 seconds for MS SQL server to restore
+    std::thread::sleep(std::time::Duration::from_secs(30));
+
     match bench_name {
         "tpch" => Ok(app_builder
             .with_dataset(make_dataset("customer", "customer", bench_name))

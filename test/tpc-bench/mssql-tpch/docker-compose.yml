@@ -1,6 +1,6 @@
 services:
  mssql_tpch:
-    # image: mcr.microsoft.com/mssql/server:2022-latest
+    # image: ghcr.io/spiceai/spice-mssql-bench:a01d88a7ccf8680268dc8e93e9fb4809a439b86b
     build:
       context: .
       dockerfile: Dockerfile
