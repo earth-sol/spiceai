@@ -97,7 +97,7 @@ jobs:
         with:
           context: ./test/tpc-bench/mssql-tpch
           file: ./test/tpc-bench/mssql-tpch/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64 # there is no arm64 MS SQL image. https://github.com/microsoft/mssql-docker/issues/802
           push: true
           tags: |
             ghcr.io/spiceai/spice-mssql-bench:latest
