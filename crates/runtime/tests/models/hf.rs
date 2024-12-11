@@ -65,7 +65,7 @@ mod nsql {
 
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn huggingface_test_nsql() -> Result<(), anyhow::Error> {
         let _tracing = init_tracing(None);
 
@@ -160,7 +160,7 @@ mod search {
 
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn huggingface_test_search() -> Result<(), anyhow::Error> {
         let _tracing = init_tracing(None);
 
@@ -253,7 +253,7 @@ mod search {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(None);
 
@@ -337,7 +337,7 @@ async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
         .await
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(None);
 
@@ -394,7 +394,7 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
     }).await
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
     test_request_context().scope(async {
         let model = Arc::new(create_hf_model(
