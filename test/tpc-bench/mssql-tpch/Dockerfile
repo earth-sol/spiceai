@@ -13,10 +13,12 @@ COPY ./data /data
 COPY ./setup.sh /srv/setup.sh
 COPY ./entrypoint.sh /srv/entrypoint.sh
 
-RUN chmod +x /srv/setup.sh & \
-    chmod +x /srv/entrypoint.sh & \
+RUN chmod 755 /data & \
+    chmod 755 /srv & \
     chown mssql:mssql -R /data & \
-    chown mssql:mssql -R /srv
+    chown mssql:mssql -R /srv & \
+    chmod +x /srv/setup.sh & \
+    chmod +x /srv/entrypoint.sh
 
 USER mssql
 
