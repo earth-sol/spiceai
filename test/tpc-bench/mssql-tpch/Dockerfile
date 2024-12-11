@@ -14,7 +14,7 @@ COPY ./entrypoint.sh /srv/entrypoint.sh
 
 RUN chmod +x /srv/setup.sh & \
     chmod +x /srv/entrypoint.sh & \
-    chmod mssql:mssql -R /data & \
+    chown mssql:mssql -R /data & \
     chown mssql:mssql -R /srv
 
 USER mssql

@@ -97,6 +97,12 @@ jobs:
     needs: build-database-bench-binary
 
     services:
+      mssql_tpch:
+        image: ${{ matrix.cmd == '-c mssql' && 'ghcr.io/spiceai/spice-mssql-bench:latest' || '' }}
+        ports:
+          - 1433:1433
+        env:
+          MSSQL_SA_PASSWORD: S3cretP@ssw0rd
       mysql_tpch:
         image: ${{ matrix.cmd == '-c mysql' && 'ghcr.io/spiceai/spice-mysql-bench:latest' || '' }}
         options: >-
