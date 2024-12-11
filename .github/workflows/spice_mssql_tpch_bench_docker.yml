@@ -94,9 +94,10 @@ jobs:
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
+        working-directory: ./test/tpc-bench/mssql-tpch
         with:
-          context: ./test/tpc-bench/mssql-tpch
-          file: ./test/tpc-bench/mssql-tpch/Dockerfile
+          context: ./
+          file: ./Dockerfile
           platforms: linux/amd64 # there is no arm64 MS SQL image. https://github.com/microsoft/mssql-docker/issues/802
           push: true
           tags: |
