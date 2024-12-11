@@ -104,6 +104,7 @@ jobs:
           - 1433:1433
         env:
           MSSQL_SA_PASSWORD: S3cretP@ssw0rd
+          DB_NAME: tpch_sf1
       mysql_tpch:
         image: ${{ matrix.cmd == '-c mysql' && 'ghcr.io/spiceai/spice-mysql-bench:latest' || '' }}
         options: >-
