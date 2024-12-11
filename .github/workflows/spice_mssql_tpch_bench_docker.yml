@@ -1,6 +1,9 @@
 name: spice-mysql-bench docker
 
 on:
+  push:
+    branches:
+      - feat/add-mssql-tpch-benchmark
   workflow_dispatch:
 
 jobs:
