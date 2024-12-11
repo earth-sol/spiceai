@@ -239,3 +239,14 @@ file-tpch-load:
 		echo "  - name: $$table" >> ./file-tpch-spicepod/spicepod.yaml; \
 		echo "    path: file:./$$table.parquet" >> ./file-tpch-spicepod/spicepod.yaml; \
 	done
+
+mssql-init:
+	sqlcmd -U $(DB_USER) -P $(DB_PASS) -S $(DB_HOST) -d master -Q "IF NOT EXISTS (SELECT name FROM master.dbo.sysdatabases WHERE name = N'$(DB_NAME)') CREATE DATABASE $(DB_NAME);"
+	sqlcmd -U $(DB_USER) -P $(DB_PASS) -S $(DB_HOST) -d $(DB_NAME) -i ./mssql-tpch/up.sql
+	@echo "Database $(DB_NAME) has been successfuly created or updated."
+
+mssql-load:
+	@for table in region nation customer supplier part partsupp orders lineitem; do \
+		cp tpch-kit/dbgen/$$table.tbl ./mssql-tpch/data/$$table.tbl; \
+	done
+	sqlcmd -U $(DB_USER) -P $(DB_PASS) -S $(DB_HOST) -d $(DB_NAME) -i ./mssql-tpch/insert.sql
