@@ -65,7 +65,7 @@ pub fn build_app(app_builder: AppBuilder, bench_name: &str) -> Result<AppBuilder
             .with_dataset(make_dataset("nation", "nation", bench_name))
             .with_dataset(make_dataset("region", "region", bench_name))
             .with_dataset(make_dataset("supplier", "supplier", bench_name))),
-        _ => Err("Only tpcds or tpch benchmark suites are supported".to_string()),
+        _ => Err("Only tpch benchmark suites are supported".to_string()),
     }
 }
 
@@ -76,13 +76,12 @@ fn make_dataset(path: &str, name: &str, bench_name: &str) -> Dataset {
 }
 
 fn get_params(bench_name: &str) -> Params {
-    let host = std::env::var("MSSQL_BENCHMARK_MYSQL_HOST").unwrap_or_default();
-    let user = std::env::var("MSSQL_BENCHMARK_MYSQL_USER").unwrap_or_default();
-    let pass = std::env::var("MSSQL_BENCHMARK_MYSQL_PASS").unwrap_or_default();
+    let host = std::env::var("MSSQL_BENCHMARK_MSSQL_HOST").unwrap_or_default();
+    let user = std::env::var("MSSQL_BENCHMARK_MSSQL_USER").unwrap_or_default();
+    let pass = std::env::var("MSSQL_BENCHMARK_MSSQL_PASS").unwrap_or_default();
     let db = match bench_name {
-        "tpch" => std::env::var("MSSQL_TPCH_BENCHMARK_MYSQL_DB").unwrap_or_default(),
-        "tpcds" => std::env::var("MSSQL_TPCDS_BENCHMARK_MYSQL_DB").unwrap_or_default(),
-        _ => panic!("Only tpcds or tpch benchmark suites are supported"),
+        "tpch" => std::env::var("MSSQL_TPCH_BENCHMARK_MSSQL_DB").unwrap_or_default(),
+        _ => panic!("Only tpch benchmark suites are supported"),
     };
 
     Params::from_string_map(

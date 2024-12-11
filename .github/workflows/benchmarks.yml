@@ -39,6 +39,7 @@ on:
           - 'spark connector'
           - 'postgres connector'
           - 'mysql connector'
+          - 'mssql connector'
           - 'duckdb connector'
           - 'odbc-databricks connector'
           - 'odbc-athena connector'
@@ -59,7 +60,7 @@ on:
           - 'no'
 
 env:
-  FEATURES: 'postgres,spark,mysql,odbc,delta_lake,databricks,duckdb,sqlite'
+  FEATURES: 'postgres,spark,mysql,mssql,odbc,delta_lake,databricks,duckdb,sqlite'
 
 jobs:
   build-database-bench-binary:
@@ -194,6 +195,9 @@ jobs:
             bench: 'tpcds'
           - cmd: '-c mysql'
             name: 'mysql connector'
+            bench: 'tpch'
+          - cmd: '-c mssql'
+            name: 'mssql connector'
             bench: 'tpch'
           - cmd: '-c duckdb'
             name: 'duckdb connector'
@@ -364,6 +368,10 @@ jobs:
           MYSQL_BENCHMARK_MYSQL_PASS: root
           MYSQL_TPCH_BENCHMARK_MYSQL_DB: tpch_sf1
           MYSQL_TPCDS_BENCHMARK_MYSQL_DB: tpcds_sf1
+          MSSQL_BENCHMARK_MSSQL_HOST: localhost
+          MSSQL_BENCHMARK_MSSQL_USER: sa
+          MSSQL_BENCHMARK_MSSQL_PASS: S3cretP@ssw0rd
+          MSSQL_TPCH_BENCHMARK_MSSQL_DB: tpch_sf1
           S3_ENDPOINT: ${{ secrets.CLICKBENCH_S3_ENDPOINT}}
           S3_KEY: ${{ secrets.CLICKBENCH_S3_KEY}}
           S3_SECRET: ${{ secrets.CLICKBENCH_S3_SECRET}}
