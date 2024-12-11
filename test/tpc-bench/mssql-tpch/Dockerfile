@@ -7,7 +7,7 @@ USER root
 RUN mkdir -p /srv
 RUN mkdir -p /data
 
-COPY ./data/tpch.bak /data/tpch.bak
+COPY ./data /data
 COPY ./setup.sh /srv/setup.sh
 COPY ./entrypoint.sh /srv/entrypoint.sh
 

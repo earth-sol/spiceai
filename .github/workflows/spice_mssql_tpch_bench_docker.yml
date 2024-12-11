@@ -81,6 +81,8 @@ jobs:
             DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=sa DB_PASS="S3cretP@ssw0rd" DB_NAME=$DB_NAME make mssql-init
             DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=sa DB_PASS="S3cretP@ssw0rd" DB_NAME=$DB_NAME make mssql-load
             DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=sa DB_PASS="S3cretP@ssw0rd" DB_NAME=$DB_NAME make mssql-backup
+            rm ./mssql-tpch/data/*.tbl
+            ls -lh ./mssql-tpch/data
           done
 
       - name: Login to GHCR
