@@ -92,12 +92,14 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: List data files
+        run: ls -lh ./test/tpc-bench/mssql-tpch/data
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
-        working-directory: ./test/tpc-bench/mssql-tpch
         with:
-          context: ./
-          file: ./Dockerfile
+          context: ./test/tpc-bench/mssql-tpch
+          file: ./test/tpc-bench/mssql-tpch/Dockerfile
           platforms: linux/amd64 # there is no arm64 MS SQL image. https://github.com/microsoft/mssql-docker/issues/802
           push: true
           tags: |
