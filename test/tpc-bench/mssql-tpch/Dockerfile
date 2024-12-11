@@ -4,8 +4,6 @@ ENV DB_NAME=tpch
 
 # restore from backup
 USER root
-RUN mkdir -p /srv
-RUN mkdir -p /data
 
 COPY ./data /data
 COPY ./setup.sh /srv/setup.sh
