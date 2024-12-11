@@ -6,7 +6,7 @@ ENV DB_NAME=tpch
 USER root
 
 RUN mkdir -p /data & \
-    mkdir -p /srv & \
+    mkdir -p /srv
 
 COPY ./data /data
 COPY ./setup.sh /srv/setup.sh
