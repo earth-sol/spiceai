@@ -1,13 +1,14 @@
 services:
  mssql_tpch:
-    # image: ghcr.io/spiceai/spice-mssql-bench:a01d88a7ccf8680268dc8e93e9fb4809a439b86b
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/spiceai/spice-mssql-bench:latest
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     ports:
       - 1433:1433
     environment:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=S3cretP@ssw0rd
-    volumes:
-      - ./data:/data
+      - DB_NAME=tpch_sf1
+    # volumes:
+    #   - ./data:/data
