@@ -20,6 +20,7 @@ use bench_search::{
     setup::{load_query_relevance_data, load_search_queries, setup_benchmark, Query},
     SearchBenchmarkResultBuilder,
 };
+use clap::Parser;
 use futures::{stream, StreamExt, TryStreamExt};
 use runtime::{
     embeddings::vector_search::{
@@ -33,6 +34,19 @@ use utils::runtime_ready_check;
 
 mod bench_search;
 mod utils;
+
+// Define command line arguments for running benchmark test
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct BenchArgs {
+    /// Run the benchmark
+    #[arg(long)]
+    bench: bool,
+
+    /// Sets the configuration to run benchmark test on
+    #[arg(short, long)]
+    configuration: Option<String>,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
@@ -63,6 +77,8 @@ fn benchmark_configurations() -> Vec<SearchBenchmarkConfiguration> {
     // TODO: expand configurations with DuckDB acceleration after issue below is resolved
     // https://github.com/spiceai/spiceai/issues/3796
 
+    let args = BenchArgs::parse();
+
     vec![
         SearchBenchmarkConfiguration {
             name: "quora_minilm-l6-v2_arrow",
@@ -87,10 +103,22 @@ fn benchmark_configurations() -> Vec<SearchBenchmarkConfiguration> {
             }),
         },
     ]
+    .into_iter()
+    .filter(|x| match &args.configuration {
+        Some(config) => x.name.to_lowercase() == config.to_lowercase(),
+        None => true,
+    })
+    .collect()
 }
 
 async fn vector_search_benchmarks() -> Result<(), String> {
-    for config in benchmark_configurations() {
+    let benchmark_configurations = benchmark_configurations();
+
+    if benchmark_configurations.is_empty() {
+        return Err("No benchmarks to run: the configuration list is empty.".to_string());
+    }
+
+    for config in benchmark_configurations {
         let _ = run_benchmark(&config).await;
     }
 
