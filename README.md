@@ -379,7 +379,7 @@ spice sql
 ```
 
 ```bash
-SELECT tpep_pickup_datetime, passenger_count, trip_distance from taxi_trips LIMIT 10;
+SELECT tpep_pickup_datetime, passenger_count, trip_distance FROM taxi_trips ORDER BY tpep_pickup_datetime LIMIT 10
 ```
 
 The output displays the results of the query along with the query execution time:
@@ -388,19 +388,19 @@ The output displays the results of the query along with the query execution time
 +----------------------+-----------------+---------------+
 | tpep_pickup_datetime | passenger_count | trip_distance |
 +----------------------+-----------------+---------------+
-| 2024-01-11T12:55:12  | 1               | 0.0           |
-| 2024-01-11T12:55:12  | 1               | 0.0           |
-| 2024-01-11T12:04:56  | 1               | 0.63          |
-| 2024-01-11T12:18:31  | 1               | 1.38          |
-| 2024-01-11T12:39:26  | 1               | 1.01          |
-| 2024-01-11T12:18:58  | 1               | 5.13          |
-| 2024-01-11T12:43:13  | 1               | 2.9           |
-| 2024-01-11T12:05:41  | 1               | 1.36          |
-| 2024-01-11T12:20:41  | 1               | 1.11          |
-| 2024-01-11T12:37:25  | 1               | 2.04          |
+| 2002-12-31T22:59:39  | 1               | 0.63          |
+| 2002-12-31T22:59:39  | 1               | 0.63          |
+| 2009-01-01T00:24:09  | 2               | 10.88         |
+| 2009-01-01T23:30:39  | 1               | 10.99         |
+| 2009-01-01T23:58:40  | 1               | 0.46          |
+| 2023-12-31T23:39:17  | 2               | 0.47          |
+| 2023-12-31T23:41:02  | 1               | 0.4           |
+| 2023-12-31T23:47:28  | 2               | 1.44          |
+| 2023-12-31T23:49:12  | 1               | 3.14          |
+| 2023-12-31T23:54:27  | 1               | 7.7           |
 +----------------------+-----------------+---------------+
 
-Time: 0.00538925 seconds. 10 rows.
+Time: 0.852775583 seconds. 10 rows.
 ```
 
 You can experiment with the time it takes to generate queries when using non-accelerated datasets. You can change the acceleration setting from `true` to `false` in the datasets.yaml file.
