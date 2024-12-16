@@ -80,6 +80,14 @@ pub enum Error {
         scorer_name: String,
     },
 
+    #[snafu(display(
+        "Scorer '{scorer_name}' needed for eval '{eval_name}' did not produce scores."
+    ))]
+    EvalScorerProducedNoResults {
+        eval_name: String,
+        scorer_name: String,
+    },
+
     #[snafu(display("Failed to create score outputs: {source}"))]
     FailedToCreateScoreOutputs { source: ArrowError },
 
@@ -201,8 +209,16 @@ async fn run_eval(
     // Compute metrics
     let metrics = scorers_to_use
         .iter()
-        .map(|(name, scorer)| ((*name).clone(), scorer.metrics(&scores[name])))
-        .collect();
+        .map(|(name, scorer)| {
+            let Some(scores) = scores.get(name) else {
+                return Err(Error::EvalScorerProducedNoResults {
+                    eval_name: eval.name.clone(),
+                    scorer_name: name.to_string(),
+                });
+            };
+            Ok(((*name).clone(), scorer.metrics(&scores)))
+        })
+        .collect::<Result<_>>()?;
 
     add_metrics_to_eval_run(Arc::clone(&df), id, &metrics).await?;
     Ok(())

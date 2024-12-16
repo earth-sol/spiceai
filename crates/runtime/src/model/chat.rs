@@ -460,12 +460,12 @@ impl Chat for ChatWrapper {
         match self.chat.chat_request(req).instrument(span.clone()).await {
             Ok(mut resp) => {
                 if let Some(usage) = resp.usage.clone() {
-                    tracing::info!(target: "task_history", parent: &span, completion_tokens = %usage.completion_tokens, total_tokens = %usage.total_tokens, prompt_tokens = %usage.prompt_tokens, "labels");
+                    tracing::info!(target: "task_history", parent: &span.clone(), completion_tokens = %usage.completion_tokens, total_tokens = %usage.total_tokens, prompt_tokens = %usage.prompt_tokens, "labels");
                 };
                 let captured_output: Vec<_> = resp.choices.iter().map(|c| &c.message).collect();
                 match serde_json::to_string(&captured_output) {
                     Ok(output) => {
-                        tracing::info!(target: "task_history", parent: &span, captured_output = %output);
+                        tracing::info!(target: "task_history", parent: &span.clone(), captured_output = %output);
                     }
                     Err(e) => tracing::error!("Failed to serialize truncated output: {e}"),
                 }
