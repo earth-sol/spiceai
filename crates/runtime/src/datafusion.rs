@@ -68,6 +68,7 @@ mod extension;
 pub mod filter_converter;
 pub mod refresh_sql;
 pub mod schema;
+mod spice_udf_override;
 pub mod udf;
 
 pub const SPICE_DEFAULT_CATALOG: &str = "spice";

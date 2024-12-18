@@ -36,7 +36,10 @@ use datafusion::{
 use datafusion_federation::FederationAnalyzerRule;
 use tokio::sync::RwLock as TokioRwLock;
 
-use crate::{embeddings, object_store_registry::default_runtime_env, status};
+use crate::{
+    datafusion::spice_udf_override::SpiceUDFsOverride, embeddings,
+    object_store_registry::default_runtime_env, status,
+};
 
 use super::{
     extension::{bytes_processed::BytesProcessedOptimizerRule, SpiceQueryPlanner},
@@ -170,6 +173,7 @@ fn get_analyzer_rules() -> Vec<Arc<dyn AnalyzerRule + Send + Sync>> {
     vec![
         Arc::new(InlineTableScan::new()),
         Arc::new(ExpandWildcardRule::new()),
+        Arc::new(SpiceUDFsOverride::new()),
         Arc::new(FederationAnalyzerRule::new()),
         // The rest of these rules are run after the federation analyzer since they only affect internal DataFusion execution.
         Arc::new(ResolveGroupingFunction::new()),

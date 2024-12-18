@@ -49,6 +49,11 @@ impl PolyTableProvider {
 
         adaptor.map(|f| Arc::clone(&f.source))
     }
+
+    #[must_use]
+    pub fn get_write_table_provider(&self) -> Arc<dyn TableProvider> {
+        Arc::clone(&self.write)
+    }
 }
 
 #[async_trait]
