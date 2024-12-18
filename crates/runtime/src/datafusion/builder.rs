@@ -33,7 +33,7 @@ use datafusion::{
     },
     prelude::{SessionConfig, SessionContext},
 };
-use datafusion_federation::FederationAnalyzerRule;
+use datafusion_federation::default_optimizer_rules;
 use tokio::sync::RwLock as TokioRwLock;
 
 use crate::{embeddings, object_store_registry::default_runtime_env, status};
@@ -94,12 +94,13 @@ impl DataFusionBuilder {
     /// Panics if the `DataFusion` instance cannot be built due to errors in registering functions or schemas.
     #[must_use]
     pub fn build(self) -> DataFusion {
+        let rules = default_optimizer_rules();
         let mut state = SessionStateBuilder::new()
             .with_config(self.config)
             .with_default_features()
+            .with_optimizer_rules(rules)
             .with_query_planner(Arc::new(SpiceQueryPlanner::new()))
             .with_runtime_env(default_runtime_env())
-            .with_analyzer_rules(get_analyzer_rules())
             .build();
 
         if let Err(e) = datafusion_functions_json::register_all(&mut state) {
@@ -170,7 +171,6 @@ fn get_analyzer_rules() -> Vec<Arc<dyn AnalyzerRule + Send + Sync>> {
     vec![
         Arc::new(InlineTableScan::new()),
         Arc::new(ExpandWildcardRule::new()),
-        Arc::new(FederationAnalyzerRule::new()),
         // The rest of these rules are run after the federation analyzer since they only affect internal DataFusion execution.
         Arc::new(ResolveGroupingFunction::new()),
         Arc::new(TypeCoercion::new()),
