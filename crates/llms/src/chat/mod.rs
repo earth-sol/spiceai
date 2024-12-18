@@ -577,9 +577,15 @@ pub fn create_hf_model(
     model_id: &str,
     model_type: Option<&str>,
     hf_token_literal: Option<&Secret<String>>,
+    chat_template_literal: Option<&str>,
 ) -> Result<Box<dyn Chat>> {
-    mistral::MistralLlama::from_hf(model_id, model_type, hf_token_literal)
-        .map(|x| Box::new(x) as Box<dyn Chat>)
+    mistral::MistralLlama::from_hf(
+        model_id,
+        model_type,
+        hf_token_literal,
+        chat_template_literal,
+    )
+    .map(|x| Box::new(x) as Box<dyn Chat>)
 }
 
 pub async fn create_hf_w_gguf(

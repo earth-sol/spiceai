@@ -168,6 +168,7 @@ impl MistralLlama {
         chat_template_literal: Option<&str>,
     ) -> Result<Arc<tokio::sync::Mutex<dyn Pipeline + Sync + Send>>> {
         let model_parts: Vec<&str> = model_id.split(':').collect();
+        println!("chat_template_literal: {chat_template_literal:?}");
         NormalLoaderBuilder::new(
             mistralrs::NormalSpecificConfig::default(),
             chat_template_literal.map(ToString::to_string),
@@ -290,6 +291,7 @@ impl MistralLlama {
         model_id: &str,
         arch: Option<&str>,
         hf_token_literal: Option<&Secret<String>>,
+        chat_template_literal: Option<&str>,
     ) -> Result<Self> {
         let model_parts: Vec<&str> = model_id.split(':').collect();
 
@@ -305,7 +307,7 @@ impl MistralLlama {
 
         let builder = NormalLoaderBuilder::new(
             mistralrs::NormalSpecificConfig::default(),
-            None,
+            chat_template_literal.map(ToString::to_string),
             None,
             Some(model_parts[0].to_string()),
         );

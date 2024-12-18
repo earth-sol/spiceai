@@ -190,7 +190,12 @@ async fn huggingface(
         return llms::chat::create_hf_w_gguf(id.as_str(), path.as_path(), hf_token).await;
     }
 
-    llms::chat::create_hf_model(&id, model_type, hf_token)
+    llms::chat::create_hf_model(
+        &id,
+        model_type,
+        hf_token,
+        extract_secret!(params, "chat_template"),
+    )
 }
 
 fn openai(model_id: Option<String>, params: &HashMap<String, SecretString>) -> Box<dyn Chat> {
