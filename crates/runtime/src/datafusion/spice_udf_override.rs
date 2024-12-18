@@ -217,14 +217,14 @@ pub fn get_accelerator_write_table_provider(
     Ok(Some(poly_provider.get_write_table_provider()))
 }
 
+/// UDF function wrapper to provide different function name during unparsing
+/// Implementation is requried as analyzer rules use them for coercion and type checking
 #[derive(Debug)]
 struct RenameFunctionUDF {
     name: String,
     inner: Arc<ScalarUDF>,
 }
 
-/// UDF function wrapper to rename it during unparsing
-/// Implementation is requried as analyzer rules use them for coercion and type checking
 impl RenameFunctionUDF {
     fn new(name: &str, inner: Arc<ScalarUDF>) -> Self {
         Self {
