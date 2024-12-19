@@ -3148,7 +3148,7 @@ dependencies = [
 [[package]]
 name = "datafusion-federation"
 version = "0.1.6"
-source = "git+https://github.com/spiceai/datafusion-federation.git?rev=91c08a6fbc3262e7ccb3aefb21969c4b32fa86ab#91c08a6fbc3262e7ccb3aefb21969c4b32fa86ab"
+source = "git+https://github.com/spiceai/datafusion-federation.git?rev=59c854400fdd033169d60796705aa69984e9bd3d#59c854400fdd033169d60796705aa69984e9bd3d"
 dependencies = [
  "arrow-json 53.3.0",
  "async-stream",
@@ -3160,7 +3160,7 @@ dependencies = [
 [[package]]
 name = "datafusion-federation-sql"
 version = "0.1.6"
-source = "git+https://github.com/spiceai/datafusion-federation.git?rev=91c08a6fbc3262e7ccb3aefb21969c4b32fa86ab#91c08a6fbc3262e7ccb3aefb21969c4b32fa86ab"
+source = "git+https://github.com/spiceai/datafusion-federation.git?rev=59c854400fdd033169d60796705aa69984e9bd3d#59c854400fdd033169d60796705aa69984e9bd3d"
 dependencies = [
  "async-trait",
  "datafusion",
@@ -3414,7 +3414,7 @@ dependencies = [
 [[package]]
 name = "datafusion-table-providers"
 version = "0.1.0"
-source = "git+https://github.com/datafusion-contrib/datafusion-table-providers.git?rev=2ed04b99972796da9e1135fdd463004c6f93c2ff#2ed04b99972796da9e1135fdd463004c6f93c2ff"
+source = "git+https://github.com/datafusion-contrib/datafusion-table-providers.git?rev=0fe287d303313245eb140becfff8e842d93ebc65#0fe287d303313245eb140becfff8e842d93ebc65"
 dependencies = [
  "arrow",
  "arrow-json 53.3.0",
@@ -10017,9 +10017,9 @@ checksum = "a3f0bf26fd526d2a95683cd0f87bf103b8539e2ca1ef48ce002d67aad59aa0b4"
 
 [[package]]
 name = "serde"
-version = "1.0.215"
+version = "1.0.216"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6513c1ad0b11a9376da888e3e0baa0077f1aed55c17f50e7b2397136129fb88f"
+checksum = "0b9781016e935a97e8beecf0c933758c97a5520d32930e460142b4cd80c6338e"
 dependencies = [
  "serde_derive",
 ]
@@ -10047,9 +10047,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.215"
+version = "1.0.216"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad1e866f866923f252f05c889987993144fb74e722403468a4ebd70c3cd756c0"
+checksum = "46f859dbbf73865c6627ed570e78961cd3ac92407a2d117204c49232485da55e"
 dependencies = [
  "proc-macro2",
  "quote",
