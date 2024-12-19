@@ -24,7 +24,7 @@ use tokio::sync::Mutex;
 
 use super::{
     builtin::catalog::BuiltinToolCatalog, catalog::SpiceToolCatalog,
-    memory::catalog::MemoryToolCatalog, SpiceModelTool,
+    extension::ExtensionToolCatalog, memory::catalog::MemoryToolCatalog, SpiceModelTool,
 };
 
 pub trait ToolFactory: Send + Sync {
@@ -48,6 +48,7 @@ pub async fn register_tool_factory(from_source: &str, tool: Arc<dyn ToolFactory>
 pub async fn register_all_factories() {
     register_tool_factory("builtin", Arc::new(BuiltinToolCatalog {})).await;
     register_tool_factory("memory", Arc::new(MemoryToolCatalog {})).await;
+    register_tool_factory("extensions", Arc::new(ExtensionToolCatalog {})).await;
 }
 
 /// Get all catalogs available by default in the spice runtime.

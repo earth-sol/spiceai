@@ -23,6 +23,7 @@ use crate::Runtime;
 
 pub mod builtin;
 pub mod catalog;
+pub mod extension;
 pub mod factory;
 pub mod memory;
 pub mod options;
