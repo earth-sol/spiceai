@@ -17,26 +17,23 @@ limitations under the License.
 use std::sync::Arc;
 
 use arrow_schema::DataType;
-use data_components::poly::PolyTableProvider;
 use datafusion::{
-    catalog::TableProvider,
-    common::tree_node::{Transformed, TransformedResult, TreeNode},
-    config::ConfigOptions,
-    datasource::source_as_provider,
-    error::Result as DataFusionResult,
+    common::tree_node::{Transformed, TreeNode, TreeNodeRecursion},
+    error::{DataFusionError, Result as DataFusionResult},
     logical_expr::{
-        expr::ScalarFunction, ColumnarValue, LogicalPlan, Projection, ScalarUDF, ScalarUDFImpl, Signature, TableScan, TableSource
+        expr::ScalarFunction, ColumnarValue, Extension, LogicalPlan, Projection, ScalarUDF,
+        ScalarUDFImpl, Signature, TableScan,
     },
-    optimizer::AnalyzerRule,
+    optimizer::{optimizer::ApplyOrder, OptimizerConfig, OptimizerRule},
     prelude::Expr,
+    sql::unparser::dialect::{Dialect, DuckDBDialect},
 };
-use datafusion_federation::FederatedTableProviderAdaptor;
-use datafusion_table_providers::duckdb::write::DuckDBTableWriter;
-
-use crate::accelerated_table::AcceleratedTable;
+use datafusion_federation::{get_table_source, FederatedPlanNode};
+use datafusion_federation_sql::SQLFederationProvider;
 
 /// Implements `DataFusion` `AnalyzerRule` to replace `SpiceAI` internal UDFs with definitions that match
-/// the signature of the target execution engine
+/// the signature of the target execution engine.
+/// The rule is applied to `Projection` nodes of federated logical plans.
 #[derive(Default, Debug)]
 pub struct SpiceUDFsOverride {}
 
@@ -46,9 +43,44 @@ impl SpiceUDFsOverride {
     }
 }
 
-impl AnalyzerRule for SpiceUDFsOverride {
-    fn analyze(&self, plan: LogicalPlan, _: &ConfigOptions) -> DataFusionResult<LogicalPlan> {
-        plan.transform_up_with_subqueries(override_spice_udf).data()
+impl OptimizerRule for SpiceUDFsOverride {
+    fn apply_order(&self) -> Option<ApplyOrder> {
+        Some(ApplyOrder::TopDown)
+    }
+
+    fn supports_rewrite(&self) -> bool {
+        true
+    }
+
+    fn rewrite(
+        &self,
+        plan: LogicalPlan,
+        _config: &dyn OptimizerConfig,
+    ) -> Result<Transformed<LogicalPlan>, DataFusionError> {
+        if let LogicalPlan::Extension(extension_node) = plan {
+            if let Some(node) = extension_node
+                .node
+                .as_any()
+                .downcast_ref::<FederatedPlanNode>()
+            {
+                // extension plan node and logical plan are immutable references
+                // so we need to clone the plan and reconstruct the extension node
+                let updated_plan = node.plan().clone().transform(override_spice_udf)?;
+                let planner = node.planner();
+
+                let updated_extension_node = Extension {
+                    node: Arc::new(FederatedPlanNode::new(updated_plan.data, planner)),
+                };
+
+                if updated_plan.transformed {
+                    return Ok(Transformed::yes(LogicalPlan::Extension(updated_extension_node)));
+                }
+                return Ok(Transformed::no(LogicalPlan::Extension(updated_extension_node)));
+            }
+            return Ok(Transformed::no(LogicalPlan::Extension(extension_node)));
+        }
+
+        Ok(Transformed::no(plan))
     }
 
     fn name(&self) -> &str {
@@ -64,18 +96,14 @@ fn override_spice_udf(plan: LogicalPlan) -> DataFusionResult<Transformed<Logical
             // Note: while there is currently no in-place mutation API that uses `&mut TreeNode`,
             // the transforming APIs are efficient and optimized to avoid cloning.
             match override_spice_udf_in_exprs(&input, expr)? {
-                (new_expr, true) => {
-                    Ok(Transformed::yes(
-                        Projection::try_new(new_expr, Arc::clone(&input))
-                            .map(LogicalPlan::Projection)?,
-                    ))
-                }
-                (new_expr, false) => {
-                    Ok(Transformed::no(
-                        Projection::try_new(new_expr, Arc::clone(&input))
-                            .map(LogicalPlan::Projection)?,
-                    ))
-                }
+                (new_expr, true) => Ok(Transformed::yes(
+                    Projection::try_new(new_expr, Arc::clone(&input))
+                        .map(LogicalPlan::Projection)?,
+                )),
+                (new_expr, false) => Ok(Transformed::no(
+                    Projection::try_new(new_expr, Arc::clone(&input))
+                        .map(LogicalPlan::Projection)?,
+                )),
             }
         }
         _ => Ok(Transformed::no(plan)),
@@ -93,9 +121,10 @@ fn override_spice_udf_in_exprs(
             // recursive `transform` is required as UDF can be nested in the expression tree
             expr.transform(|expr| {
                 if let Expr::ScalarFunction(scalar_fn) = expr {
-                    let udf_fn_name = scalar_fn.name();
-                    match udf_fn_name {
-                        "cosine_distance" if is_duckdb_accelerator_provider(input)? => {
+                    match scalar_fn.name() {
+                        "cosine_distance"
+                            if is_duckdb_dialect(retrieve_dialect(input)?.as_ref()) =>
+                        {
                             let rewritten_expr =
                                 rewrite_cosine_distance_udf_duckdb(scalar_fn.func, scalar_fn.args)?;
                             modified = true;
@@ -112,6 +141,10 @@ fn override_spice_udf_in_exprs(
         .collect::<DataFusionResult<Vec<_>>>()?;
 
     Ok((exprs, modified))
+}
+
+fn is_duckdb_dialect(dialect: Option<&Arc<dyn Dialect>>) -> bool {
+    dialect.is_some_and(|dialect| dialect.as_any().is::<DuckDBDialect>())
 }
 
 /// Converts the `cosine_distance` UDF into `DuckDB` `array_cosine_distance` function:
@@ -162,59 +195,43 @@ fn rewrite_cosine_distance_udf_duckdb(
         args,
     ));
 
-   Ok(expr)
+    Ok(expr)
 }
 
 /// Recursively searches children of `LogicalPlan` to `TableScan` node and checks if the target execution engine is `DuckDB`
-pub(crate) fn is_duckdb_accelerator_provider(plan: &LogicalPlan) -> DataFusionResult<bool> {
-    let federated_table_exists = plan.exists(|x: &LogicalPlan| {
-       if let LogicalPlan::TableScan(TableScan { ref source, .. }) = x {
-            let Some(provider) = get_accelerator_write_table_provider(source)? else {
-                return Ok(false);
-            };
+pub(crate) fn retrieve_dialect(plan: &LogicalPlan) -> DataFusionResult<Option<Arc<dyn Dialect>>> {
+    let mut dialect: Option<Arc<dyn Dialect>> = None;
 
-            return Ok(provider
-                .as_any()
-                .downcast_ref::<DuckDBTableWriter>()
-                .is_some());
+    plan.apply(|x| {
+        if let Some(x) = retrieve_federated_node_dialect(x)? {
+            dialect = Some(x);
+            return Ok(TreeNodeRecursion::Stop);
         }
-
-        Ok(false)
+        Ok(TreeNodeRecursion::Continue)
     })?;
-
-    Ok(federated_table_exists)
+    Ok(dialect)
 }
 
-pub fn get_accelerator_write_table_provider(
-    source: &Arc<dyn TableSource>,
-) -> DataFusionResult<Option<Arc<dyn TableProvider>>> {
-    let source = source_as_provider(source)?;
+fn retrieve_federated_node_dialect(
+    plan: &LogicalPlan,
+) -> DataFusionResult<Option<Arc<dyn Dialect>>> {
+    match plan {
+        LogicalPlan::TableScan(TableScan { ref source, .. }) => {
+            let Some(federated_source) = get_table_source(source)? else {
+                return Ok(None);
+            };
 
-    let Some(wrapper) = source
-        .as_any()
-        .downcast_ref::<FederatedTableProviderAdaptor>()
-    else {
-        return Ok(None);
-    };
+            let provider = federated_source.federation_provider();
 
-    let Some(federated_table_provider) = &wrapper.table_provider else {
-        return Ok(None);
-    };
+            let Some(sql_provider) = provider.as_any().downcast_ref::<SQLFederationProvider>()
+            else {
+                return Ok(None);
+            };
 
-    let Some(accelerated_table) = federated_table_provider
-        .as_any()
-        .downcast_ref::<AcceleratedTable>()
-    else {
-        return Ok(None);
-    };
-
-    let accelerator = accelerated_table.get_accelerator();
-
-    let Some(poly_provider) = accelerator.as_any().downcast_ref::<PolyTableProvider>() else {
-        return Ok(None);
-    };
-
-    Ok(Some(poly_provider.get_write_table_provider()))
+            Ok(Some(sql_provider.dialect()))
+        }
+        _ => Ok(None),
+    }
 }
 
 /// UDF function wrapper to provide different function name during unparsing

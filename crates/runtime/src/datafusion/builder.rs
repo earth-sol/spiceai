@@ -103,6 +103,7 @@ impl DataFusionBuilder {
             .with_query_planner(Arc::new(SpiceQueryPlanner::new()))
             .with_runtime_env(default_runtime_env())
             .with_analyzer_rules(get_analyzer_rules())
+            .with_optimizer_rule(Arc::new(SpiceUDFsOverride::new()))
             .build();
 
         if let Err(e) = datafusion_functions_json::register_all(&mut state) {
@@ -173,7 +174,6 @@ fn get_analyzer_rules() -> Vec<Arc<dyn AnalyzerRule + Send + Sync>> {
     vec![
         Arc::new(InlineTableScan::new()),
         Arc::new(ExpandWildcardRule::new()),
-        Arc::new(SpiceUDFsOverride::new()),
         Arc::new(FederationAnalyzerRule::new()),
         // The rest of these rules are run after the federation analyzer since they only affect internal DataFusion execution.
         Arc::new(ResolveGroupingFunction::new()),

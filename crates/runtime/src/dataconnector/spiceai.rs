@@ -89,6 +89,10 @@ pub struct SpiceAI {
 pub struct SpiceCloudPlatformDialect {}
 
 impl Dialect for SpiceCloudPlatformDialect {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn use_timestamp_for_date64(&self) -> bool {
         true
     }

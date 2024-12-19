@@ -63,6 +63,10 @@ pub struct Dremio {
 pub struct DremioDialect {}
 
 impl Dialect for DremioDialect {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn use_timestamp_for_date64(&self) -> bool {
         true
     }

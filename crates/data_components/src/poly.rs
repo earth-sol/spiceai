@@ -68,6 +68,9 @@ impl DeletionTableProvider for PolyTableProvider {
 }
 
 impl FederationProvider for PolyTableProvider {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
     fn name(&self) -> &str {
         "FederationProviderForPolyTableProvider"
     }
