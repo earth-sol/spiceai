@@ -97,11 +97,11 @@ impl FederationProvider for FederationAdaptor {
         self.inner.clone().and_then(|x| x.compute_context())
     }
 
-    fn optimizer(&self) -> Option<Arc<datafusion::optimizer::Optimizer>> {
+    fn analyzer(&self) -> Option<Arc<datafusion::optimizer::Analyzer>> {
         if !self.enabled {
             return None;
         }
-        self.inner.clone().and_then(|x| x.optimizer())
+        self.inner.clone().and_then(|x| x.analyzer())
     }
 }
 
