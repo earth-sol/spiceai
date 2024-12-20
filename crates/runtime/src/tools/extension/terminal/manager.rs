@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 use std::collections::HashMap;
+use std::env;
 use std::io::{self};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -38,6 +39,15 @@ impl Default for TerminalManager {
 }
 
 impl TerminalManager {
+    fn get_shell_command() -> Command {
+        let default_shell = if cfg!(target_os = "windows") {
+            env::var("COMSPEC").unwrap_or("cmd.exe".to_string())
+        } else {
+            env::var("SHELL").unwrap_or("bash".to_string())
+        };
+        Command::new(default_shell)
+    }
+
     /// Spawns a new terminal session and adds it to the manager.
     ///
     /// # Returns
@@ -48,23 +58,14 @@ impl TerminalManager {
         let mut id_lock = self.next_id.lock().await;
         let id = *id_lock;
         *id_lock += 1;
-        drop(id_lock); // Release the lock early
+        drop(id_lock);
 
-        // Determine the shell based on the operating system
-        #[cfg(target_os = "windows")]
-        let shell = "cmd.exe";
-
-        #[cfg(not(target_os = "windows"))]
-        let shell = "bash";
-
-        // Spawn the new terminal process
-        let child = Command::new(shell)
+        let child = Self::get_shell_command()
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
 
-        // Insert the new terminal into the HashMap
         self.terminals.lock().await.insert(id, child);
         Ok(id)
     }
@@ -121,17 +122,13 @@ impl TerminalManager {
                         // EOF reached without finding the marker
                         break;
                     }
-
                     if buffer.contains(END_OF_COMMAND_MARKER) {
+                        buffer = buffer.replace(END_OF_COMMAND_MARKER, "");
                         break;
                     }
-                    println!("buffer: {}", buffer);
                 }
 
-                if buffer.trim_end() == END_OF_COMMAND_MARKER {
-                    buffer.truncate(buffer.len() - END_OF_COMMAND_MARKER.len());
-                }
-                Ok(buffer.trim_end().to_string())
+                Ok(buffer.trim().to_string())
             } else {
                 Err(io::Error::new(
                     io::ErrorKind::BrokenPipe,

@@ -45,6 +45,15 @@ pub struct TerminalToolParams {
     terminal_id: Option<usize>,
 }
 
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize)]
+pub struct TerminalToolResponse {
+    /// The ID of the terminal that executed the command.
+    terminal_id: usize,
+
+    /// The output of the command.
+    output: String,
+}
+
 /// The TerminalTool provides the ability to execute commands in terminals.
 /// It can create new terminals or interact with existing ones via the TerminalManager.
 pub struct TerminalTool {
@@ -96,11 +105,12 @@ impl SpiceModelTool for TerminalTool {
         let span: Span = tracing::span!(
             target: "task_history",
             tracing::Level::INFO,
-            "tool_use::sql",
+            "tool_use::terminal",
             tool = self.name(),
             input = arg
         );
-        async {
+
+        let result = async {
             let params: TerminalToolParams = serde_json::from_str(arg).boxed()?;
 
             let terminal_id = match params.terminal_id {
@@ -122,38 +132,43 @@ impl SpiceModelTool for TerminalTool {
                 ),
             };
 
-            // At this point, terminal_id is Some(id)
-            let terminal_id = terminal_id.ok_or_else(|| {
-                Box::<dyn std::error::Error + Send + Sync>::from(
+            let Some(terminal_id) = terminal_id else {
+                return Err(Box::<dyn std::error::Error + Send + Sync>::from(
                     "Failed to obtain terminal ID".to_string(),
-                )
-            })?;
+                ));
+            };
 
-            // Send the command to the terminal
             self.terminal_manager
                 .send_command(terminal_id, &params.command)
                 .await
                 .boxed()?;
 
-            // Optionally, read the output
-            // Note: Reading output asynchronously would require additional handling
-            // Here, we'll attempt to read a single line as a simple response
             let output = self
                 .terminal_manager
                 .read_output(terminal_id)
                 .await
                 .boxed()?;
 
-            // Prepare the response
-            let response = serde_json::json!({
-                "terminal_id": terminal_id,
-                "output": output.trim(),
-            });
-
-            Ok(response)
+            let response = TerminalToolResponse {
+                terminal_id,
+                output,
+            };
+            serde_json::to_value(response).boxed()
         }
         .instrument(span.clone())
-        .await
+        .await;
+
+        match result {
+            Ok(value) => {
+                let captured_output_json = serde_json::to_string(&value).boxed()?;
+                tracing::info!(target: "task_history", parent: &span, captured_output = %captured_output_json);
+                Ok(value)
+            }
+            Err(e) => {
+                tracing::error!(target: "task_history", parent: &span, "{e}");
+                Err(e)
+            }
+        }
     }
 }
 
