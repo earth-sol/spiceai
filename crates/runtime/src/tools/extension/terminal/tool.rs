@@ -29,7 +29,7 @@ use tracing_futures::Instrument;
 
 use super::manager::TerminalManager;
 
-/// Parameters for the TerminalTool.
+/// Parameters for the [`TerminalTool`].
 ///
 /// - `command`: The command to execute in the terminal.
 /// - `terminal_id`: (Optional) The ID of an existing terminal to send the command to.
@@ -54,8 +54,8 @@ pub struct TerminalToolResponse {
     output: String,
 }
 
-/// The TerminalTool provides the ability to execute commands in terminals.
-/// It can create new terminals or interact with existing ones via the TerminalManager.
+/// The [`TerminalTool`] provides the ability to execute commands in terminals.
+/// It can create new terminals or interact with existing ones via the [`TerminalManager`].
 pub struct TerminalTool {
     name: String,
     description: Option<String>,
@@ -77,8 +77,8 @@ impl Default for TerminalTool {
     fn default() -> Self {
         Self::new(
             "terminal",
-            Some(r#"Execute shell commands in managed terminal sessions.
-Use 'command' to run in a new terminal or provide 'terminal_id' to send commands to an existing terminal."#.to_string())
+            Some("Execute shell commands in managed terminal sessions.
+Use 'command' to run in a new terminal or provide 'terminal_id' to send commands to an existing terminal.".to_string())
         )
     }
 }
@@ -118,8 +118,7 @@ impl SpiceModelTool for TerminalTool {
                     // Use existing terminal
                     if !self.terminal_manager.list_terminals().await.contains(&id) {
                         return Err(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                            "Terminal ID {} not found",
-                            id
+                            "Terminal ID {id} not found"
                         )));
                     };
                     Some(id)

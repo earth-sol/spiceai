@@ -84,7 +84,7 @@ impl TerminalManager {
         let mut terminals = self.terminals.lock().await;
         if let Some(child) = terminals.get_mut(&id) {
             if let Some(stdin) = child.stdin.as_mut() {
-                let full_command = format!("{}\necho {}\n", command, END_OF_COMMAND_MARKER);
+                let full_command = format!("{command}\necho {END_OF_COMMAND_MARKER}\n");
                 stdin.write_all(full_command.as_bytes()).await?;
                 stdin.flush().await
             } else {
@@ -143,27 +143,6 @@ impl TerminalManager {
         }
     }
 
-    /// Terminates the specified terminal process.
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the terminal.
-    ///
-    /// # Returns
-    ///
-    /// * `io::Result<()>` - Ok if successful, or an I/O error.
-    pub async fn terminate_terminal(&self, id: usize) -> io::Result<()> {
-        let mut terminals = self.terminals.lock().await;
-        if let Some(mut child) = terminals.remove(&id) {
-            child.kill().await
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "Terminal ID not found",
-            ))
-        }
-    }
-
     /// Lists all active terminal IDs.
     ///
     /// # Returns
@@ -171,6 +150,6 @@ impl TerminalManager {
     /// * `Vec<usize>` - A vector of active terminal IDs.
     pub async fn list_terminals(&self) -> Vec<usize> {
         let terminals = self.terminals.lock().await;
-        terminals.keys().cloned().collect()
+        terminals.keys().copied().collect()
     }
 }
