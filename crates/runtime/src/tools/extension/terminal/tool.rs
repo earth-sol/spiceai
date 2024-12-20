@@ -64,10 +64,10 @@ pub struct TerminalTool {
 
 impl TerminalTool {
     #[must_use]
-    pub fn new(name: &str, description: Option<String>) -> Self {
+    pub fn new(name: &str, description: Option<&str>) -> Self {
         Self {
             name: name.to_string(),
-            description,
+            description: description.map(String::from),
             terminal_manager: Arc::new(TerminalManager::default()),
         }
     }

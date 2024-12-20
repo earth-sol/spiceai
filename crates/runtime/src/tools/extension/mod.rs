@@ -14,15 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// #[cfg(feature = "terminal")]
+#[cfg(feature = "extensions_terminal")]
 pub mod terminal;
+#[cfg(feature = "extensions_terminal")]
+use terminal::TerminalTool;
 
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use secrecy::SecretString;
 use spicepod::component::tool::Tool;
-use terminal::TerminalTool;
 
 use super::{catalog::SpiceToolCatalog, factory::ToolFactory, SpiceModelTool};
 
@@ -30,13 +31,15 @@ use super::{catalog::SpiceToolCatalog, factory::ToolFactory, SpiceModelTool};
 /// These tools can still be accessed by the user by specifying in the `params.tools` field of the model.
 pub struct ExtensionToolCatalog {}
 impl ExtensionToolCatalog {
+    #[allow(unused_variables)]
     fn get_tool(
         id: &str,
         name: Option<&str>,
-        description: Option<String>,
+        description: Option<&str>,
     ) -> Option<Arc<dyn SpiceModelTool>> {
         let name = name.unwrap_or(id);
         match id {
+            #[cfg(feature = "extensions_terminal")]
             "terminal" => Some(Arc::new(TerminalTool::new(name, description))),
             _ => None,
         }
@@ -49,7 +52,7 @@ impl SpiceToolCatalog for ExtensionToolCatalog {
     }
 
     async fn get(&self, name: &str) -> Option<Arc<dyn SpiceModelTool>> {
-        ExtensionToolCatalog::get_tool(name, None, None)
+        ExtensionToolCatalog::get_tool(name, Some(name), None)
     }
 
     fn name(&self) -> &str {
@@ -74,7 +77,7 @@ impl ToolFactory for ExtensionToolCatalog {
         Self::get_tool(
             id,
             Some(component.name.as_str()),
-            component.description.clone(),
+            component.description.as_deref(),
         )
         .ok_or_else(|| format!("Tool with id `{id}` not found in extensions tool catalog").into())
     }

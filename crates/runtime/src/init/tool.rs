@@ -14,15 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use crate::{
     metrics, status,
-    tools::{self, factory::default_available_catalogs},
+    tools::{
+        self, extension::ExtensionToolCatalog, factory::default_available_catalogs,
+        options::SpiceToolsOptions,
+    },
     Runtime, SpiceModelTool, SpiceToolCatalog, UnableToInitializeLlmToolSnafu,
 };
 use opentelemetry::KeyValue;
 use secrecy::SecretString;
+use serde_json::Value;
 use snafu::ResultExt;
 use spicepod::component::tool::Tool;
 
@@ -33,6 +40,36 @@ impl Runtime {
         if let Some(app) = app_lock.as_ref() {
             for tool in &app.tools {
                 self.load_tool(tool).await;
+            }
+        }
+
+        // Only load `extensions` tools that are explicitly needed by models.
+        if let Some(app) = app_lock.as_ref() {
+            let ctlg = ExtensionToolCatalog {};
+            let all_tools_used = app
+                .models
+                .iter()
+                .flat_map(|m| {
+                    let tools: Option<Result<SpiceToolsOptions, _>> = m
+                        .params
+                        .get("tools")
+                        .or(m.params.get("spice_tools"))
+                        .and_then(Value::as_str)
+                        .map(str::parse);
+
+                    if let Some(Ok(SpiceToolsOptions::Specific(tool_list))) = tools {
+                        tool_list.clone()
+                    } else {
+                        vec![]
+                    }
+                })
+                .collect::<HashSet<_>>();
+
+            for tool in all_tools_used {
+                if let Some(t) = ctlg.get(&tool).await {
+                    tracing::debug!("Loading tool from extensions: {}", t.name());
+                    self.insert_tool(&t).await;
+                }
             }
         }
 
