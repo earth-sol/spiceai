@@ -187,7 +187,7 @@ select
 | ------------------------ | ------------------------ |
 | [q36.sql](tpcds/q36.sql) | [q86.sql](tpcds/q86.sql) |
 
-## MySQL does not support FULL JOIN
+### MySQL does not support FULL JOIN
 
 **Limitation**: The MySQL connector does not support `FULL JOIN` or `FULL OUTER JOIN` statements.
 
@@ -222,7 +222,7 @@ Query Error Execution error: Unable to query arrow: Server error: `ERROR 42000 (
 | ------------------------ | ------------------------ |
 | [q97.sql](tpcds/q97.sql) | [q51.sql](tpcds/q51.sql) |
 
-## MySQL returns NULL on division by zero
+### MySQL returns NULL on division by zero
 
 **Limitation**: The MySQL connector does not support queries that divide by zero.
 
@@ -427,3 +427,16 @@ select  cast(amc as FLOAT)/cast(pmc as FLOAT) am_pm_ratio
 | **Affected queries**     |     |
 | ------------------------ | --- |
 | [q41.sql](tpcds/q41.sql) |     |
+
+## ClickBench
+
+### Attribution Notice
+
+The [ClickBench benchmark queries](./clickbench) are used under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+- **Original Author(s):** [ClickBench Authors](https://github.com/ClickBench/ClickBench)
+- **Source Repository:** [https://github.com/ClickBench/ClickBench](https://github.com/ClickBench/ClickBench)
+- **License:** [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+- **Modifications:** This version use a subset of database sources, and makes the following modifications:
+  - Renames the `datafusion` source to `arrow`.
+  - Separates source `queries.sql` into individual query files split by line.

@@ -64,7 +64,7 @@ pub(crate) async fn run(
                 get_tpcds_test_queries(engine.as_deref())
             }
         }
-        "clickbench" => get_clickbench_test_queries(),
+        "clickbench" => get_clickbench_test_queries(engine.as_deref()),
         _ => return Err(format!("Invalid benchmark to run {bench_name}")),
     };
 
@@ -348,21 +348,40 @@ fn get_tpcds_test_queries(engine: Option<&str>) -> Vec<(&'static str, &'static s
 }
 
 macro_rules! generate_clickbench_queries {
-    ( $( $i:literal ),* ) => {
+    ( $engine:expr, $( $i:literal ),* ) => {
         vec![
             $(
                 (
                     concat!("clickbench_q", stringify!($i)),
-                    include_str!(concat!("../queries/clickbench/q", stringify!($i), ".sql"))
+                    include_str!(concat!("../queries/clickbench/", $engine, "/q", stringify!($i), ".sql"))
                 )
             ),*
         ]
     }
 }
 
-fn get_clickbench_test_queries() -> Vec<(&'static str, &'static str)> {
-    generate_clickbench_queries!(
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-        26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43
-    )
+fn get_clickbench_test_queries(engine: Option<&str>) -> Vec<(&'static str, &'static str)> {
+    let queries: Vec<(&'static str, &'static str)> = match engine {
+        Some("sqlite") => generate_clickbench_queries!(
+            "sqlite", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+            22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+            43 // 29 is excluded from SQLite because it does not support REGEXP_REPLACE
+        ),
+        Some("duckdb") => generate_clickbench_queries!(
+            "duckdb", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+            22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43
+        ),
+        Some("postgres") => generate_clickbench_queries!(
+            "postgres", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+            22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43
+        ),
+        Some("arrow") | None => generate_clickbench_queries!(
+            // default to the Arrow engine when no engine is specified
+            "arrow", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+            23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43
+        ),
+        _ => panic!("Unsupported engine {engine:#?}"),
+    };
+
+    queries
 }
