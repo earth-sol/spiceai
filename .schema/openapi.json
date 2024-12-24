@@ -4,7 +4,8 @@
     "title": "runtime",
     "description": "The spiced runtime",
     "license": {
-      "name": "Apache-2.0"
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
     },
     "version": "1.0.0-rc.3"
   },
