@@ -42,7 +42,7 @@ jobs:
           path: .schema/openapi.json
 
       - name: Create PR
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'workflow_dispatch'
         run: |
           git config --global user.name 'Spice Schema Bot'
           git config --global user.email 'schema-bot@spice.ai'
