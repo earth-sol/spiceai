@@ -63,6 +63,7 @@ use tokio::time::{sleep, Instant};
 pub mod query;
 
 pub mod builder;
+pub mod dialect;
 pub mod error;
 mod extension;
 pub mod filter_converter;
@@ -1219,9 +1220,17 @@ impl DataFusion {
 
 #[must_use]
 pub fn is_spice_internal_dataset(dataset: &TableReference) -> bool {
-    dataset.schema().is_some_and(|schema| {
-        schema == SPICE_RUNTIME_SCHEMA
+    match (dataset.catalog(), dataset.schema()) {
+        (Some(catalog), Some(schema)) => is_spice_internal_schema(catalog, schema),
+        (None, Some(schema)) => is_spice_internal_schema(SPICE_DEFAULT_CATALOG, schema),
+        _ => false,
+    }
+}
+
+#[must_use]
+pub fn is_spice_internal_schema(catalog: &str, schema: &str) -> bool {
+    catalog == SPICE_DEFAULT_CATALOG
+        && (schema == SPICE_RUNTIME_SCHEMA
             || schema == SPICE_METADATA_SCHEMA
-            || schema == SPICE_EVAL_SCHEMA
-    })
+            || schema == SPICE_EVAL_SCHEMA)
 }
