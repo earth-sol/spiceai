@@ -221,8 +221,8 @@ impl FlightClient {
 
         Ok(FlightClient {
             flight_client: FlightServiceClient::new(flight_channel)
-                .max_encoding_message_size(100 * 1024 * 1024)
-                .max_decoding_message_size(100 * 1024 * 1024),
+                .max_encoding_message_size(1500 * 1024 * 1024)
+                .max_decoding_message_size(1500 * 1024 * 1024),
             credentials,
             url,
             metadata,
