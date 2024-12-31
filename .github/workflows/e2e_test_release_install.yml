@@ -57,7 +57,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        curl https://install.spiceai.org | /bin/bash
+        # curl https://install.spiceai.org | /bin/bash
+        /bin/bash ./install/install.sh
 
     - name: install Spice (Windows)
       if : matrix.target_os == 'windows'
