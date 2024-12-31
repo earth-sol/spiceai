@@ -95,10 +95,10 @@ checkJqInstalled() {
 function gh_curl() {
     if [ -z "$GITHUB_TOKEN" ]
     then
-        curl \
+        curl -v \
             $@
     else
-        curl -H "Authorization: token $GITHUB_TOKEN" \
+        curl -v -H "Authorization: token $GITHUB_TOKEN" \
             $@
     fi
 }
@@ -255,32 +255,32 @@ else
     ret_val=v$1
 fi
 
-echo "Installing Spice CLI $ret_val ..."
+# echo "Installing Spice CLI $ret_val ..."
 
 downloadFile $ret_val
-installFile
-cleanup
+# installFile
+# cleanup
 
-SHELLS_TO_CHECK=(".bashrc" ".bash_profile" ".zshrc" ".zprofile" ".config/fish/config.fish")
+# SHELLS_TO_CHECK=(".bashrc" ".bash_profile" ".zshrc" ".zprofile" ".config/fish/config.fish")
 
-for i in "${SHELLS_TO_CHECK[@]}"; do checkShell $i; done
+# for i in "${SHELLS_TO_CHECK[@]}"; do checkShell $i; done
 
-if [[ "$SHELL_TO_USE" == "null" ]]; then
-  echo "Unable to find the shell profile, not adding the Spice CLI to PATH"
-  echo "Manually add 'export PATH=$HOME/$SPICE_BIN:\$PATH' to your shell profile"
-else
-  if grep -Fq $SPICE_BIN $SHELL_TO_USE
-  then
-    echo "The Spice CLI is already in your PATH!"
-  else
-    echo -e "${yellow}The Spice CLI is not in your PATH${reset}\n"
+# if [[ "$SHELL_TO_USE" == "null" ]]; then
+#   echo "Unable to find the shell profile, not adding the Spice CLI to PATH"
+#   echo "Manually add 'export PATH=$HOME/$SPICE_BIN:\$PATH' to your shell profile"
+# else
+#   if grep -Fq $SPICE_BIN $SHELL_TO_USE
+#   then
+#     echo "The Spice CLI is already in your PATH!"
+#   else
+#     echo -e "${yellow}The Spice CLI is not in your PATH${reset}\n"
 
-    if [[ "$SHELL_TO_USE" == "$HOME/.config/fish/config.fish" ]]; then
-      addToProfile "fish_add_path \$HOME/.spice/bin"
-    else
-      addToProfile "export PATH=$HOME/$SPICE_BIN:\$PATH"
-    fi
-  fi
-fi
+#     if [[ "$SHELL_TO_USE" == "$HOME/.config/fish/config.fish" ]]; then
+#       addToProfile "fish_add_path \$HOME/.spice/bin"
+#     else
+#       addToProfile "export PATH=$HOME/$SPICE_BIN:\$PATH"
+#     fi
+#   fi
+# fi
 
-installCompleted
+# installCompleted
