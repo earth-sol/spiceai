@@ -3032,8 +3032,8 @@ dependencies = [
  "chrono",
  "clickhouse-rs",
  "datafusion",
- "datafusion-federation",
- "datafusion-federation-sql",
+ "datafusion-federation 0.1.6 (git+https://github.com/spiceai/datafusion-federation.git?rev=137336b0980bc2fcc76d38e7bfee933093f813b5)",
+ "datafusion-federation-sql 0.1.6 (git+https://github.com/spiceai/datafusion-federation.git?rev=137336b0980bc2fcc76d38e7bfee933093f813b5)",
  "datafusion-table-providers",
  "db_connection_pool",
  "delta_kernel",
@@ -3230,6 +3230,18 @@ dependencies = [
 [[package]]
 name = "datafusion-federation"
 version = "0.1.6"
+source = "git+https://github.com/spiceai/datafusion-federation.git?rev=137336b0980bc2fcc76d38e7bfee933093f813b5#137336b0980bc2fcc76d38e7bfee933093f813b5"
+dependencies = [
+ "arrow-json 53.3.0",
+ "async-stream",
+ "async-trait",
+ "datafusion",
+ "futures",
+]
+
+[[package]]
+name = "datafusion-federation"
+version = "0.1.6"
 source = "git+https://github.com/spiceai/datafusion-federation.git?rev=691226ff4602ce99fc03a8426f422701ca51ec35#691226ff4602ce99fc03a8426f422701ca51ec35"
 dependencies = [
  "arrow-json 53.3.0",
@@ -3242,11 +3254,24 @@ dependencies = [
 [[package]]
 name = "datafusion-federation-sql"
 version = "0.1.6"
+source = "git+https://github.com/spiceai/datafusion-federation.git?rev=137336b0980bc2fcc76d38e7bfee933093f813b5#137336b0980bc2fcc76d38e7bfee933093f813b5"
+dependencies = [
+ "async-trait",
+ "datafusion",
+ "datafusion-federation 0.1.6 (git+https://github.com/spiceai/datafusion-federation.git?rev=137336b0980bc2fcc76d38e7bfee933093f813b5)",
+ "futures",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "datafusion-federation-sql"
+version = "0.1.6"
 source = "git+https://github.com/spiceai/datafusion-federation.git?rev=691226ff4602ce99fc03a8426f422701ca51ec35#691226ff4602ce99fc03a8426f422701ca51ec35"
 dependencies = [
  "async-trait",
  "datafusion",
- "datafusion-federation",
+ "datafusion-federation 0.1.6 (git+https://github.com/spiceai/datafusion-federation.git?rev=691226ff4602ce99fc03a8426f422701ca51ec35)",
  "futures",
  "tokio",
  "tracing",
@@ -3509,8 +3534,8 @@ dependencies = [
  "byteorder",
  "chrono",
  "datafusion",
- "datafusion-federation",
- "datafusion-federation-sql",
+ "datafusion-federation 0.1.6 (git+https://github.com/spiceai/datafusion-federation.git?rev=137336b0980bc2fcc76d38e7bfee933093f813b5)",
+ "datafusion-federation-sql 0.1.6 (git+https://github.com/spiceai/datafusion-federation.git?rev=691226ff4602ce99fc03a8426f422701ca51ec35)",
  "duckdb",
  "dyn-clone",
  "fallible-iterator 0.3.0",
@@ -9749,8 +9774,8 @@ dependencies = [
  "dashmap",
  "data_components",
  "datafusion",
- "datafusion-federation",
- "datafusion-federation-sql",
+ "datafusion-federation 0.1.6 (git+https://github.com/spiceai/datafusion-federation.git?rev=137336b0980bc2fcc76d38e7bfee933093f813b5)",
+ "datafusion-federation-sql 0.1.6 (git+https://github.com/spiceai/datafusion-federation.git?rev=137336b0980bc2fcc76d38e7bfee933093f813b5)",
  "datafusion-functions-json",
  "datafusion-table-providers",
  "db_connection_pool",
