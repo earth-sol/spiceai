@@ -1,0 +1,19 @@
+---
+source: crates/runtime/benches/bench.rs
+expression: records_pretty
+snapshot_kind: text
+---
++--------------------------------------------+-----------+
+| l_comment                                  | l_partkey |
++--------------------------------------------+-----------+
+| ecial theodolites. slyly ironic            | 167828    |
+| nic accounts are furiously furiously       | 60057     |
+| blithely even pearls was slyly regular in  | 3037      |
+| ly unusual accounts doze quietly re        | 43621     |
+| ithely about                               | 157238    |
+|  slyly regular ideas wake. stealthy        | 192290    |
+|  slyly bold notornis wake quickly blithely | 37435     |
+| ckages. carefully even accounts nag p      | 174073    |
+| ly pending packages wake slyly             | 168569    |
+|  bold requests dete                        | 118058    |
++--------------------------------------------+-----------+
