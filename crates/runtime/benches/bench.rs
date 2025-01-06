@@ -196,6 +196,7 @@ async fn main() -> Result<(), String> {
     Box::pin(request_context.scope(bench_main())).await
 }
 
+#[allow(clippy::too_many_lines)]
 async fn bench_main() -> Result<(), String> {
     let mut upload_results_dataset: Option<String> = None;
     if let Ok(env_var) = std::env::var("UPLOAD_RESULTS_DATASET") {
@@ -235,11 +236,16 @@ async fn bench_main() -> Result<(), String> {
             }
             let accelerators: Vec<Acceleration> = vec![
                 create_acceleration("arrow", acceleration::Mode::Memory, args.bench_name.as_ref(), RefreshMode::Full, ZeroResultsAction::ReturnEmpty),
+                create_acceleration("arrow", acceleration::Mode::Memory, args.bench_name.as_ref(), RefreshMode::Full, ZeroResultsAction::UseSource),
                 create_acceleration("arrow", acceleration::Mode::Memory, args.bench_name.as_ref(), RefreshMode::Append, ZeroResultsAction::ReturnEmpty),
                 #[cfg(feature = "duckdb")]
                 create_acceleration("duckdb", acceleration::Mode::Memory, args.bench_name.as_ref(), RefreshMode::Full, ZeroResultsAction::ReturnEmpty),
                 #[cfg(feature = "duckdb")]
+                create_acceleration("duckdb", acceleration::Mode::Memory, args.bench_name.as_ref(), RefreshMode::Full, ZeroResultsAction::UseSource),
+                #[cfg(feature = "duckdb")]
                 create_acceleration("duckdb", acceleration::Mode::File, args.bench_name.as_ref(), RefreshMode::Full, ZeroResultsAction::ReturnEmpty),
+                #[cfg(feature = "duckdb")]
+                create_acceleration("duckdb", acceleration::Mode::File, args.bench_name.as_ref(), RefreshMode::Full, ZeroResultsAction::UseSource),
                 #[cfg(feature = "duckdb")]
                 create_acceleration("duckdb", acceleration::Mode::Memory, args.bench_name.as_ref(), RefreshMode::Append, ZeroResultsAction::ReturnEmpty),
                 #[cfg(feature = "duckdb")]
