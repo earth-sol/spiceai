@@ -3,6 +3,7 @@ name: E2E Test Release Installation
 on:
   workflow_dispatch:
 
+
 jobs:
   test-install:
     name: install on ${{ matrix.name }}
@@ -32,7 +33,11 @@ jobs:
             target_os: windows
             target_arch: x86_64
             target_arch_go: amd64
-            
+
+    # Run only one end-to-end installation test per platform at a time to avoid GitHub rate limiting when the Spice CLI checks the release.
+    concurrency:
+      group: ${{ matrix.target_os }}
+
     steps:
     - name: system info
       if : matrix.target_os != 'windows'
@@ -54,7 +59,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         curl https://install.spiceai.org | /bin/bash
-    
+
     - name: install Spice (Windows)
       if : matrix.target_os == 'windows'
       env:
@@ -83,7 +88,7 @@ jobs:
         spice init app
         cd app
         spice run &
-  
+
     - name: start Spice runtime (Windows)
       if: matrix.target_os == 'windows'
       run: |
@@ -126,7 +131,7 @@ jobs:
         runtime_version=$(echo "$version" | grep 'Runtime version:' | cut -d':' -f2 | xargs)
 
         release_version=$(curl -s "https://api.github.com/repos/spiceai/spiceai/releases/latest" -H "Authorization: token $GITHUB_TOKEN" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        
+
         echo "Release Version: $release_version"
         echo "CLI Version: $cli_version"
         echo "Runtime Version: $runtime_version"
@@ -140,7 +145,7 @@ jobs:
           echo "Runtime version $runtime_version does not match the latest release version $release_version."
           exit 1
         fi
-      
+
     - name: check Spice cli and runtime version (Windows)
       if: matrix.target_os == 'windows'
       env:
@@ -172,5 +177,5 @@ jobs:
         if ($runtimeVersion -ne $releaseVersion) {
           Write-Host "Runtime version $runtimeVersion does not match the latest release version $releaseVersion."
           exit 1
-        }  
+        }
       shell: pwsh
