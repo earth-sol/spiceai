@@ -400,6 +400,10 @@ pub trait DataConnector: Send + Sync {
         None
     }
 
+    fn supports_transactional_write(&self) -> bool {
+        false
+    }
+
     async fn metadata_provider(
         &self,
         _dataset: &Dataset,

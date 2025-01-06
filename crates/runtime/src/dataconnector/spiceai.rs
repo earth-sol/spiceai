@@ -252,6 +252,10 @@ impl DataConnector for SpiceAI {
         }
     }
 
+    fn supports_transactional_write(&self) -> bool {
+        true
+    }
+
     async fn read_write_provider(
         &self,
         dataset: &Dataset,

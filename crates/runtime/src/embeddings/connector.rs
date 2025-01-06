@@ -145,6 +145,10 @@ impl DataConnector for EmbeddingConnector {
             .await
     }
 
+    fn supports_transactional_write(&self) -> bool {
+        self.inner_connector.supports_transactional_write()
+    }
+
     async fn read_write_provider(
         &self,
         dataset: &Dataset,

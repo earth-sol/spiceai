@@ -142,6 +142,10 @@ impl DataConnector for Postgres {
         self
     }
 
+    fn supports_transactional_write(&self) -> bool {
+        true
+    }
+
     #[cfg(feature = "postgres-write")]
     async fn read_write_provider(
         &self,

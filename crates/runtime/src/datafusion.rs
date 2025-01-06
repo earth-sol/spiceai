@@ -720,6 +720,14 @@ impl DataFusion {
                         .build()
                     })?
                     .context(UnableToResolveTableProviderSnafu)?;
+
+                if !source.supports_transactional_write() {
+                    tracing::warn!(
+                        "Table '{}' added with write capability, but its data connector does not fully support transactional writes or support depends on the target service. Concurrent writes may result in unexpected behavior.",
+                        dataset.name
+                    );
+                }
+
                 Arc::new(FederatedTable::new(read_write_provider))
             }
         };
@@ -1068,16 +1076,27 @@ impl DataFusion {
 
         let source_table_provider = match dataset.mode() {
             Mode::Read => federated_table_provider,
-            Mode::ReadWrite => source
-                .read_write_provider(dataset)
-                .await
-                .ok_or_else(|| {
-                    WriteProviderNotImplementedSnafu {
-                        table_name: dataset.name.to_string(),
-                    }
-                    .build()
-                })?
-                .context(UnableToResolveTableProviderSnafu)?,
+            Mode::ReadWrite => {
+                let read_write_provider = source
+                    .read_write_provider(dataset)
+                    .await
+                    .ok_or_else(|| {
+                        WriteProviderNotImplementedSnafu {
+                            table_name: dataset.name.to_string(),
+                        }
+                        .build()
+                    })?
+                    .context(UnableToResolveTableProviderSnafu)?;
+
+                if !source.supports_transactional_write() {
+                    tracing::warn!(
+                        "Table '{}' added with write capability, but its data connector does not fully support transactional writes or support depends on the target service. Concurrent writes may result in unexpected behavior.",
+                        dataset.name
+                    );
+                }
+
+                read_write_provider
+            }
         };
 
         self.register_metadata_table(dataset, Arc::clone(&source))
