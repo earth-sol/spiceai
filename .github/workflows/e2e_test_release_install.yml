@@ -179,3 +179,7 @@ jobs:
           exit 1
         }
       shell: pwsh
+
+    - name: Debug GitHub rate limits
+      run: |
+        curl https://api.github.com/rate_limit | jq
