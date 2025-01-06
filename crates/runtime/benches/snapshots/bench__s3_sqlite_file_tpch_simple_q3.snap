@@ -1,0 +1,19 @@
+---
+source: crates/runtime/benches/bench.rs
+expression: records_pretty
+snapshot_kind: text
+---
++-----------------------------------------+-----------+
+| l_comment                               | l_partkey |
++-----------------------------------------+-----------+
+| ress theodolites. regular, ironi        | 8477      |
+| ld asymptotes detect. even, ev          | 171846    |
+| y permanent accounts. depos             | 198790    |
+| s. final, ironic deposits               | 123708    |
+| nic packages. slo                       | 102228    |
+| se quickly careful som                  | 186689    |
+| posits. carefully                       | 39536     |
+| egrate slyly? frets alongside of the st | 33486     |
+| he ideas nag slyly. slyly regula        | 24303     |
+| g to the evenly enticing accounts.      | 97935     |
++-----------------------------------------+-----------+
