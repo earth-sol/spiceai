@@ -1,0 +1,19 @@
+---
+source: crates/runtime/benches/bench.rs
+expression: records_pretty
+snapshot_kind: text
+---
++--------------------------------------------+-----------+
+| l_comment                                  | l_partkey |
++--------------------------------------------+-----------+
+| ecial theodolites. slyly ironic            | 167828    |
+| nic packages. slo                          | 102228    |
+| blithely even pearls was slyly regular in  | 3037      |
+| s. final, ironic deposits                  | 123708    |
+| ithely about                               | 157238    |
+| se quickly careful som                     | 186689    |
+|  slyly bold notornis wake quickly blithely | 37435     |
+| egrate slyly? frets alongside of the st    | 33486     |
+| ly pending packages wake slyly             | 168569    |
+| y permanent accounts. depos                | 198790    |
++--------------------------------------------+-----------+
