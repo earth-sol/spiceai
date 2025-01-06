@@ -1,0 +1,19 @@
+---
+source: crates/runtime/benches/bench.rs
+expression: records_pretty
+snapshot_kind: text
+---
++------------------------------------------+-----------+
+| l_comment                                | l_partkey |
++------------------------------------------+-----------+
+| l theodolites.                           | 101153    |
+| silent excuses. fluffily even accounts d | 62803     |
+| g to the unu                             | 142170    |
+| furiously reg                            | 121063    |
+| ess accounts. fluffily pen               | 162721    |
+| nic accounts                             | 45713     |
+| refully. silent, special                 | 4181      |
+| s across the even acco                   | 86730     |
+| ilent forges. even acco                  | 25495     |
+| packages according to the blithely re    | 175685    |
++------------------------------------------+-----------+
