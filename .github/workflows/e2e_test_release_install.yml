@@ -181,5 +181,6 @@ jobs:
       shell: pwsh
 
     - name: Debug GitHub rate limits
+      if: always()
       run: |
         curl https://api.github.com/rate_limit | jq
