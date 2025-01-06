@@ -1,0 +1,19 @@
+---
+source: crates/runtime/benches/bench.rs
+expression: records_pretty
+snapshot_kind: text
+---
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+
+| URL                                                                                                                                                                                                                                                              | pageviews |
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+
+| http://video.yandex.ru/catalog/12-68=on&acceFrom=&engineVolumeFrom                                                                                                                                                                                               | 2         |
+| http://orenburg/detail.ru                                                                                                                                                                                                                                        | 2         |
+| http://monitogorsk/1004483253                                                                                                                                                                                                                                    | 2         |
+| http://wildberries.aspx#location/group_cod_1s=53&butto_repairs=0&with_photo/69363/2#f                                                                                                                                                                            | 2         |
+| http://stalker-pub-20087898675494,960948/#page_type%3D0%26pz%3D0%26rleurl%3D//ad.adriver.ru/photo=0&is_hot=0&auto_id=577&oki=1&op_prodam-1-komn-kvarti-m.ru/allprice_ot=&priceup&page=0&metallic=0&exchangeType=city&custom%3D%26xpid%3D1216629                  | 2         |
+| http://stalker-pub-20087898675494,960948/#page_type%3D0%26pz%3D0%26rleurl%3D//ad.adrive_type=0&view_type=2d#schenie_spire/?SECTIONAL,автосалон/pages/00001216629/0/&&puid1=m&puid2=49&TOPIC_ID=2&IsOrdered/main                                                  | 2         |
+| http://omsk/evential/housession%3D90%26rnd%3D839322%26ntype=0&expand_search/obmeny_new744.ru/cars/page9/#overnazakh.html?1=1&currency=RUR/page/11107&z                                                                                                           | 2         |
+| http://svpressa.ru/1.4077.2593120%26pz%3D0                                                                                                                                                                                                                       | 2         |
+| http://auto_id=3159&input_age2                                                                                                                                                                                                                                   | 2         |
+| http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,9455989.ya.ru/world/photo-3/#page_type=&input_age1=&int[168346/detail.aspx#location Ramblery/4-komn-Kvarticles/images/00004-gv-6007695,91488145584323212&op_page/2?category_id=&auto | 2         |
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+
