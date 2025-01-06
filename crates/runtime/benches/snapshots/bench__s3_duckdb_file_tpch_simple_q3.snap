@@ -1,0 +1,19 @@
+---
+source: crates/runtime/benches/bench.rs
+expression: records_pretty
+snapshot_kind: text
+---
++--------------------------------------------+-----------+
+| l_comment                                  | l_partkey |
++--------------------------------------------+-----------+
+|  furiously ironic packages                 | 99985     |
+| onic accounts. fluffily even e             | 61170     |
+| fully carefull                             | 194627    |
+| ly regular deposits are. busy accou        | 199419    |
+| ly after the carefully express pattern     | 8287      |
+| into beans grow furio                      | 35732     |
+|  shall have to cajole                      | 79210     |
+| hely after the even, fi                    | 99224     |
+| even platelets. deposits around the regula | 179330    |
+| ironic reque                               | 113151    |
++--------------------------------------------+-----------+
