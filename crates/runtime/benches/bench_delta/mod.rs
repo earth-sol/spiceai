@@ -71,90 +71,90 @@ pub fn build_app(app_builder: AppBuilder, bench_name: &str) -> Result<AppBuilder
             .with_dataset(make_dataset("spiceai_sandbox.tpch.supplier", "supplier"))),
         "tpcds" => Ok(app_builder
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.call_center",
+                "spiceai_sandbox.tpcds_sf5.call_center",
                 "call_center",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.catalog_page",
+                "spiceai_sandbox.tpcds_sf5.catalog_page",
                 "catalog_page",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.catalog_returns",
+                "spiceai_sandbox.tpcds_sf5.catalog_returns",
                 "catalog_returns",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.catalog_sales",
+                "spiceai_sandbox.tpcds_sf5.catalog_sales",
                 "catalog_sales",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.customer",
+                "spiceai_sandbox.tpcds_sf5.customer",
                 "customer",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.customer_address",
+                "spiceai_sandbox.tpcds_sf5.customer_address",
                 "customer_address",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.customer_demographics",
+                "spiceai_sandbox.tpcds_sf5.customer_demographics",
                 "customer_demographics",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.date_dim",
+                "spiceai_sandbox.tpcds_sf5.date_dim",
                 "date_dim",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.household_demographics",
+                "spiceai_sandbox.tpcds_sf5.household_demographics",
                 "household_demographics",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.income_band",
+                "spiceai_sandbox.tpcds_sf5.income_band",
                 "income_band",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.inventory",
+                "spiceai_sandbox.tpcds_sf5.inventory",
                 "inventory",
             ))
-            .with_dataset(make_dataset("spiceai_sandbox.tpcds_sf100.item", "item"))
+            .with_dataset(make_dataset("spiceai_sandbox.tpcds_sf5.item", "item"))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.promotion",
+                "spiceai_sandbox.tpcds_sf5.promotion",
                 "promotion",
             ))
-            .with_dataset(make_dataset("spiceai_sandbox.tpcds_sf100.reason", "reason"))
+            .with_dataset(make_dataset("spiceai_sandbox.tpcds_sf5.reason", "reason"))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.ship_mode",
+                "spiceai_sandbox.tpcds_sf5.ship_mode",
                 "ship_mode",
             ))
-            .with_dataset(make_dataset("spiceai_sandbox.tpcds_sf100.store", "store"))
+            .with_dataset(make_dataset("spiceai_sandbox.tpcds_sf5.store", "store"))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.store_returns",
+                "spiceai_sandbox.tpcds_sf5.store_returns",
                 "store_returns",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.store_sales",
+                "spiceai_sandbox.tpcds_sf5.store_sales",
                 "store_sales",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.time_dim",
+                "spiceai_sandbox.tpcds_sf5.time_dim",
                 "time_dim",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.warehouse",
+                "spiceai_sandbox.tpcds_sf5.warehouse",
                 "warehouse",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.web_page",
+                "spiceai_sandbox.tpcds_sf5.web_page",
                 "web_page",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.web_returns",
+                "spiceai_sandbox.tpcds_sf5.web_returns",
                 "web_returns",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.web_sales",
+                "spiceai_sandbox.tpcds_sf5.web_sales",
                 "web_sales",
             ))
             .with_dataset(make_dataset(
-                "spiceai_sandbox.tpcds_sf100.web_site",
+                "spiceai_sandbox.tpcds_sf5.web_site",
                 "web_site",
             ))),
         _ => Err("Only tpcds or tpch benchmark suites are supported".to_string()),
