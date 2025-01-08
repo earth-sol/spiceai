@@ -101,7 +101,7 @@ jobs:
 
   run-database-bench:
     name: Run ${{ matrix.name }} ${{ matrix.bench }} Benchmark
-    runs-on: spiceai-runners
+    runs-on: spiceai-large-runners
     needs: build-database-bench-binary
 
     services:
