@@ -17,10 +17,9 @@ limitations under the License.
 use clap::Subcommand;
 pub use dataset::DatasetTestArgs;
 
-#[cfg(feature = "models")]
-pub use embedding::EmbeddingTestArgs;
+mod consistency;
+pub use consistency::ConsistencyTestArgs;
 mod dataset;
-mod embedding;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -37,7 +36,5 @@ pub enum TestCommands {
     Throughput(DatasetTestArgs),
     Load(DatasetTestArgs),
     Bench(DatasetTestArgs),
-
-    #[cfg(feature = "models")]
-    EmbeddingConsistency(EmbeddingTestArgs),
+    Consistency(ConsistencyTestArgs),
 }

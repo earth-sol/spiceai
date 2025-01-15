@@ -44,14 +44,10 @@ async fn main() -> anyhow::Result<()> {
         Commands::Run(TestCommands::Bench(args)) => tests::bench::run(&args).await?,
         Commands::Export(TestCommands::Bench(args)) => tests::env_export(&args)?,
 
-        #[cfg(feature = "models")]
-        Commands::Run(TestCommands::EmbeddingConsistency(args)) => {
-            tests::embedding::run(&args).await?
-        }
+        Commands::Run(TestCommands::Consistency(args)) => tests::consistency::run(&args).await?,
 
-        #[cfg(feature = "models")]
-        Commands::Export(TestCommands::EmbeddingConsistency(_args)) => {
-            unimplemented!("Exporting embedding consistency tests is not yet supported")
+        Commands::Export(TestCommands::Consistency(_args)) => {
+            unimplemented!("Exporting consistency tests is not yet supported")
         }
     }
 

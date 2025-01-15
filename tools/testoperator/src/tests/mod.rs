@@ -20,7 +20,7 @@ use test_framework::{
 };
 
 pub(crate) mod bench;
-pub(crate) mod embedding;
+pub(crate) mod consistency;
 pub(crate) mod load;
 pub(crate) mod throughput;
 
