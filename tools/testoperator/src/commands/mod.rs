@@ -14,9 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use clap::{Parser, Subcommand, ValueEnum};
-use std::path::PathBuf;
-use test_framework::queries::{QueryOverrides, QuerySet};
+use clap::Subcommand;
+pub use dataset::DatasetTestArgs;
+
+#[cfg(feature = "models")]
+pub use embedding::EmbeddingTestArgs;
+mod dataset;
+mod embedding;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -30,90 +34,10 @@ pub enum Commands {
 
 #[derive(Subcommand)]
 pub enum TestCommands {
-    Throughput(TestArgs),
-    Load(TestArgs),
-    Bench(TestArgs),
-}
+    Throughput(DatasetTestArgs),
+    Load(DatasetTestArgs),
+    Bench(DatasetTestArgs),
 
-#[derive(Parser)]
-pub struct TestArgs {
-    /// Path to the spicepod.yaml file
-    #[arg(short('p'), long)]
-    pub(crate) spicepod_path: PathBuf,
-
-    /// Path to the spiced binary
-    #[arg(short, long)]
-    pub(crate) spiced_path: PathBuf,
-
-    /// An optional data directory, to symlink into the spiced instance
-    #[arg(short, long)]
-    pub(crate) data_dir: Option<PathBuf>,
-
-    /// The expected scale factor for the test, used in metrics calculation
-    #[arg(long)]
-    pub(crate) scale_factor: Option<f64>,
-
-    /// The duration of the test in seconds
-    #[arg(long)]
-    pub(crate) duration: Option<usize>,
-
-    /// The query set to use for the test
-    #[arg(long)]
-    pub(crate) query_set: QuerySetArg,
-
-    #[arg(long)]
-    pub(crate) query_overrides: Option<QueryOverridesArg>,
-
-    #[arg(long)]
-    pub(crate) concurrency: Option<usize>,
-
-    #[arg(long)]
-    pub(crate) ready_wait: Option<usize>,
-
-    #[arg(long)]
-    pub(crate) disable_progress_bars: bool,
-}
-
-#[derive(Clone, ValueEnum)]
-pub enum QuerySetArg {
-    Tpch,
-    Tpcds,
-    ClickBench,
-}
-
-#[derive(Clone, ValueEnum)]
-pub enum QueryOverridesArg {
-    Sqlite,
-    Postgresql,
-    Mysql,
-    Dremio,
-    Spark,
-    ODBCAthena,
-    Duckdb,
-    Snowflake,
-}
-
-impl From<QuerySetArg> for QuerySet {
-    fn from(arg: QuerySetArg) -> Self {
-        match arg {
-            QuerySetArg::Tpch => QuerySet::Tpch,
-            QuerySetArg::Tpcds => QuerySet::Tpcds,
-            QuerySetArg::ClickBench => QuerySet::ClickBench,
-        }
-    }
-}
-
-impl From<QueryOverridesArg> for QueryOverrides {
-    fn from(arg: QueryOverridesArg) -> Self {
-        match arg {
-            QueryOverridesArg::Sqlite => QueryOverrides::SQLite,
-            QueryOverridesArg::Postgresql => QueryOverrides::PostgreSQL,
-            QueryOverridesArg::Mysql => QueryOverrides::MySQL,
-            QueryOverridesArg::Dremio => QueryOverrides::Dremio,
-            QueryOverridesArg::Spark => QueryOverrides::Spark,
-            QueryOverridesArg::ODBCAthena => QueryOverrides::ODBCAthena,
-            QueryOverridesArg::Duckdb => QueryOverrides::DuckDB,
-            QueryOverridesArg::Snowflake => QueryOverrides::Snowflake,
-        }
-    }
+    #[cfg(feature = "models")]
+    EmbeddingConsistency(EmbeddingTestArgs),
 }
