@@ -42,7 +42,7 @@ pub(crate) async fn run(args: &TestArgs) -> anyhow::Result<()> {
     let baseline_test = SpiceTest::new(app.name.clone(), spiced_instance)
         .with_query_set(queries.clone())
         .with_parallel_count(args.concurrency.unwrap_or(8))
-        .with_end_condition(EndCondition::QuerySetCompleted(2))
+        .with_end_condition(EndCondition::QuerySetCompleted(10))
         .with_progress_bars(!args.disable_progress_bars)
         .start()
         .await?;
@@ -54,6 +54,8 @@ pub(crate) async fn run(args: &TestArgs) -> anyhow::Result<()> {
         .percentile(0.99)?;
     let baseline_metrics = test.collect()?;
     let spiced_instance = test.end();
+
+    baseline_metrics.show()?;
 
     // load test
     println!("Running load test");
