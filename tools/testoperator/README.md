@@ -42,7 +42,7 @@ testoperator export [COMMAND] [OPTIONS]
 - `-s, --spiced-path <SPICED_PATH>`: Path to the `spiced` binary.
 - `-d, --data-dir <DATA_DIR>`: An optional data directory to symlink into the `spiced` instance.
 - `--query-set <QUERY_SET>`: The query set to use for the test. Possible values: `tpch`, `tpcds`, `clickbench`.
-- `--query-overrides <QUERY_OVERRIDES>`: Optional query overrides. Possible values: `sqlite`, `postgresql`, `mysql`, `dremio`, `spark`, `odbcathena`, `duckdb`.
+- `--query-overrides <QUERY_OVERRIDES>`: Optional query overrides. Possible values: `sqlite`, `postgresql`, `mysql`, `dremio`, `spark`, `odbcathena`, `duckdb`, `s3`.
 - `--concurrency <CONCURRENCY>`: The concurrency level for the test.
 - `--ready-wait <WAIT TIME>`: How long to wait before spiced is ready.
 - `--disable-progress-bars`: Disable progress bars during the test.

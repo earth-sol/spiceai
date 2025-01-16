@@ -46,6 +46,7 @@ pub enum QueryOverrides {
     DuckDB,
     Snowflake,
     IcebergSF1,
+    S3,
 }
 
 impl QueryOverrides {
@@ -59,6 +60,7 @@ impl QueryOverrides {
             "spark" => Some(Self::Spark),
             "odbc_athena" => Some(Self::ODBCAthena),
             "duckdb" => Some(Self::DuckDB),
+            "s3" => Some(Self::S3),
             _ => None,
         }
     }
@@ -272,6 +274,13 @@ pub fn get_tpcds_test_queries(
                 87  // EXCEPT and INTERSECT aren't supported
             );
             add_tpcds_query_overrides!(queries, "postgres", 36, 70, 86)
+        }
+        Some(QueryOverrides::S3) => {
+            let queries: Vec<(&'static str, &'static str)> = remove_tpcds_query!(
+                queries,
+                72 // Query Q72 causes high resource usage by the runtime and affects other concurrent queries during the load test. https://github.com/spiceai/spiceai/issues/4360
+            );
+            queries
         }
         Some(_) | None => queries,
     }
