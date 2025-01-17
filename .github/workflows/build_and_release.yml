@@ -92,6 +92,14 @@ jobs:
                 target_arch_go: "amd64",
                 tags: ["cuda"]
               },
+              {
+                name: "GPU T4 Windows",
+                runner: "windows-gpu-t4-4-core",
+                target_os: "windows",
+                target_arch: "x86_64",
+                target_arch_go: "amd64",
+                tags: ["cuda"]
+              },
             ];
 
             // If running via workflow_dispatch, filter based on input
@@ -127,8 +135,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The `windows-gpu-t4-4-core` runner does not have Python installed
+      - name: Set up Python3
+        if: matrix.target.runner == 'windows-gpu-t4-4-core'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
       - name: Set REL_VERSION from version.txt
         run: python3 ./.github/scripts/get_release_version.py
+
+      # The `windows-gpu-t4-4-core` does not have modern PowerShell installed
+      - name: Install PowerShell
+        if: matrix.target.runner == 'windows-gpu-t4-4-core'
+        uses: ./.github/actions/install-pwsh
+
+      # The `windows-gpu-t4-4-core` requires Visual Studio Build Tools
+      - name: Install Visual Studio Build Tools
+        if: matrix.target.runner == 'windows-gpu-t4-4-core'
+        uses: ./.github/actions/install-vs-buildtools
 
       - name: Set up Go
         # CLI is only built on the same runners as the default spiced binary
@@ -143,8 +168,10 @@ jobs:
           os: ${{ matrix.target.target_os }}
 
       - name: Set up make
-        if: matrix.target.target_os == 'linux'
+        if: matrix.target.target_os == 'linux' || matrix.target.runner == 'windows-gpu-t4-4-core'
         uses: ./.github/actions/setup-make
+        with:
+          os: ${{ matrix.target.target_os }}
 
       - name: Set up cc
         if: matrix.target.target_os == 'linux'
@@ -613,7 +640,6 @@ jobs:
           name: spiced_models_cuda_86_${{ matrix.target_os }}_${{ matrix.target_arch }}
           path: ${{ env.ARTIFACT_DIR }}
 
-    
       - name: download artifacts - spiced_models_cuda_89_${{ matrix.target_os }}_${{ matrix.target_arch }}
         if: matrix.target_os == 'linux' && matrix.target_arch == 'x86_64'
         uses: actions/download-artifact@v4

@@ -26,9 +26,9 @@ runs:
     - name: Define Shell and Commands (windows)
       if: ${{ inputs.target_os == 'windows'}}
       run: |
-        echo "SHELL=pwsh" >> $GITHUB_ENV
-        echo "BUILD_CMD=cd bin\\spiced && make SPICED_NON_DEFAULT_FEATURES='models,cuda'" >> $GITHUB_ENV
-        echo "PACKAGE_CMD=move target\\release\\spiced.exe spiced.exe && tar -czf spiced_models_cuda_${{ inputs.cuda-compute-capability }}_${{ inputs.artifact-tag }}.tar.gz spiced.exe" >> $GITHUB_ENV
+        echo "SHELL=pwsh" >> $env:GITHUB_ENV
+        echo "BUILD_CMD=cd bin\\spiced && make SPICED_NON_DEFAULT_FEATURES='models,cuda'" >> $env:GITHUB_ENV
+        echo "PACKAGE_CMD=move target\\release\\spiced.exe spiced.exe && tar -czf spiced.exe_models_cuda_${{ inputs.cuda-compute-capability }}_${{ inputs.artifact-tag }}.tar.gz spiced.exe" >> $GITHUB_ENV
       shell: pwsh
     - name: Define Shell and Commands
       if: ${{ inputs.target_os != 'windows'}}
@@ -38,7 +38,8 @@ runs:
         echo "PACKAGE_CMD=mv target/release/spiced spiced && chmod +x spiced && tar czf spiced_models_cuda_${{ inputs.cuda-compute-capability }}_${{ inputs.artifact-tag }}.tar.gz spiced" >> $GITHUB_ENV
       shell: bash
 
-    - name: Install CUDA Toolkit
+    - name: Install CUDA Toolkit (Linux)
+      if: ${{ inputs.target_os != 'windows'}}
       uses: Jimver/cuda-toolkit@v0.2.19
       id: cuda-toolkit
       with:
@@ -47,6 +48,14 @@ runs:
         use-github-cache: false
         non-cuda-sub-packages: '["libcurand-dev", "libcublas","libcublas-dev"]'
         sub-packages: '["nvcc","compiler","libraries","libraries-dev","cudart","cudart-dev"]'
+
+    - name: Install CUDA Toolkit (Windows)
+      if: ${{ inputs.target_os == 'windows'}}
+      uses: Jimver/cuda-toolkit@v0.2.19
+      id: cuda-toolkit
+      with:
+        cuda: ${{ inputs.cuda-version }}
+        use-github-cache: false
 
     - name: Verify CUDA prerequisites
       run: |
@@ -65,11 +74,16 @@ runs:
       shell: ${{ env.SHELL }}
 
     - name: Upload artifact
+      if: matrix.target.target_os != 'windows'
       uses: actions/upload-artifact@v4
       with:
         name: spiced_models_cuda_${{ inputs.cuda-compute-capability }}_${{ inputs.artifact-tag }}
         path: spiced_models_cuda_${{ inputs.cuda-compute-capability }}_${{ inputs.artifact-tag }}.tar.gz
+    
+    - name: Upload artifact
+      if: matrix.target.target_os == 'windows'
+      uses: actions/upload-artifact@v4
+      with:
+        name: spiced.exe_models_cuda_${{ inputs.cuda-compute-capability }}_${{ inputs.artifact-tag }}
+        path: spiced.exe_models_cuda_${{ inputs.cuda-compute-capability }}_${{ inputs.artifact-tag }}.tar.gz
 
-    - name: Set output artifact name
-      run: echo "artifact-name=spiced_models_cuda_${{ inputs.cuda-compute-capability }}${{ inputs.artifact-tag }}" >> $GITHUB_ENV
-      shell: bash
