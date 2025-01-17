@@ -14,20 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+pub mod chat;
+pub mod embed;
+
 use async_openai::{
     config::OpenAIConfig,
-    error::OpenAIError,
     types::{
         ChatCompletionRequestAssistantMessage, ChatCompletionRequestAssistantMessageContent,
-        ChatCompletionRequestMessage, ChatCompletionResponseStream, CreateChatCompletionRequest,
-        CreateChatCompletionResponse,
+        ChatCompletionRequestMessage, CreateChatCompletionRequest,
     },
     Client,
 };
-use async_trait::async_trait;
 use serde_json::json;
-
-use crate::chat::{nsql::SqlGeneration, Chat};
 
 static DEFAULT_ENDPOINT: &str = "https://api.x.ai/v1";
 static DEFAULT_MODEL: &str = "grok-beta";
@@ -54,7 +52,10 @@ impl Xai {
     }
 
     /// Changes to `req` to accomodate xAi not being `OpenAI` compatible.
-    fn alter_request(&self, mut req: CreateChatCompletionRequest) -> CreateChatCompletionRequest {
+    fn alter_chat_request(
+        &self,
+        mut req: CreateChatCompletionRequest,
+    ) -> CreateChatCompletionRequest {
         // Use name of xAI model, not spicepod model.
         req.model.clone_from(&self.model);
 
@@ -95,32 +96,5 @@ impl Xai {
         }
 
         req
-    }
-}
-
-#[async_trait]
-impl Chat for Xai {
-    fn as_sql(&self) -> Option<&dyn SqlGeneration> {
-        None
-    }
-
-    async fn chat_stream(
-        &self,
-        req: CreateChatCompletionRequest,
-    ) -> Result<ChatCompletionResponseStream, OpenAIError> {
-        let stream = self
-            .client
-            .chat()
-            .create_stream(self.alter_request(req))
-            .await?;
-
-        Ok(Box::pin(stream))
-    }
-
-    async fn chat_request(
-        &self,
-        req: CreateChatCompletionRequest,
-    ) -> Result<CreateChatCompletionResponse, OpenAIError> {
-        self.client.chat().create(self.alter_request(req)).await
     }
 }

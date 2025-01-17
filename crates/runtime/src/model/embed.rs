@@ -23,6 +23,7 @@ use llms::embeddings::{
 };
 use llms::openai::embed::OpenaiEmbed;
 use llms::openai::DEFAULT_EMBEDDING_MODEL;
+use llms::xai::{embed::XaiEmbed, Xai};
 use secrecy::{ExposeSecret, Secret, SecretString};
 use snafu::ResultExt;
 use spicepod::component::{embeddings::EmbeddingPrefix, model::ModelFileType};
@@ -66,6 +67,7 @@ pub async fn try_to_embedding(
         EmbeddingPrefix::OpenAi => openai(model_id, component, &params, secrets).await,
         EmbeddingPrefix::File => file(model_id.as_deref(), component, &params),
         EmbeddingPrefix::HuggingFace => huggingface(model_id, component, &params).await,
+        EmbeddingPrefix::XAI => xai(model_id, &params),
     }
 }
 
@@ -210,6 +212,18 @@ async fn openai(
 
         embed = embed.try_with_tokenizer_bytes(&bytz)?;
     }
+    Ok(Box::new(embed))
+}
+
+fn xai(
+    model_id: Option<String>,
+    params: &HashMap<String, SecretString>,
+) -> Result<Box<dyn Embed>, EmbedError> {
+    let embed = XaiEmbed::new(Xai::new(
+        model_id.as_deref(),
+        extract_secret!(params, "xai_api_key"),
+    ));
+
     Ok(Box::new(embed))
 }
 
