@@ -2183,7 +2183,7 @@ dependencies = [
 [[package]]
 name = "candle-cublaslt"
 version = "0.2.2"
-source = "git+https://github.com/spiceai/candle-cublaslt?rev=ca4dbdd03a993f689f572df4ea51be5cf5948e7a#ca4dbdd03a993f689f572df4ea51be5cf5948e7a"
+source = "git+https://github.com/spiceai/candle-cublaslt?rev=147f4424b0567131c41cf1ee667645120682170b#147f4424b0567131c41cf1ee667645120682170b"
 dependencies = [
  "candle-core 0.8.1",
  "cudarc",
@@ -2242,7 +2242,7 @@ dependencies = [
 [[package]]
 name = "candle-layer-norm"
 version = "0.0.1"
-source = "git+https://github.com/spiceai/candle-layer-norm?rev=2e20e75210b3ccfc4f42b4e1f4b0cddaf04eef8b#2e20e75210b3ccfc4f42b4e1f4b0cddaf04eef8b"
+source = "git+https://github.com/spiceai/candle-layer-norm?rev=8ae9ca8f2115c7363b6c9456036137879bfb3651#8ae9ca8f2115c7363b6c9456036137879bfb3651"
 dependencies = [
  "anyhow",
  "candle-core 0.8.1",
@@ -11422,7 +11422,7 @@ dependencies = [
 [[package]]
 name = "text-embeddings-backend"
 version = "1.5.0"
-source = "git+https://github.com/sgrebnov/text-embeddings-inference.git?rev=cc90909aa8f3e498df8d6c6ea5c8992da7cdd8de#cc90909aa8f3e498df8d6c6ea5c8992da7cdd8de"
+source = "git+https://github.com/sgrebnov/text-embeddings-inference.git?rev=77cff8a90b89212446c8ab807b6980d6416d8045#77cff8a90b89212446c8ab807b6980d6416d8045"
 dependencies = [
  "hf-hub",
  "serde_json",
@@ -11435,7 +11435,7 @@ dependencies = [
 [[package]]
 name = "text-embeddings-backend-candle"
 version = "1.5.0"
-source = "git+https://github.com/sgrebnov/text-embeddings-inference.git?rev=cc90909aa8f3e498df8d6c6ea5c8992da7cdd8de#cc90909aa8f3e498df8d6c6ea5c8992da7cdd8de"
+source = "git+https://github.com/sgrebnov/text-embeddings-inference.git?rev=77cff8a90b89212446c8ab807b6980d6416d8045#77cff8a90b89212446c8ab807b6980d6416d8045"
 dependencies = [
  "anyhow",
  "candle-core 0.8.1",
@@ -11459,7 +11459,7 @@ dependencies = [
 [[package]]
 name = "text-embeddings-backend-core"
 version = "1.5.0"
-source = "git+https://github.com/sgrebnov/text-embeddings-inference.git?rev=cc90909aa8f3e498df8d6c6ea5c8992da7cdd8de#cc90909aa8f3e498df8d6c6ea5c8992da7cdd8de"
+source = "git+https://github.com/sgrebnov/text-embeddings-inference.git?rev=77cff8a90b89212446c8ab807b6980d6416d8045#77cff8a90b89212446c8ab807b6980d6416d8045"
 dependencies = [
  "nohash-hasher",
  "thiserror 1.0.69",
@@ -11468,7 +11468,7 @@ dependencies = [
 [[package]]
 name = "text-embeddings-core"
 version = "1.5.0"
-source = "git+https://github.com/sgrebnov/text-embeddings-inference.git?rev=cc90909aa8f3e498df8d6c6ea5c8992da7cdd8de#cc90909aa8f3e498df8d6c6ea5c8992da7cdd8de"
+source = "git+https://github.com/sgrebnov/text-embeddings-inference.git?rev=77cff8a90b89212446c8ab807b6980d6416d8045#77cff8a90b89212446c8ab807b6980d6416d8045"
 dependencies = [
  "async-channel 2.3.1",
  "hf-hub",
