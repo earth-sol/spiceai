@@ -168,13 +168,13 @@ jobs:
           os: ${{ matrix.target.target_os }}
 
 
-      - name: Trace OpenSSL build
-        run: |
-          where make
-          make --version
-          where perl
-          perl --version
-          cargo build -p openssl-sys -vvv
+      # - name: Trace OpenSSL build
+      #   run: |
+      #     where make
+      #     make --version
+      #     where perl
+      #     perl --version
+      #     cargo build -p openssl-sys -vvv
 
       - name: Set up make
         if: matrix.target.target_os == 'linux' || matrix.target.runner == 'windows-gpu-t4-4-core'
