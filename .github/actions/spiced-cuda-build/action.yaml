@@ -24,7 +24,7 @@ runs:
   using: "composite"
   steps:
 
-    # SET CUDA_COMPUTE_CAP=75&&make SPICED_NON_DEFAULT_FEATURES='models,cuda'
+    # SET CUDA_COMPUTE_CAP=86&&make SPICED_NON_DEFAULT_FEATURES='models,cuda'
     - name: Define Shell and Commands (windows)
       if: ${{ inputs.target_os == 'windows'}}
       run: |
