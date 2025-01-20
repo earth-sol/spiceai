@@ -223,149 +223,149 @@ jobs:
           }
 
       ## Default flavor
-      - name: Build spiced
-        if: contains(matrix.target.tags, 'default')
-        run: make -C bin/spiced
+      # - name: Build spiced
+      #   if: contains(matrix.target.tags, 'default')
+      #   run: make -C bin/spiced
 
-      - name: tar binary
-        if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'default')
-        run: |
-          mv target/release/spiced spiced
-          chmod +x spiced
-          tar czf spiced_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz spiced
+      # - name: tar binary
+      #   if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'default')
+      #   run: |
+      #     mv target/release/spiced spiced
+      #     chmod +x spiced
+      #     tar czf spiced_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz spiced
 
-      - name: tar binary (Windows)
-        if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'default')
-        run: |
-          mv target/release/spiced.exe spiced.exe
-          tar czf spiced.exe_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz spiced.exe
+      # - name: tar binary (Windows)
+      #   if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'default')
+      #   run: |
+      #     mv target/release/spiced.exe spiced.exe
+      #     tar czf spiced.exe_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz spiced.exe
 
-      - name: Print version
-        if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'default')
-        run: ./spiced --version
+      # - name: Print version
+      #   if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'default')
+      #   run: ./spiced --version
 
-      - name: Print version (Windows)
-        if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'default')
-        run: ./spiced.exe --version
+      # - name: Print version (Windows)
+      #   if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'default')
+      #   run: ./spiced.exe --version
 
-      - uses: actions/upload-artifact@v4
-        if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'default')
-        with:
-          name: spiced_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          path: spiced_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
+      # - uses: actions/upload-artifact@v4
+      #   if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'default')
+      #   with:
+      #     name: spiced_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     path: spiced_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
 
-      - uses: actions/upload-artifact@v4
-        if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'default')
-        with:
-          name: spiced.exe_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          path: spiced.exe_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
+      # - uses: actions/upload-artifact@v4
+      #   if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'default')
+      #   with:
+      #     name: spiced.exe_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     path: spiced.exe_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
 
-      ## Models flavor
-      - name: Build spiced (models)
-        if: contains(matrix.target.tags, 'models')
-        run: make -C bin/spiced SPICED_NON_DEFAULT_FEATURES="models"
+      # ## Models flavor
+      # - name: Build spiced (models)
+      #   if: contains(matrix.target.tags, 'models')
+      #   run: make -C bin/spiced SPICED_NON_DEFAULT_FEATURES="models"
 
-      - name: tar binary (models)
-        if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'models')
-        run: |
-          mv target/release/spiced spiced
-          chmod +x spiced
-          tar czf spiced_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz spiced
+      # - name: tar binary (models)
+      #   if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'models')
+      #   run: |
+      #     mv target/release/spiced spiced
+      #     chmod +x spiced
+      #     tar czf spiced_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz spiced
 
-      - name: tar binary (models) (Windows)
-        if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'models')
-        run: |
-          rm spiced.exe
-          mv target/release/spiced.exe spiced.exe
-          tar czf spiced.exe_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz spiced.exe
+      # - name: tar binary (models) (Windows)
+      #   if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'models')
+      #   run: |
+      #     rm spiced.exe
+      #     mv target/release/spiced.exe spiced.exe
+      #     tar czf spiced.exe_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz spiced.exe
 
-      - name: Print version (models)
-        if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'models')
-        run: ./spiced --version
+      # - name: Print version (models)
+      #   if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'models')
+      #   run: ./spiced --version
 
-      - name: Print version (models) (Windows)
-        if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'models')
-        run: ./spiced.exe --version
+      # - name: Print version (models) (Windows)
+      #   if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'models')
+      #   run: ./spiced.exe --version
 
-      - uses: actions/upload-artifact@v4
-        if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'models')
-        with:
-          name: spiced_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          path: spiced_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
+      # - uses: actions/upload-artifact@v4
+      #   if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'models')
+      #   with:
+      #     name: spiced_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     path: spiced_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
 
-      - uses: actions/upload-artifact@v4
-        if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'models')
-        with:
-          name: spiced.exe_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          path: spiced.exe_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
+      # - uses: actions/upload-artifact@v4
+      #   if: matrix.target.target_os == 'windows' && contains(matrix.target.tags, 'models')
+      #   with:
+      #     name: spiced.exe_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     path: spiced.exe_models_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
 
-      ## Models + metal flavor
-      - name: Build spiced (models)
-        if: matrix.target.target_os == 'darwin'
-        run: make -C bin/spiced SPICED_NON_DEFAULT_FEATURES="models,metal"
+      # ## Models + metal flavor
+      # - name: Build spiced (models)
+      #   if: matrix.target.target_os == 'darwin'
+      #   run: make -C bin/spiced SPICED_NON_DEFAULT_FEATURES="models,metal"
 
-      - name: tar binary (models,metal)
-        if: matrix.target.target_os == 'darwin'
-        run: |
-          mv target/release/spiced spiced
-          chmod +x spiced
-          tar czf spiced_models_metal_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz spiced
+      # - name: tar binary (models,metal)
+      #   if: matrix.target.target_os == 'darwin'
+      #   run: |
+      #     mv target/release/spiced spiced
+      #     chmod +x spiced
+      #     tar czf spiced_models_metal_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz spiced
 
-      - name: Print version (models,metal)
-        if: matrix.target.target_os == 'darwin'
-        run: ./spiced --version
+      # - name: Print version (models,metal)
+      #   if: matrix.target.target_os == 'darwin'
+      #   run: ./spiced --version
 
-      - uses: actions/upload-artifact@v4
-        if: matrix.target.target_os == 'darwin'
-        with:
-          name: spiced_models_metal_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          path: spiced_models_metal_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
+      # - uses: actions/upload-artifact@v4
+      #   if: matrix.target.target_os == 'darwin'
+      #   with:
+      #     name: spiced_models_metal_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     path: spiced_models_metal_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
 
-      ## Models + CUDA flavor: 90, 89, 86, 80, 75 
-      - name: Run Spiced CUDA Build (COMPUTE_CAP=75).
-        uses: ./.github/actions/spiced-cuda-build
-        if: contains(matrix.target.tags, 'cuda')
-        with:
-          cuda-version: "12.4.1"
-          cuda-compute-capability: "75"
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          target_os: ${{ matrix.target.target_os }}
+      # ## Models + CUDA flavor: 90, 89, 86, 80, 75 
+      # - name: Run Spiced CUDA Build (COMPUTE_CAP=75).
+      #   uses: ./.github/actions/spiced-cuda-build
+      #   if: contains(matrix.target.tags, 'cuda')
+      #   with:
+      #     cuda-version: "12.4.1"
+      #     cuda-compute-capability: "75"
+      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     target_os: ${{ matrix.target.target_os }}
 
-      - name: Run Spiced CUDA Build (COMPUTE_CAP=80).
-        uses: ./.github/actions/spiced-cuda-build
-        if: contains(matrix.target.tags, 'cuda')
-        with:
-          cuda-version: "12.4.1"
-          cuda-compute-capability: "80"
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          target_os: ${{ matrix.target.target_os }}
+      # - name: Run Spiced CUDA Build (COMPUTE_CAP=80).
+      #   uses: ./.github/actions/spiced-cuda-build
+      #   if: contains(matrix.target.tags, 'cuda')
+      #   with:
+      #     cuda-version: "12.4.1"
+      #     cuda-compute-capability: "80"
+      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     target_os: ${{ matrix.target.target_os }}
 
-      - name: Run Spiced CUDA Build (COMPUTE_CAP=86).
-        uses: ./.github/actions/spiced-cuda-build
-        if: contains(matrix.target.tags, 'cuda')
-        with:
-          cuda-version: "12.4.1"
-          cuda-compute-capability: "86"
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          target_os: ${{ matrix.target.target_os }}
+      # - name: Run Spiced CUDA Build (COMPUTE_CAP=86).
+      #   uses: ./.github/actions/spiced-cuda-build
+      #   if: contains(matrix.target.tags, 'cuda')
+      #   with:
+      #     cuda-version: "12.4.1"
+      #     cuda-compute-capability: "86"
+      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     target_os: ${{ matrix.target.target_os }}
 
-      - name: Run Spiced CUDA Build (COMPUTE_CAP=89).
-        uses: ./.github/actions/spiced-cuda-build
-        if: contains(matrix.target.tags, 'cuda')
-        with:
-          cuda-version: "12.4.1"
-          cuda-compute-capability: "89"
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          target_os: ${{ matrix.target.target_os }}
+      # - name: Run Spiced CUDA Build (COMPUTE_CAP=89).
+      #   uses: ./.github/actions/spiced-cuda-build
+      #   if: contains(matrix.target.tags, 'cuda')
+      #   with:
+      #     cuda-version: "12.4.1"
+      #     cuda-compute-capability: "89"
+      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     target_os: ${{ matrix.target.target_os }}
 
-      - name: Run Spiced CUDA Build (COMPUTE_CAP=90).
-        uses: ./.github/actions/spiced-cuda-build
-        if: contains(matrix.target.tags, 'cuda')
-        with:
-          cuda-version: "12.4.1"
-          cuda-compute-capability: "90"
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          target_os: ${{ matrix.target.target_os }}
+      # - name: Run Spiced CUDA Build (COMPUTE_CAP=90).
+      #   uses: ./.github/actions/spiced-cuda-build
+      #   if: contains(matrix.target.tags, 'cuda')
+      #   with:
+      #     cuda-version: "12.4.1"
+      #     cuda-compute-capability: "90"
+      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     target_os: ${{ matrix.target.target_os }}
 
       ## CLI build
       - name: Build spice
