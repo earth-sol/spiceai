@@ -322,23 +322,23 @@ jobs:
           path: spiced_models_metal_${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}.tar.gz
 
       ## Models + CUDA flavor: 90, 89, 86, 80, 75 
-      - name: Run Spiced CUDA Build (COMPUTE_CAP=75).
-        uses: ./.github/actions/spiced-cuda-build
-        if: contains(matrix.target.tags, 'cuda')
-        with:
-          cuda-version: "12.4.1"
-          cuda-compute-capability: "75"
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          target_os: ${{ matrix.target.target_os }}
+      # - name: Run Spiced CUDA Build (COMPUTE_CAP=75).
+      #   uses: ./.github/actions/spiced-cuda-build
+      #   if: contains(matrix.target.tags, 'cuda')
+      #   with:
+      #     cuda-version: "12.4.1"
+      #     cuda-compute-capability: "75"
+      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     target_os: ${{ matrix.target.target_os }}
 
-      - name: Run Spiced CUDA Build (COMPUTE_CAP=80).
-        uses: ./.github/actions/spiced-cuda-build
-        if: contains(matrix.target.tags, 'cuda')
-        with:
-          cuda-version: "12.4.1"
-          cuda-compute-capability: "80"
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          target_os: ${{ matrix.target.target_os }}
+      # - name: Run Spiced CUDA Build (COMPUTE_CAP=80).
+      #   uses: ./.github/actions/spiced-cuda-build
+      #   if: contains(matrix.target.tags, 'cuda')
+      #   with:
+      #     cuda-version: "12.4.1"
+      #     cuda-compute-capability: "80"
+      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     target_os: ${{ matrix.target.target_os }}
 
       - name: Run Spiced CUDA Build (COMPUTE_CAP=86).
         uses: ./.github/actions/spiced-cuda-build
@@ -349,23 +349,23 @@ jobs:
           artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
           target_os: ${{ matrix.target.target_os }}
 
-      - name: Run Spiced CUDA Build (COMPUTE_CAP=89).
-        uses: ./.github/actions/spiced-cuda-build
-        if: contains(matrix.target.tags, 'cuda')
-        with:
-          cuda-version: "12.4.1"
-          cuda-compute-capability: "89"
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          target_os: ${{ matrix.target.target_os }}
+      # - name: Run Spiced CUDA Build (COMPUTE_CAP=89).
+      #   uses: ./.github/actions/spiced-cuda-build
+      #   if: contains(matrix.target.tags, 'cuda')
+      #   with:
+      #     cuda-version: "12.4.1"
+      #     cuda-compute-capability: "89"
+      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     target_os: ${{ matrix.target.target_os }}
 
-      - name: Run Spiced CUDA Build (COMPUTE_CAP=90).
-        uses: ./.github/actions/spiced-cuda-build
-        if: contains(matrix.target.tags, 'cuda')
-        with:
-          cuda-version: "12.4.1"
-          cuda-compute-capability: "90"
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-          target_os: ${{ matrix.target.target_os }}
+      # - name: Run Spiced CUDA Build (COMPUTE_CAP=90).
+      #   uses: ./.github/actions/spiced-cuda-build
+      #   if: contains(matrix.target.tags, 'cuda')
+      #   with:
+      #     cuda-version: "12.4.1"
+      #     cuda-compute-capability: "90"
+      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+      #     target_os: ${{ matrix.target.target_os }}
 
       ## CLI build
       - name: Build spice
