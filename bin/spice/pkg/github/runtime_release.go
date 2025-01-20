@@ -121,7 +121,7 @@ func get_ai_accelerator() (string, bool) {
 		}
 	}
 
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == "linux" || runtime.GOOS == "windows" {
 		version, err := get_cuda_version()
 		if err != nil {
 			slog.Error("checking for CUDA device", "error", err)
@@ -159,11 +159,11 @@ func has_metal_device() (bool, error) {
 }
 
 func get_cuda_version() (*string, error) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
 		return nil, nil
 	}
 
-	slog.Debug("On Linux, running `nvidia-smi --query-gpu=compute_cap --format=csv,noheader` to determine hardware")
+	slog.Debug("Running `nvidia-smi --query-gpu=compute_cap --format=csv,noheader` to determine hardware")
 	cmd := exec.Command("nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
