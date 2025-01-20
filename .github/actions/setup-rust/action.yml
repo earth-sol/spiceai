@@ -31,7 +31,7 @@ runs:
           Start-Process -FilePath "rustup-init.exe" -ArgumentList "-q", "-y", "--default-toolchain", "none", "--profile", "default" -Wait
           echo "$env:USERPROFILE\.cargo\bin" >> $env:GITHUB_PATH
         }
-  
+
     - name: Install latest Rust stable toolchain (Linux/macOS)
       if: inputs.os != 'windows'
       shell: bash

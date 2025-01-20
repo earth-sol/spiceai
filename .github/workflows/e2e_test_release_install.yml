@@ -37,12 +37,6 @@ jobs:
     - name: checkout code
       uses: actions/checkout@v4
 
-
-    - uses: Jimver/cuda-toolkit@v0.2.19
-      id: cuda-toolkit
-      with:
-        cuda: '12.4.1'
-
     # The aarch64 runner does not have any tools pre-installed
     - name: Install missing tools
       if: matrix.target_os == 'linux' && matrix.target_arch == 'aarch64'

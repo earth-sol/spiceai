@@ -25,4 +25,3 @@ runs:
           echo "C:\ProgramData\Chocolatey\bin" >> $env:GITHUB_PATH
         }
         choco install make -y
-
