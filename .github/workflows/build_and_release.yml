@@ -167,15 +167,6 @@ jobs:
         with:
           os: ${{ matrix.target.target_os }}
 
-
-      # - name: Trace OpenSSL build
-      #   run: |
-      #     where make
-      #     make --version
-      #     where perl
-      #     perl --version
-      #     cargo build -p openssl-sys -vvv
-
       - name: Set up make
         if: matrix.target.target_os == 'linux' || matrix.target.runner == 'windows-gpu-t4-4-core'
         uses: ./.github/actions/setup-make
@@ -358,23 +349,23 @@ jobs:
           artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
           target_os: ${{ matrix.target.target_os }}
 
-      # - name: Run Spiced CUDA Build (COMPUTE_CAP=89).
-      #   uses: ./.github/actions/spiced-cuda-build
-      #   if: contains(matrix.target.tags, 'cuda')
-      #   with:
-      #     cuda-version: "12.4.1"
-      #     cuda-compute-capability: "89"
-      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-      #     target_os: ${{ matrix.target.target_os }}
+      - name: Run Spiced CUDA Build (COMPUTE_CAP=89).
+        uses: ./.github/actions/spiced-cuda-build
+        if: contains(matrix.target.tags, 'cuda')
+        with:
+          cuda-version: "12.4.1"
+          cuda-compute-capability: "89"
+          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+          target_os: ${{ matrix.target.target_os }}
 
-      # - name: Run Spiced CUDA Build (COMPUTE_CAP=90).
-      #   uses: ./.github/actions/spiced-cuda-build
-      #   if: contains(matrix.target.tags, 'cuda')
-      #   with:
-      #     cuda-version: "12.4.1"
-      #     cuda-compute-capability: "90"
-      #     artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
-      #     target_os: ${{ matrix.target.target_os }}
+      - name: Run Spiced CUDA Build (COMPUTE_CAP=90).
+        uses: ./.github/actions/spiced-cuda-build
+        if: contains(matrix.target.tags, 'cuda')
+        with:
+          cuda-version: "12.4.1"
+          cuda-compute-capability: "90"
+          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+          target_os: ${{ matrix.target.target_os }}
 
       ## CLI build
       - name: Build spice

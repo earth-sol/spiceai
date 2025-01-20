@@ -25,15 +25,4 @@ runs:
           echo "C:\ProgramData\Chocolatey\bin" >> $env:GITHUB_PATH
         }
         choco install make -y
-        choco install strawberryperl -y
-        choco install protoc -y
-        echo "C:\Strawberry\perl\bin" >> $env:GITHUB_PATH
-
-    - name: Check Make and Perl version (Windows)
-      if: inputs.os == 'windows'
-      shell: pwsh
-      run: |
-        make --version
-        perl --version
-        protoc --version
 

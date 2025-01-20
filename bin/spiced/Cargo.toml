@@ -58,7 +58,7 @@ default = [
   "snowflake",
   "spark",
   "ftp",
-  # "debezium", temporary disabled due to openssl-sys build issue
+  "debezium",
   "anonymous_telemetry",
   "mssql",
   "dynamodb",
