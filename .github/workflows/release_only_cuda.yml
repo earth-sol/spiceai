@@ -18,14 +18,6 @@ jobs:
     env:
       ARTIFACT_DIR: ./release
 
-    strategy:
-      matrix:
-        include:
-          - target_os: linux
-            target_arch: x86_64
-          - target_os: windows
-            target_arch: x86_64
-
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,10 +35,8 @@ jobs:
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          pattern: |
-            spiced_models_cuda_*_${{ matrix.target_os }}_${{ matrix.target_arch }}
-            spiced.exe_models_cuda_*_${{ matrix.target_os }}_${{ matrix.target_arch }}
           path: ${{ env.ARTIFACT_DIR }}
+          github-token: ${{ secrets.DOWNLOAD_ARTIFACT_TOKEN }}
           merge-multiple: true
           run-id: ${{ inputs.run_id }}
 
