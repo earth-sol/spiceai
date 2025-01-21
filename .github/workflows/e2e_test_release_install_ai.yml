@@ -15,31 +15,31 @@ jobs:
             target_os: linux
             target_arch: x86_64
             tags: ['cuda']
-          # - name: macOS aarch64 (GPU M4)
-          #   runner: spiceai-macos
-          #   target_os: darwin
-          #   target_arch: aarch64
-          #   tags: ['metal']
-          # - name: Windows x64 (GPU T4)
-          #   runner: windows-gpu-t4-4-core
-          #   target_os: windows
-          #   target_arch: x86_64,
-          #   tags: ['cuda']
-          # - name: 'Linux aarch64'
-          #   runner: 'hosted-linux-arm-runner'
-          #   target_os: 'linux'
-          #   target_arch: 'aarch64'
-          #   tags: []
-          # - name: 'macOS aarch64'
-          #   runner: 'macos-14'
-          #   target_os: 'darwin'
-          #   target_arch: 'aarch64'
-          #   tags: []
-          # - name: 'Windows x64'
-          #   runner: 'windows-latest'
-          #   target_os: 'windows'
-          #   target_arch: 'x86_64'
-          #   tags: []
+          - name: macOS aarch64 (GPU M4)
+            runner: spiceai-macos
+            target_os: darwin
+            target_arch: aarch64
+            tags: ['metal']
+          - name: Windows x64 (GPU T4)
+            runner: windows-gpu-t4-4-core
+            target_os: windows
+            target_arch: x86_64,
+            tags: ['cuda']
+          - name: 'Linux aarch64'
+            runner: 'hosted-linux-arm-runner'
+            target_os: 'linux'
+            target_arch: 'aarch64'
+            tags: []
+          - name: 'macOS aarch64'
+            runner: 'macos-14'
+            target_os: 'darwin'
+            target_arch: 'aarch64'
+            tags: []
+          - name: 'Windows x64'
+            runner: 'windows-latest'
+            target_os: 'windows'
+            target_arch: 'x86_64'
+            tags: []
     steps:
       - name: system info
         if: matrix.target_os != 'windows'
@@ -82,9 +82,6 @@ jobs:
           use-github-cache: false
           sub-packages: '["cudart"]'
           non-cuda-sub-packages: '["libcublas", "libcurand"]'
-          # non-cuda-sub-packages: '["libcurand-dev", "libcublas","libcublas-dev"]'
-          # sub-packages: '["nvcc","compiler","libraries","libraries-dev","cudart","cudart-dev"]'
-
 
       - name: CUDA version
         if: contains(matrix.tags, 'cuda')
@@ -126,14 +123,13 @@ jobs:
           spice version
 
       - name: Init Spice app (OpenAI model)
-        if: "!contains(matrix.tags, 'metal')"
+        if: "!contains(matrix.tags, 'metal') && !contains(matrix.tags, 'cuda')"
         run: |
           cp ./test/models/spicepod_openai.yml ./spicepod.yaml
           cat ./spicepod.yaml
 
-      # acceleration is currently supported for metal target only
       - name: Init Spice app (Huggingface model)
-        if: contains(matrix.tags, 'metal')
+        if: "contains(matrix.tags, 'metal') || contains(matrix.tags, 'cuda')"
         run: |
           cp ./test/models/spicepod_hf.yml ./spicepod.yaml
           cat ./spicepod.yaml
@@ -144,8 +140,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SPICE_OPENAI_API_KEY: ${{ secrets.SPICE_SECRET_OPENAI_API_KEY }}
         run: |
-          #spice run &> spice.log &
-          spice run
+          spice run &> spice.log &
 
       - name: Wait for Spice runtime is ready
         if: matrix.target_os != 'windows'
