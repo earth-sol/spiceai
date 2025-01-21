@@ -15,31 +15,31 @@ jobs:
             target_os: linux
             target_arch: x86_64
             tags: ['cuda']
-          - name: macOS aarch64 (GPU M4)
-            runner: spiceai-macos
-            target_os: darwin
-            target_arch: aarch64
-            tags: ['metal']
-          - name: Windows x64 (GPU T4)
-            runner: windows-gpu-t4-4-core
-            target_os: windows
-            target_arch: x86_64,
-            tags: ['cuda']
-          - name: 'Linux aarch64'
-            runner: 'hosted-linux-arm-runner'
-            target_os: 'linux'
-            target_arch: 'aarch64'
-            tags: []
-          - name: 'macOS aarch64'
-            runner: 'macos-14'
-            target_os: 'darwin'
-            target_arch: 'aarch64'
-            tags: []
-          - name: 'Windows x64'
-            runner: 'windows-latest'
-            target_os: 'windows'
-            target_arch: 'x86_64'
-            tags: []
+          # - name: macOS aarch64 (GPU M4)
+          #   runner: spiceai-macos
+          #   target_os: darwin
+          #   target_arch: aarch64
+          #   tags: ['metal']
+          # - name: Windows x64 (GPU T4)
+          #   runner: windows-gpu-t4-4-core
+          #   target_os: windows
+          #   target_arch: x86_64,
+          #   tags: ['cuda']
+          # - name: 'Linux aarch64'
+          #   runner: 'hosted-linux-arm-runner'
+          #   target_os: 'linux'
+          #   target_arch: 'aarch64'
+          #   tags: []
+          # - name: 'macOS aarch64'
+          #   runner: 'macos-14'
+          #   target_os: 'darwin'
+          #   target_arch: 'aarch64'
+          #   tags: []
+          # - name: 'Windows x64'
+          #   runner: 'windows-latest'
+          #   target_os: 'windows'
+          #   target_arch: 'x86_64'
+          #   tags: []
     steps:
       - name: system info
         if: matrix.target_os != 'windows'
@@ -71,6 +71,20 @@ jobs:
           cuda: '12.4.1'
           use-github-cache: false
           use-local-cache: false
+
+      - name: Install CUDA Toolkit (Linux)
+        if: matrix.runner == 'ubuntu-gpu-t4-4-core'
+        uses: Jimver/cuda-toolkit@v0.2.19
+        id: cuda-toolkit-linux
+        with:
+          cuda: '12.4.1'
+          method: 'network'
+          use-github-cache: false
+          # non-cuda-sub-packages: '[]'
+          # sub-packages: '["nvcc", "cudart"]'
+          non-cuda-sub-packages: '["libcurand-dev", "libcublas","libcublas-dev"]'
+          sub-packages: '["nvcc","compiler","libraries","libraries-dev","cudart","cudart-dev"]'
+
 
       - name: CUDA version
         if: contains(matrix.tags, 'cuda')
