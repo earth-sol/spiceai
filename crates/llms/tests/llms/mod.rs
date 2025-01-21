@@ -227,7 +227,7 @@ static TEST_CASES: LazyLock<Vec<TestCase>> = LazyLock::new(|| {
                                 "type": "function",
                                 "function": {
                                     "name": "get_current_weather",
-                                    "arguments": "{\"location\": \"San Francisco, CA\"}"
+                                    "arguments": "{\"location\": \"San Francisco\"}"
                                 }
                             }
                         ]
