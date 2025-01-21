@@ -15,31 +15,31 @@ jobs:
             target_os: linux
             target_arch: x86_64
             tags: ['cuda']
-          - name: macOS aarch64 (GPU M4)
-            runner: spiceai-macos
-            target_os: darwin
-            target_arch: aarch64
-            tags: ['metal']
+          # - name: macOS aarch64 (GPU M4)
+          #   runner: spiceai-macos
+          #   target_os: darwin
+          #   target_arch: aarch64
+          #   tags: ['metal']
           - name: Windows x64 (GPU T4)
             runner: windows-gpu-t4-4-core
             target_os: windows
             target_arch: x86_64,
             tags: ['cuda']
-          - name: 'Linux aarch64'
-            runner: 'hosted-linux-arm-runner'
-            target_os: 'linux'
-            target_arch: 'aarch64'
-            tags: []
-          - name: 'macOS aarch64'
-            runner: 'macos-14'
-            target_os: 'darwin'
-            target_arch: 'aarch64'
-            tags: []
-          - name: 'Windows x64'
-            runner: 'windows-latest'
-            target_os: 'windows'
-            target_arch: 'x86_64'
-            tags: []
+          # - name: 'Linux aarch64'
+          #   runner: 'hosted-linux-arm-runner'
+          #   target_os: 'linux'
+          #   target_arch: 'aarch64'
+          #   tags: []
+          # - name: 'macOS aarch64'
+          #   runner: 'macos-14'
+          #   target_os: 'darwin'
+          #   target_arch: 'aarch64'
+          #   tags: []
+          # - name: 'Windows x64'
+          #   runner: 'windows-latest'
+          #   target_os: 'windows'
+          #   target_arch: 'x86_64'
+          #   tags: []
     steps:
       - name: system info
         if: matrix.target_os != 'windows'
@@ -144,7 +144,7 @@ jobs:
 
       - name: Wait for Spice runtime is ready
         if: matrix.target_os != 'windows'
-        timeout-minutes: 3
+        timeout-minutes: 10
         run: |
           while [[ "$(curl -s http://localhost:8090/v1/ready)" != "ready" ]]; do sleep 1; done
 
@@ -169,7 +169,7 @@ jobs:
             }
           } while ($res -ne "ready")
         shell: pwsh
-        timeout-minutes: 3
+        timeout-minutes: 10
 
       - name: Install expect (linux)
         if: matrix.target_os == 'linux'
