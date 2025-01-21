@@ -140,11 +140,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SPICE_OPENAI_API_KEY: ${{ secrets.SPICE_SECRET_OPENAI_API_KEY }}
         run: |
-          spice run &> spice.log &
+          # spice run &> spice.log &
+          spice run
 
       - name: Wait for Spice runtime is ready
         if: matrix.target_os != 'windows'
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           while [[ "$(curl -s http://localhost:8090/v1/ready)" != "ready" ]]; do sleep 1; done
 
@@ -154,7 +155,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SPICE_OPENAI_API_KEY: ${{ secrets.SPICE_SECRET_OPENAI_API_KEY }}
         run: |
-          Start-Process -FilePath spice -ArgumentList run -RedirectStandardOutput stdout.log -RedirectStandardError stderr.log
+          #Start-Process -FilePath spice -ArgumentList run -RedirectStandardOutput stdout.log -RedirectStandardError stderr.log
+          Start-Process -FilePath spice -ArgumentList run -NoNewWindow -Wait
           echo "Waiting for Spice runtime to be ready..."
           do {
             try {
@@ -169,7 +171,7 @@ jobs:
             }
           } while ($res -ne "ready")
         shell: pwsh
-        timeout-minutes: 10
+        timeout-minutes: 15
 
       - name: Install expect (linux)
         if: matrix.target_os == 'linux'
