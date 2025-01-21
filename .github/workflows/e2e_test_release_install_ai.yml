@@ -80,10 +80,10 @@ jobs:
           cuda: '12.4.1'
           method: 'network'
           use-github-cache: false
-          # non-cuda-sub-packages: '[]'
-          # sub-packages: '["nvcc", "cudart"]'
-          non-cuda-sub-packages: '["libcurand-dev", "libcublas","libcublas-dev"]'
-          sub-packages: '["nvcc","compiler","libraries","libraries-dev","cudart","cudart-dev"]'
+          sub-packages: '["cudart"]'
+          non-cuda-sub-packages: '["libcublas", "libcurand"]'
+          # non-cuda-sub-packages: '["libcurand-dev", "libcublas","libcublas-dev"]'
+          # sub-packages: '["nvcc","compiler","libraries","libraries-dev","cudart","cudart-dev"]'
 
 
       - name: CUDA version
@@ -144,7 +144,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SPICE_OPENAI_API_KEY: ${{ secrets.SPICE_SECRET_OPENAI_API_KEY }}
         run: |
-          spice run &> spice.log &
+          #spice run &> spice.log &
+          spice run
 
       - name: Wait for Spice runtime is ready
         if: matrix.target_os != 'windows'
