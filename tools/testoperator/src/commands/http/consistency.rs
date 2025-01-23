@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 use crate::{
-    commands::HttpConsistencyTestArgs,
-    tests::{get_app_and_start_request, util::Color},
+    args::HttpConsistencyTestArgs,
+    commands::{get_app_and_start_request, util::Color},
     with_color,
 };
 use std::{sync::Arc, time::Duration};
@@ -66,7 +66,7 @@ pub async fn consistency_run(args: &HttpConsistencyTestArgs) -> anyhow::Result<(
 
     println!("{}", with_color!(Color::Blue, "Starting consistency test"));
     let test = test.start()?.wait().await?;
-    let results = test.collect(TestType::HTTPConsistency)?;
+    let results = test.collect(TestType::HttpConsistency)?;
 
     let mut spiced_instance = test.end();
 
