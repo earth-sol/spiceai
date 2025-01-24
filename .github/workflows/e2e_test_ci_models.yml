@@ -43,16 +43,26 @@ jobs:
     strategy:
       matrix:
         target:
-          - name: 'Linux x64'
-            builder: 'spiceai-runners'
-            target_os: 'linux'
-            target_arch: 'x86_64'
+          # - name: 'Linux x64'
+          #   builder: 'spiceai-runners'
+          #   target_os: 'linux'
+          #   target_arch: 'x86_64'
           - name: 'macOS aarch64 (Apple Silicon)'
             builder: 'spiceai-macos'
             target_os: 'darwin'
             target_arch: 'aarch64'
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check cmake version
+        run: |
+          echo "$PATH"
+          echo $0
+          env
+          cat ~/.bashrc || echo "No .bashrc"
+          cat ~/.bash_profile || echo "No .bash_profile"
+          brew list --versions cmake || echo "brew not available"
+          cmake --version
 
       - name: Set REL_VERSION from version.txt
         run: python3 ./.github/scripts/get_release_version.py
