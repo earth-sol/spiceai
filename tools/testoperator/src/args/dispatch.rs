@@ -22,6 +22,8 @@ use test_framework::{
     TestType,
 };
 
+use super::HttpTestArgs;
+
 #[derive(Parser, Debug, Clone)]
 pub struct DispatchArgs {
     /// A positional argument for the directory to scan, or test file
@@ -70,7 +72,9 @@ pub struct DispatchTests {
     pub bench: Option<BenchArgs>,
     pub throughput: Option<BenchArgs>,
     pub load: Option<LoadArgs>,
-    // TODO: add data consistency, http consistency, http overhead
+    pub http_consistency: Option<HttpConsistencyArgs>,
+    // pub http_overhead: Option<HttpOverheadTestArgs>,
+    // TODO: add data consistency
 }
 
 /// Benchmark and throughput workflow arguments, defined in the test files
@@ -116,4 +120,22 @@ pub struct LoadWorkflowArgs {
     #[serde(flatten)]
     pub load_args: LoadArgs,
     pub spiced_commit: String,
+}
+
+/// Payload sent to the GitHub Actions workflow request for HTTP consistency tests
+/// `spiced_commit` is not an eligible argument in the test files, as it is controlled by the environment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HttpConsistencyArgs {
+    #[serde(flatten)]
+    pub http_args: HttpTestArgs,
+    pub buckets: usize,
+    pub increase_threshold: f64,
+    pub spicepod_path: PathBuf,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ready_wait: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub concurrency: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration: Option<String>,
 }

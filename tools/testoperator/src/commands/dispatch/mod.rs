@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use serde_json::Value;
 use test_framework::{
     anyhow::{self, Result},
     gh_utils::GitHubWorkflow,
@@ -22,7 +23,9 @@ use test_framework::{
     TestType,
 };
 
-use crate::args::dispatch::{BenchWorkflowArgs, DispatchArgs, DispatchTestFile, LoadWorkflowArgs};
+use crate::args::dispatch::{
+    BenchWorkflowArgs, DispatchArgs, DispatchTestFile, DispatchTests, LoadWorkflowArgs,
+};
 
 pub async fn dispatch(args: DispatchArgs) -> Result<()> {
     if !args.path.is_dir() && !args.path.is_file() {
@@ -58,39 +61,63 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
     let spiced_commit = std::env::var("SPICED_COMMIT").ok().unwrap_or_default();
 
     for (path, test) in tests {
-        let payload = match test_type {
-            TestType::Benchmark => {
-                if let Some(bench) = test.tests.bench {
-                    serde_json::json!(BenchWorkflowArgs {
-                        bench_args: bench,
-                        spiced_commit: spiced_commit.clone(),
-                    })
-                } else {
-                    println!("Test file {path:#?} does not contain a benchmark test");
-                    continue;
-                }
+        let payload = match (test_type, &test.tests) {
+            (
+                TestType::Benchmark,
+                DispatchTests {
+                    bench: Some(bench), ..
+                },
+            ) => {
+                serde_json::json!(BenchWorkflowArgs {
+                    bench_args: bench.clone(),
+                    spiced_commit: spiced_commit.clone(),
+                })
             }
-            TestType::Throughput => {
-                if let Some(throughput) = test.tests.throughput {
-                    serde_json::json!(BenchWorkflowArgs {
-                        bench_args: throughput,
-                        spiced_commit: spiced_commit.clone(),
-                    })
-                } else {
-                    println!("Test file {path:#?} does not contain a throughput test");
-                    continue;
-                }
+            (
+                TestType::Throughput,
+                DispatchTests {
+                    throughput: Some(throughput),
+                    ..
+                },
+            ) => {
+                serde_json::json!(BenchWorkflowArgs {
+                    bench_args: throughput.clone(),
+                    spiced_commit: spiced_commit.clone(),
+                })
             }
-            TestType::Load => {
-                if let Some(load) = test.tests.load {
-                    serde_json::json!(LoadWorkflowArgs {
-                        load_args: load.clone(),
-                        spiced_commit: spiced_commit.clone(),
-                    })
-                } else {
-                    println!("Test file {path:#?} does not contain a load test");
-                    continue;
-                }
+            (
+                TestType::Load,
+                DispatchTests {
+                    load: Some(load), ..
+                },
+            ) => {
+                serde_json::json!(LoadWorkflowArgs {
+                    load_args: load.clone(),
+                    spiced_commit: spiced_commit.clone(),
+                })
+            }
+            (TestType::Benchmark, _) => {
+                println!("Test file {path:#?} does not contain a benchmark test");
+                continue;
+            }
+            (TestType::Throughput, _) => {
+                println!("Test file {path:#?} does not contain a throughput test");
+                continue;
+            }
+            (TestType::Load, _) => {
+                println!("Test file {path:#?} does not contain a load test");
+                continue;
+            }
+            (
+                TestType::HttpConsistency,
+                DispatchTests {
+                    http_consistency: Some(consistency),
+                    ..
+                },
+            ) => {
+                let mut payload = serde_json::json!(consistency.clone());
+                payload["spiced_commit"] = Value::String(spiced_commit.clone());
+                payload
             }
             _ => {
                 return Err(anyhow::anyhow!(

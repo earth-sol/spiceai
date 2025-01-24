@@ -15,22 +15,22 @@ limitations under the License.
 */
 
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use test_framework::{anyhow, spicetest::http::component::HttpComponent};
 
 use super::CommonArgs;
 
-#[derive(Parser)]
+#[derive(Parser, Debug, Clone, Deserialize, Serialize)]
 pub struct HttpTestArgs {
-    #[clap(flatten)]
-    pub(crate) common: CommonArgs,
-
     /// The embedding model (named in spicepod) to test against. Cannot be used in conjunction with `model`.
     #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) embedding: Option<String>,
 
     /// The language model (named in spicepod) to test against. Cannot be used in conjunction with `embedding`.
     #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) model: Option<String>,
 
     #[arg(long, default_value = "0")]
@@ -38,10 +38,12 @@ pub struct HttpTestArgs {
 
     /// The path to a file containing payloads to use in testing. Either JSONL of compatible request bodies, or individual string payloads. Cannot not be used in conjunction with `payload`.
     #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) payload_file: Option<PathBuf>,
 
     /// The payload to use in testing. Either JSONL of compatible request bodies, or individual string payloads. Cannot not be used in conjunction with `payload_file`.
     #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) payload: Option<Vec<String>>,
 }
 
@@ -86,6 +88,9 @@ impl HttpTestArgs {
 
 #[derive(Parser)]
 pub struct HttpConsistencyTestArgs {
+    #[clap(flatten)]
+    pub(crate) common: CommonArgs,
+
     #[command(flatten)]
     pub(crate) http: HttpTestArgs,
 
@@ -100,6 +105,9 @@ pub struct HttpConsistencyTestArgs {
 
 #[derive(Parser)]
 pub struct HttpOverheadTestArgs {
+    #[clap(flatten)]
+    pub(crate) common: CommonArgs,
+
     #[clap(flatten)]
     pub(crate) http: HttpTestArgs,
 
