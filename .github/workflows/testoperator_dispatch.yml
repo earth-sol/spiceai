@@ -42,7 +42,8 @@ jobs:
       - name: Build Testoperator
         uses: ./.github/actions/build-testoperator
       
-      - name: Dispatch Testoperator - ${{ github.event.inputs.workflow_type }}
+      - name: Dispatch Testoperator - Input
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           testoperator dispatch \
             ${{ github.event.inputs.test_files_path }} \
