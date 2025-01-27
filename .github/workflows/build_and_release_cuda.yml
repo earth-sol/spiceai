@@ -5,23 +5,23 @@ on:
     tags:
       - v*
     paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'README.md'
-      - 'Makefile'
-      - 'CONTRIBUTING.md'
-      - 'SECURITY.md'
-      - 'LICENSE'
-      - '.github/**'
-      - 'version.txt'
-      - '.schema/**'
-      - '.vscode/**'
-      - 'deploy/**'
-      - 'install/**'
-      - 'media/**'
-      - 'monitoring/**'
-      - 'acknowledgements.md'
-      - 'Dockerfile*'
+      - "**/*.md"
+      - "docs/**"
+      - "README.md"
+      - "Makefile"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - "LICENSE"
+      - ".github/**"
+      - "version.txt"
+      - ".schema/**"
+      - ".vscode/**"
+      - "deploy/**"
+      - "install/**"
+      - "media/**"
+      - "monitoring/**"
+      - "acknowledgements.md"
+      - "Dockerfile*"
 
   workflow_dispatch:
     inputs:
@@ -43,6 +43,7 @@ on:
           - "75"
           - "80"
           - "86"
+          - "87"
           - "89"
           - "90"
         default: "all"
@@ -63,61 +64,73 @@ jobs:
             const matrix = [
               {
                 compute_cap: "75",
-                runner: "ubuntu-gpu-t4-4-core",
+                runner: "spiceai-large-runners",
                 target_os: "linux",
                 target_arch: "x86_64"
               },
               {
                 compute_cap: "80",
-                runner: "ubuntu-gpu-t4-4-core",
+                runner: "spiceai-large-runners",
                 target_os: "linux",
                 target_arch: "x86_64"
               },
               {
                 compute_cap: "86",
-                runner: "ubuntu-gpu-t4-4-core",
+                runner: "spiceai-large-runners",
+                target_os: "linux",
+                target_arch: "x86_64"
+              },
+              {
+                compute_cap: "87",
+                runner: "spiceai-large-runners",
                 target_os: "linux",
                 target_arch: "x86_64"
               },
               {
                 compute_cap: "89",
-                runner: "ubuntu-gpu-t4-4-core",
+                runner: "spiceai-large-runners",
                 target_os: "linux",
                 target_arch: "x86_64"
               },
               {
                 compute_cap: "90",
-                runner: "ubuntu-gpu-t4-4-core",
+                runner: "spiceai-large-runners",
                 target_os: "linux",
                 target_arch: "x86_64"
               },
               {
                 compute_cap: "75",
-                runner: "windows-gpu-t4-4-core",
+                runner: "windows-latest",
                 target_os: "windows",
                 target_arch: "x86_64"
               },
               {
                 compute_cap: "80",
-                runner: "windows-gpu-t4-4-core",
+                runner: "windows-latest",
                 target_os: "windows",
                 target_arch: "x86_64"
               },
               {
                 compute_cap: "86",
-                runner: "windows-gpu-t4-4-core",
+                runner: "windows-latest",
+                target_os: "windows",
+                target_arch: "x86_64"
+              },
+              {
+                compute_cap: "87",
+                runner: "windows-latest",
                 target_os: "windows",
                 target_arch: "x86_64"
               },
               {
                 compute_cap: "89",
-                runner: "windows-gpu-t4-4-core",
+                runner: "windows-latest",
                 target_os: "windows",
                 target_arch: "x86_64"
               },
               {
                 compute_cap: "90",
-                runner: "windows-gpu-t4-4-core",
+                runner: "windows-latest",
                 target_os: "windows",
                 target_arch: "x86_64"
               }
@@ -157,22 +170,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The `windows-gpu-t4-4-core` does not have Python installed
-      - name: Set up Python3
-        if: matrix.target.target_os == 'windows'
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-
       - name: Set REL_VERSION from version.txt
         run: python3 ./.github/scripts/get_release_version.py
 
-      # The `windows-gpu-t4-4-core` does not have modern PowerShell installed
-      - name: Install PowerShell
-        if: matrix.target.target_os == 'windows'
-        uses: ./.github/actions/install-pwsh
-
-      # The `windows-gpu-t4-4-core` requires Visual Studio Build Tools
       - name: Install Visual Studio Build Tools
         if: matrix.target.target_os == 'windows'
         uses: ./.github/actions/install-vs-buildtools
@@ -181,6 +181,10 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           os: ${{ matrix.target.target_os }}
+
+      - name: Set up wget
+        if: matrix.target.target_os == 'linux'
+        run: sudo apt-get update && sudo apt-get install wget -y
 
       - name: Set up make
         if: matrix.target.target_os == 'linux' || matrix.target.runner == 'windows-gpu-t4-4-core'
@@ -249,14 +253,6 @@ jobs:
     env:
       ARTIFACT_DIR: ./release
 
-    strategy:
-      matrix:
-        include:
-          - target_os: linux
-            target_arch: x86_64
-          - target_os: windows
-            target_arch: x86_64
-
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -272,9 +268,6 @@ jobs:
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          pattern: |
-            spiced_models_cuda_*_${{ matrix.target_os }}_${{ matrix.target_arch }}
-            spiced.exe_models_cuda_*_${{ matrix.target_os }}_${{ matrix.target_arch }}
           path: ${{ env.ARTIFACT_DIR }}
           merge-multiple: true
 
@@ -287,18 +280,33 @@ jobs:
           OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
           export GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
-          # Get the list of files
-          RELEASE_ARTIFACT=(${ARTIFACT_DIR}/*)
+
+          # First check if we have any files to upload
+          if [ -z "$(ls -A ${ARTIFACT_DIR})" ]; then
+            echo "No artifacts found in ${ARTIFACT_DIR}"
+            exit 1
+          fi
+
+          # Create an array of actual files (no globs)
+          RELEASE_ARTIFACTS=()
+          for file in ${ARTIFACT_DIR}/*; do
+            if [ -f "$file" ]; then
+              RELEASE_ARTIFACTS+=("$file")
+            fi
+          done
+
           # Delete existing release artifact
           python ./.github/scripts/github_release.py delete \
             --owner $OWNER_NAME --repo $REPO_NAME \
             --tag "v${{ env.REL_VERSION }}" \
-            ${RELEASE_ARTIFACT[*]}
+            "${RELEASE_ARTIFACTS[@]}"
+
           if [ "$LATEST_RELEASE" = "true" ]; then
             export RELEASE_BODY=`cat ./docs/release_notes/v${{ env.REL_VERSION }}.md`
           else
             export RELEASE_BODY="This is the release candidate ${{ env.REL_VERSION }}"
           fi
+
           echo "Uploading Spice.ai CUDA Binaries to GitHub Release"
           python ./.github/scripts/github_release.py upload \
             --owner $OWNER_NAME --repo $REPO_NAME \
@@ -306,4 +314,4 @@ jobs:
             --release-name "v${{ env.REL_VERSION }}" \
             --body "${RELEASE_BODY}" \
             --prerelease "$PRE_RELEASE" \
-            ${RELEASE_ARTIFACT[*]} 
+            "${RELEASE_ARTIFACTS[@]}"

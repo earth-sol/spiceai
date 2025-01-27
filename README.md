@@ -19,6 +19,8 @@
 
 **Spice** is a SQL query and AI compute engine, written in Rust, for data-driven apps and agents.
 
+<img width="740" alt="Spice.ai Open Source accelerated data query and LLM-inference engine" src="https://github.com/user-attachments/assets/9db94f9c-10a1-47b0-ab45-05aa964590ff" />
+
 Spice provides three industry standard APIs in a lightweight, portable runtime (single ~140 MB binary):
 
 1. **SQL Query APIs**: Arrow Flight, Arrow Flight SQL, ODBC, JDBC, and ADBC.
@@ -183,36 +185,37 @@ See more demos on [YouTube](https://www.youtube.com/playlist?list=PLesJrUXEx3U9a
 
 ## Supported Data Accelerators
 
-| Name       | Description                     | Status            | Engine Modes     |
-| ---------- | ------------------------------- | ----------------- | ---------------- |
-| `arrow`    | In-Memory Arrow Records         | Stable            | `memory`         |
-| `duckdb`   | Embedded [DuckDB][duckdb]       | Stable            | `memory`, `file` |
-| `postgres` | Attached [PostgreSQL][postgres] | Release Candidate | N/A              |
-| `sqlite`   | Embedded [SQLite][sqlite]       | Release Candidate | `memory`, `file` |
+| Name       | Description                      | Status            | Engine Modes     |
+| ---------- | -------------------------------- | ----------------- | ---------------- |
+| `arrow`    | [In-Memory Arrow Records][arrow] | Stable            | `memory`         |
+| `duckdb`   | Embedded [DuckDB][duckdb]        | Stable            | `memory`, `file` |
+| `postgres` | Attached [PostgreSQL][postgres]  | Release Candidate | N/A              |
+| `sqlite`   | Embedded [SQLite][sqlite]        | Release Candidate | `memory`, `file` |
 
-[duckdb]: https://spiceai.org/docs/data-accelerators/duckdb
-[postgres]: https://github.com/spiceai/cookbook/tree/trunk/postgres/accelerator#postgresql-data-accelerator
-[sqlite]: https://spiceai.org/docs/data-accelerators/sqlite
+[arrow]: https://spiceai.org/docs/components/data-accelerators/arrow
+[duckdb]: https://spiceai.org/docs/components/data-accelerators/duckdb
+[postgres]: https://spiceai.org/docs/components/data-accelerators/postgres
+[sqlite]: https://spiceai.org/docs/components/data-accelerators/sqlite
 
 ## Supported Model Providers
 
 | Name          | Description                                  | Status            | ML Format(s) | LLM Format(s)                   |
 | ------------- | -------------------------------------------- | ----------------- | ------------ | ------------------------------- |
 | `openai`      | OpenAI (or compatible) LLM endpoint          | Release Candidate | -            | OpenAI-compatible HTTP endpoint |
-| `file`        | Local filesystem                             |                   | ONNX         | GGUF, GGML, SafeTensor          |
-| `huggingface` | Models hosted on HuggingFace                 |                   | ONNX         | GGUF, GGML, SafeTensor          |
+| `file`        | Local filesystem                             | Beta              | ONNX         | GGUF, GGML, SafeTensor          |
+| `huggingface` | Models hosted on HuggingFace                 | Beta              | ONNX         | GGUF, GGML, SafeTensor          |
 | `spice.ai`    | Models hosted on the Spice.ai Cloud Platform |                   | ONNX         | OpenAI-compatible HTTP endpoint |
 | `azure`       | Azure OpenAI                                 |                   | -            | OpenAI-compatible HTTP endpoint |
-| `anthropic`   | Models hosted on Anthropic                   |                   | -            | OpenAI-compatible HTTP endpoint |
-| `xai`         | Models hosted on xAI                         |                   | -            | OpenAI-compatible HTTP endpoint |
+| `anthropic`   | Models hosted on Anthropic                   | Alpha             | -            | OpenAI-compatible HTTP endpoint |
+| `xai`         | Models hosted on xAI                         | Alpha             | -            | OpenAI-compatible HTTP endpoint |
 
 ## Supported Embeddings Providers
 
 | Name          | Description                                  | Status            | ML Format(s) | LLM Format(s)\*                 |
 | --------------| -------------------------------------------- | ----------------- | ------------ | ------------------------------- |
 | `openai`      | OpenAI (or compatible) LLM endpoint          | Release Candidate | -            | OpenAI-compatible HTTP endpoint |
-| `file`        | Local filesystem                             | Alpha             | ONNX         | GGUF, GGML, SafeTensor          |
-| `huggingface` | Models hosted on HuggingFace                 | Alpha             | ONNX         | GGUF, GGML, SafeTensor          |
+| `file`        | Local filesystem                             | Release Candidate | ONNX         | GGUF, GGML, SafeTensor          |
+| `huggingface` | Models hosted on HuggingFace                 | Release Candidate | ONNX         | GGUF, GGML, SafeTensor          |
 | `azure`       | Azure OpenAI                                 | Alpha             | -            | OpenAI-compatible HTTP endpoint |
 
 ## Supported Catalogs
