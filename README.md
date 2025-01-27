@@ -516,7 +516,7 @@ Spice.ai is designed to be extensible with extension points documented at [EXTEN
 
 ### 🔨 Upcoming Features
 
-🚀 See the [Roadmap to v1.0-stable](https://github.com/spiceai/spiceai/blob/trunk/docs/ROADMAP.md) for upcoming features.
+🚀 See the [Roadmap](https://github.com/spiceai/spiceai/blob/trunk/docs/ROADMAP.md) for upcoming features.
 
 ### 🤝 Connect with us
 
