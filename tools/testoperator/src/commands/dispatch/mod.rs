@@ -33,13 +33,7 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
         return Err(anyhow::anyhow!("Path must be a directory or a file"));
     }
 
-    if std::env::var("GH_TOKEN").is_err() {
-        return Err(anyhow::anyhow!(
-            "A GitHub token must be set in the GH_TOKEN environment variable"
-        ));
-    }
-
-    let octo_client = octocrab::instance().user_access_token(std::env::var("GH_TOKEN")?)?;
+    let octo_client = octocrab::instance().user_access_token(args.github_token)?;
     let test_type: TestType = args.workflow.into();
     let yaml_files = if args.path.is_dir() {
         scan_directory_for_yamls(&args.path)?
@@ -59,8 +53,6 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let spiced_commit = std::env::var("SPICED_COMMIT").ok().unwrap_or_default();
-
     for (path, test) in tests {
         let mut payload = match (test_type, &test.tests) {
             (
@@ -71,7 +63,7 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
             ) => {
                 serde_json::json!(BenchWorkflowArgs {
                     bench_args: bench.clone(),
-                    spiced_commit: spiced_commit.clone(),
+                    spiced_commit: args.spiced_commit.clone(),
                 })
             }
             (
@@ -83,7 +75,7 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
             ) => {
                 serde_json::json!(BenchWorkflowArgs {
                     bench_args: throughput.clone(),
-                    spiced_commit: spiced_commit.clone(),
+                    spiced_commit: args.spiced_commit.clone(),
                 })
             }
             (
@@ -94,8 +86,19 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
             ) => {
                 serde_json::json!(LoadWorkflowArgs {
                     load_args: load.clone(),
-                    spiced_commit: spiced_commit.clone(),
+                    spiced_commit: args.spiced_commit.clone(),
                 })
+            }
+            (
+                TestType::HttpConsistency,
+                DispatchTests {
+                    http_consistency: Some(consistency),
+                    ..
+                },
+            ) => {
+                let mut payload = serde_json::json!(consistency.clone());
+                payload["spiced_commit"] = Value::String(args.spiced_commit.clone());
+                payload
             }
             (TestType::Benchmark, _) => {
                 println!("Test file {path:#?} does not contain a benchmark test");
@@ -108,17 +111,6 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
             (TestType::Load, _) => {
                 println!("Test file {path:#?} does not contain a load test");
                 continue;
-            }
-            (
-                TestType::HttpConsistency,
-                DispatchTests {
-                    http_consistency: Some(consistency),
-                    ..
-                },
-            ) => {
-                let mut payload = serde_json::json!(consistency.clone());
-                payload["spiced_commit"] = Value::String(spiced_commit.clone());
-                payload
             }
             _ => {
                 return Err(anyhow::anyhow!(
@@ -134,10 +126,7 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
             "spiceai",
             "spiceai",
             test_type.workflow(),
-            std::env::var("WORKFLOW_COMMIT")
-                .ok()
-                .unwrap_or("trunk".to_string())
-                .as_str(),
+            &args.workflow_commit,
         )
         .send(octo_client.actions(), Some(payload))
         .await?;

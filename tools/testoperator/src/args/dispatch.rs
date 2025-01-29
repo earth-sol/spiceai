@@ -32,6 +32,15 @@ pub struct DispatchArgs {
     /// The GitHub workflow to execute
     #[arg(long)]
     pub(crate) workflow: Workflow,
+
+    #[arg(long, env = "GH_TOKEN")]
+    pub(crate) github_token: String,
+
+    #[arg(long, env = "SPICED_COMMIT", default_value = "")]
+    pub(crate) spiced_commit: String,
+
+    #[arg(long, env = "WORKFLOW_COMMIT", default_value = "trunk")]
+    pub(crate) workflow_commit: String,
 }
 
 #[derive(Debug, Copy, Clone, ValueEnum)]
