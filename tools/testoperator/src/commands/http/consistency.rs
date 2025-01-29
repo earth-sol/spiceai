@@ -58,7 +58,7 @@ pub async fn consistency_run(args: &HttpConsistencyTestArgs) -> anyhow::Result<(
             args.common.concurrency,
             payloads,
             component,
-            Duration::from_secs(args.http.warmup),
+            Duration::from_secs(args.warmup),
             args.buckets,
             args.common.disable_progress_bars,
         )),

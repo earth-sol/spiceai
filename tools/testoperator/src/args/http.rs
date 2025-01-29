@@ -33,9 +33,6 @@ pub struct HttpTestArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) model: Option<String>,
 
-    #[arg(long, default_value = "0")]
-    pub warmup: u64,
-
     /// The path to a file containing payloads to use in testing. Either JSONL of compatible request bodies, or individual string payloads. Cannot not be used in conjunction with `payload`.
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -93,6 +90,9 @@ pub struct HttpConsistencyTestArgs {
 
     #[command(flatten)]
     pub(crate) http: HttpTestArgs,
+
+    #[arg(long, default_value = "0")]
+    pub warmup: u64,
 
     /// The number of buckets to divide the test duration into.
     #[arg(long, default_value = "10")]
