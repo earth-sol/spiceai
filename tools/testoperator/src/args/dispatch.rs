@@ -81,8 +81,7 @@ pub struct DispatchTests {
     pub throughput: Option<BenchArgs>,
     pub load: Option<LoadArgs>,
     pub http_consistency: Option<HttpConsistencyArgs>,
-    // pub http_overhead: Option<HttpOverheadTestArgs>,
-    // TODO: add data consistency
+    pub http_overhead: Option<HttpOverheadArgs>,
 }
 
 /// Benchmark and throughput workflow arguments, defined in the test files
@@ -138,11 +137,39 @@ pub struct HttpConsistencyArgs {
     pub http_args: HttpTestArgs,
 
     pub buckets: usize,
-    pub increase_threshold: f64,
     pub spicepod_path: PathBuf,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub concurrency: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<u64>,
+}
+
+/// Payload sent to the GitHub Actions workflow request for HTTP overhead tests
+/// `spiced_commit` is not an eligible argument in the test files, as it is controlled by the environment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HttpOverheadArgs {
+    #[serde(flatten)]
+    pub http_args: HttpTestArgs,
+    pub spicepod_path: PathBuf,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub concurrency: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration: Option<u64>,
+
+    pub base: OverheadBaseModel,
+    pub base_component: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_payload_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OverheadBaseModel {
+    #[serde(rename = "openai")]
+    OpenAI,
+    Anthropic,
+    Xai,
 }

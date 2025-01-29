@@ -7,4 +7,12 @@ tests:
     model: gpt-4o-mini
     ready_wait: 0
     buckets: 5
-  # TODO: http_overhead
+  http_overhead:
+    spicepod_path: ./test/spicepods/models/openai.yaml
+    concurrency: 8
+    duration: 300
+    payload_file: ./test/payloads/model-generic-lorem.txt
+    model: gpt-4o-mini
+    warmup: 0
+    base: openai
+    base_component: gpt-4o-mini

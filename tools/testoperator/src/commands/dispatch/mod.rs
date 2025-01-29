@@ -100,6 +100,17 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
                 payload["spiced_commit"] = Value::String(args.spiced_commit.clone());
                 payload
             }
+            (
+                TestType::HttpOverhead,
+                DispatchTests {
+                    http_overhead: Some(overhead),
+                    ..
+                },
+            ) => {
+                let mut payload = serde_json::json!(overhead.clone());
+                payload["spiced_commit"] = Value::String(args.spiced_commit.clone());
+                payload
+            }
             (TestType::Benchmark, _) => {
                 println!("Test file {path:#?} does not contain a benchmark test");
                 continue;
@@ -110,6 +121,14 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
             }
             (TestType::Load, _) => {
                 println!("Test file {path:#?} does not contain a load test");
+                continue;
+            }
+            (TestType::HttpConsistency, _) => {
+                println!("Test file {path:#?} does not contain an HTTP consistency test");
+                continue;
+            }
+            (TestType::HttpOverhead, _) => {
+                println!("Test file {path:#?} does not contain an HTTP overhead test");
                 continue;
             }
             _ => {
