@@ -22,7 +22,7 @@ mod commands;
 
 use args::{
     Commands, DataConsistencyArgs, DatasetTestArgs, HttpConsistencyTestArgs, HttpOverheadTestArgs,
-    HttpTestArgs, TestCommands,
+    TestCommands,
 };
 
 #[derive(Parser)]
