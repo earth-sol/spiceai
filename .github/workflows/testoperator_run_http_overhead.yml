@@ -114,7 +114,7 @@ jobs:
             --base-url ${{ env.BASE_URL }} \
             --base-header "${{ env.BASE_HEADER }}" \
             --base-component ${{ github.event.inputs.base_component }} \
-            ${{ github.event.inputs.base_payload_file && '--base-payload-file ' || '' }}${{ithub.event.inputs.base_payload_file }}
+            ${{ github.event.inputs.base_payload_file && '--base-payload-file ' || '' }}${{ github.event.inputs.base_payload_file }}
         env:
           SPICE_SECRET_OPENAI_API_KEY: ${{ secrets.SPICE_SECRET_OPENAI_API_KEY }}
           SPICE_SECRET_ANTHROPIC_API_KEY: ${{ secrets.SPICE_SECRET_ANTHROPIC_API_KEY }}
