@@ -34,7 +34,7 @@ pub struct HttpTestArgs {
     pub(crate) model: Option<String>,
 
     #[arg(long, default_value = "0")]
-    pub(crate) warmup: u64,
+    pub warmup: u64,
 
     /// The path to a file containing payloads to use in testing. Either JSONL of compatible request bodies, or individual string payloads. Cannot not be used in conjunction with `payload`.
     #[arg(long)]

@@ -27,6 +27,7 @@ use crate::args::dispatch::{
     BenchWorkflowArgs, DispatchArgs, DispatchTestFile, DispatchTests, LoadWorkflowArgs,
 };
 
+#[allow(clippy::too_many_lines)]
 pub async fn dispatch(args: DispatchArgs) -> Result<()> {
     if !args.path.is_dir() && !args.path.is_file() {
         return Err(anyhow::anyhow!("Path must be a directory or a file"));
@@ -129,9 +130,17 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
         payload = map_numbers_to_strings(payload);
 
         println!("Dispatching {test_type} test from {path:#?}");
-        GitHubWorkflow::new("spiceai", "spiceai", test_type.workflow(), "trunk")
-            .send(octo_client.actions(), Some(payload))
-            .await?;
+        GitHubWorkflow::new(
+            "spiceai",
+            "spiceai",
+            test_type.workflow(),
+            std::env::var("WORKFLOW_COMMIT")
+                .ok()
+                .unwrap_or("trunk".to_string())
+                .as_str(),
+        )
+        .send(octo_client.actions(), Some(payload))
+        .await?;
 
         // sleep to space out runs
         println!("Waiting for next run...");

@@ -8,4 +8,5 @@ tests:
     embedding: text-embedding-3-small
     ready_wait: 0
     buckets: 5
+    warmup: 0
   # TODO: http_overhead
