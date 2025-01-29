@@ -127,6 +127,7 @@ pub struct LoadWorkflowArgs {
 pub struct HttpConsistencyArgs {
     #[serde(flatten)]
     pub http_args: HttpTestArgs,
+
     pub buckets: usize,
     pub increase_threshold: f64,
     pub spicepod_path: PathBuf,
