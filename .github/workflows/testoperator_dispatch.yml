@@ -16,6 +16,7 @@ on:
           - 'bench'
           - 'load'
           - 'throughput'
+          - 'http-consistency'
 
 jobs:
   dispatch-tests:
