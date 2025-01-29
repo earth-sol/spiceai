@@ -132,9 +132,9 @@ pub struct HttpConsistencyArgs {
     pub spicepod_path: PathBuf,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub ready_wait: Option<String>,
+    pub ready_wait: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub concurrency: Option<String>,
+    pub concurrency: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub duration: Option<String>,
+    pub duration: Option<u64>,
 }
