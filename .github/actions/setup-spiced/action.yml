@@ -33,13 +33,13 @@ runs:
 
         echo "Could not find any recently built spiced commit in MinIO"
         exit 1
-    
+
     - name: Set SPICED_COMMIT from workflow input
       shell: bash
       if: ${{ inputs.spiced_commit }}
       run: |
         echo "SPICED_COMMIT=${{ inputs.spiced_commit }}" >> $GITHUB_ENV
-    
+
     - name: Output SPICED_COMMIT
       id: output_spiced_commit
       shell: bash
@@ -48,6 +48,8 @@ runs:
     - name: Download spiced from MinIO
       shell: bash
       run: |
-        mc cp spice-minio/artifacts/spiced/linux-x86_64/$SPICED_COMMIT/spiced_models_linux_x86_64.tar.gz spiced_models_linux_x86_64.tar.gz
-        tar -xzf spiced_models_linux_x86_64.tar.gz
-        sudo cp ./spiced /usr/local/bin/spiced
+        curl -L -o spiced_models_metal_darwin_aarch64.tar.gz \
+        https://github.com/spiceai/spiceai/releases/download/v1.0.1/spiced_models_metal_darwin_aarch64.tar.gz
+        tar -xzf spiced_models_metal_darwin_aarch64.tar.gz
+        cp ./spiced /usr/local/bin/spiced
+        chmod +x /usr/local/bin/spiced
