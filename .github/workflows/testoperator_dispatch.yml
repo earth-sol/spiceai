@@ -16,6 +16,7 @@ on:
           - 'bench'
           - 'load'
           - 'throughput'
+          - 'http-consistency'
 
 jobs:
   dispatch-tests:
@@ -46,6 +47,23 @@ jobs:
           testoperator dispatch \
             ${{ github.event.inputs.test_files_path }} \
             --workflow ${{ github.event.inputs.workflow_type }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SPICED_COMMIT: ${{ steps.setup-spiced.outputs.SPICED_COMMIT }}
+          WORKFLOW_COMMIT: ${{ github.ref }}
+
+      - name: Dispatch Testoperator - Scheduled Bench
+        if: ${{ github.event_name == 'schedule' }}
+        run: |
+          testoperator dispatch ./tools/testoperator/dispatch --workflow bench
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SPICED_COMMIT: ${{ steps.setup-spiced.outputs.SPICED_COMMIT }}
+      
+      - name: Dispatch Testoperator - Scheduled Throughput
+        if: ${{ github.event_name == 'schedule' && github.event.schedule == '10 22 */3 * *' }}
+        run: |
+          testoperator dispatch ./tools/testoperator/dispatch --workflow throughput
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SPICED_COMMIT: ${{ steps.setup-spiced.outputs.SPICED_COMMIT }}
