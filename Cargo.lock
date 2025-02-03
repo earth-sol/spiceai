@@ -259,7 +259,7 @@ dependencies = [
 
 [[package]]
 name = "app"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "snafu",
  "spicepod",
@@ -589,7 +589,7 @@ dependencies = [
 
 [[package]]
 name = "arrow_sql_gen"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arrow",
  "bigdecimal",
@@ -603,7 +603,7 @@ dependencies = [
 
 [[package]]
 name = "arrow_tools"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arrow",
  "arrow-schema",
@@ -2087,7 +2087,7 @@ dependencies = [
 
 [[package]]
 name = "cache"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arrow",
  "async-stream",
@@ -3024,7 +3024,7 @@ checksum = "e8566979429cf69b49a5c740c60791108e86440e8be149bbea4fe54d2c32d6e2"
 
 [[package]]
 name = "data_components"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arrow",
  "arrow-buffer",
@@ -3552,7 +3552,7 @@ dependencies = [
 
 [[package]]
 name = "db_connection_pool"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arrow",
  "arrow-odbc",
@@ -3869,7 +3869,7 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
 name = "document_parse"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "bytes",
  "docx-rs",
@@ -4274,7 +4274,7 @@ dependencies = [
 
 [[package]]
 name = "flight_client"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arrow",
  "arrow-flight",
@@ -4289,7 +4289,7 @@ dependencies = [
 
 [[package]]
 name = "flightpublisher"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arrow",
  "arrow-flight",
@@ -4302,7 +4302,7 @@ dependencies = [
 
 [[package]]
 name = "flightrepl"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "ansi_term",
  "arrow-flight",
@@ -4323,7 +4323,7 @@ dependencies = [
 
 [[package]]
 name = "flightsubscriber"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arrow-flight",
  "clap",
@@ -6647,7 +6647,7 @@ dependencies = [
 
 [[package]]
 name = "llms"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "async-openai",
@@ -7227,7 +7227,7 @@ dependencies = [
 
 [[package]]
 name = "model_components"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "arrow",
@@ -7561,7 +7561,7 @@ dependencies = [
 
 [[package]]
 name = "ns_lookup"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "snafu",
  "tracing",
@@ -8321,7 +8321,7 @@ dependencies = [
 
 [[package]]
 name = "otel-arrow"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arrow",
  "arrow-buffer",
@@ -8332,7 +8332,7 @@ dependencies = [
 
 [[package]]
 name = "otelpublisher"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "clap",
  "futures",
@@ -8355,7 +8355,7 @@ checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
 name = "package"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "bytes",
  "object_store",
@@ -9862,7 +9862,7 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "app",
@@ -9997,7 +9997,7 @@ dependencies = [
 
 [[package]]
 name = "runtime-auth"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "app",
  "axum",
@@ -10977,7 +10977,7 @@ dependencies = [
 
 [[package]]
 name = "spice-cloud"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "async-trait",
  "datafusion",
@@ -10994,7 +10994,7 @@ dependencies = [
 
 [[package]]
 name = "spiced"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "app",
  "clap",
@@ -11026,7 +11026,7 @@ dependencies = [
 
 [[package]]
 name = "spicepod"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "fundu",
  "schemars",
@@ -11040,7 +11040,7 @@ dependencies = [
 
 [[package]]
 name = "spicepodschema"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "schemars",
  "serde_json",
@@ -11049,7 +11049,7 @@ dependencies = [
 
 [[package]]
 name = "spiceschema"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "clap",
  "runtime",
@@ -11433,7 +11433,7 @@ dependencies = [
 
 [[package]]
 name = "telemetry"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arrow",
  "async-trait",
@@ -11481,7 +11481,7 @@ dependencies = [
 
 [[package]]
 name = "test-framework"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "app",
@@ -11510,7 +11510,7 @@ dependencies = [
 
 [[package]]
 name = "testoperator"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "clap",
  "reqwest 0.12.9",
@@ -12765,7 +12765,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "util"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "backoff",
  "humantime",
