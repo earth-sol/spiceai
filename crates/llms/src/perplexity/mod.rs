@@ -15,10 +15,12 @@ limitations under the License.
 */
 #![allow(clippy::missing_errors_doc)]
 
+use std::collections::HashMap;
+
 use async_openai::{error::OpenAIError, Client};
 use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::Error as SseError;
-use secrecy::Secret;
+use secrecy::{ExposeSecret, SecretString};
 use types::{
     PerplexityRequest, PerplexityRequestParameters, PerplexityResponse, PerplexityResponseStream,
     PerplexityStreamResponse,
@@ -39,21 +41,37 @@ static PERPLEXITY_SONAR_API_BASE: &str = "https://api.perplexity.ai";
 static PERPLEXITY_SONAR_DEFAULT_MODEL: &str = "sonar";
 
 impl PerplexitySonar {
-    #[must_use]
-    pub fn new(
-        auth_token: &Secret<String>,
+    pub fn from_params(
         model: Option<&str>,
-        overrides: Vec<(String, String)>,
-    ) -> Self {
+        params: &HashMap<String, SecretString>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let Some(auth_token) = params.get("perplexity_auth_token") else {
+            return Err(Box::from(
+                "No `perplexity_auth_token` provided for Perplexity model.",
+            ));
+        };
+
+        let overrides: Vec<(String, String)> = params
+            .iter()
+            .filter_map(|(k, v)| {
+                if k != "perplexity_auth_token" {
+                    if let Some(p) = k.strip_prefix("perplexity_") {
+                        return Some((p.to_string(), v.expose_secret().clone()));
+                    }
+                };
+                None
+            })
+            .collect();
+
         let cfg = HostedModelConfig::default()
             .with_auth(GenericAuthMechanism::BearerToken(auth_token.clone()))
             .with_base_url(PERPLEXITY_SONAR_API_BASE);
 
-        Self {
+        Ok(Self {
             client: Client::<HostedModelConfig>::with_config(cfg),
             model: model.unwrap_or(PERPLEXITY_SONAR_DEFAULT_MODEL).to_string(),
             overrides,
-        }
+        })
     }
 
     #[must_use]
