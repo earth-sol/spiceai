@@ -50,6 +50,12 @@ jobs:
     name: Build spiced
     runs-on: 'spiceai-macos'
     steps:
+
+      - name: Test ai_platform_dev access
+        run: |
+          ls -la ~/ai_platform
+          cat ~/ai_platform/sg_test.txt
+
       - uses: actions/checkout@v4
 
       - name: Set up Rust
