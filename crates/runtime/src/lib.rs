@@ -409,7 +409,8 @@ impl Runtime {
         ));
         let open_telemetry_server_future = tokio::spawn(opentelemetry::start(
             config.open_telemetry_bind_address,
-            Arc::clone(&self.df),
+            None,
+            None,
             tls_config.clone(),
             endpoint_auth.grpc_auth.clone(),
         ));

@@ -17,7 +17,6 @@ limitations under the License.
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use arrow::array::RecordBatch;
 use flight_client::Credentials;
 use flight_client::FlightClient;
 use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_server::MetricsService;
@@ -66,14 +65,27 @@ impl MetricsService for Service {
         request: Request<ExportMetricsServiceRequest>,
     ) -> std::result::Result<Response<ExportMetricsServiceResponse>, Status> {
         let request = request.into_inner();
-        let mut batches = Vec::new();
         for resource_metric in request.resource_metrics {
-            let mut converter = OtelToArrowConverter::new(resource_metric.scope_metrics.len());
-            let batch = converter.convert(&resource_metric)?;
-            batches.push(batch);
-        }
+            if let Some(resource) = resource_metric.resource {
+                let mut converter = OtelToArrowConverter::new(resource_metric.scope_metrics.len());
 
-        self.flight_client.publish("oss_telemetry", batches).await?;
+                let batch = converter
+                    .convert(&resource_metric)
+                    .map_err(|e| Status::internal(e.to_string()))?;
+                let name = resource
+                    .attributes
+                    .iter()
+                    .find(|attr| attr.key == "name")
+                    .map(|attr| attr.value.map(|v| v.to_string()))
+                    .flatten();
+                if let Some(name) = name {
+                    self.flight_client
+                        .publish(name, vec![batch])
+                        .await
+                        .map_err(|e| Status::internal(e.to_string()))?;
+                }
+            }
+        }
 
         Ok(Response::new(ExportMetricsServiceResponse {
             partial_success: None,
