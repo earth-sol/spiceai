@@ -48,6 +48,12 @@ sql> show tables
 	Run: func(cmd *cobra.Command, args []string) {
 		rtcontext := context.NewContext()
 
+		_, err := rtcontext.Version()
+		if err != nil {
+			slog.Error("Failed to run `spice sql`: The Spice runtime is not installed. Run `spice install` and retry.")
+			return
+		}
+
 		spiceArgs := []string{"--repl"}
 
 		if rootCertPath, err := cmd.Flags().GetString("tls-root-certificate-file"); err == nil && rootCertPath != "" {
