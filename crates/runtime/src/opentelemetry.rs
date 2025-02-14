@@ -80,7 +80,10 @@ impl MetricsService for Service {
             let name = sdk_resource_metric
                 .resource
                 .iter()
-                .find(|attr| *attr.0 == opentelemetry::Key::from_static_str("name"))
+                .find(|attr| {
+                    *attr.0 == opentelemetry::Key::from_static_str("name")
+                        || *attr.0 == opentelemetry::Key::from_static_str("service.name")
+                })
                 .map(|attr| attr.1.as_str());
             if let Some(name) = name {
                 flight_client
@@ -120,7 +123,7 @@ pub async fn start(
     {
         Ok(client) => client,
         Err(e) => {
-            tracing::trace!("Unable to initialize anonymous telemetry: {e}");
+            tracing::trace!("Unable to initialize telemetry flight client: {e}");
             return Err(Error::UnableToInitializeTelemetryExporter { source: e });
         }
     };

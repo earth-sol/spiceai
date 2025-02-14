@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use clap::Parser;
 use opentelemetry_proto::tonic::{
     collector::metrics::v1::{
@@ -46,11 +48,17 @@ pub struct Args {
     #[arg(long, value_name = "TLS_ROOT_CERTIFICATE_FILE")]
     pub tls_root_certificate_file: Option<String>,
 
+    /// Name of the resource to publish metrics for
+    #[arg(long, value_name = "RESOURCE_NAME", default_value = "test")]
+    pub resource_name: String,
+
     /// API key for the Open Telemetry endpoint
     #[arg(long, value_name = "API_KEY")]
     pub api_key: Option<String>,
 }
 
+#[allow(clippy::expect_used)]
+#[allow(clippy::cast_possible_truncation)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
@@ -79,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             attributes: vec![KeyValue {
                 key: "service.name".to_string(),
                 value: Some(AnyValue {
-                    value: Some(Value::StringValue("test".to_string())),
+                    value: Some(Value::StringValue(args.resource_name.clone())),
                 }),
             }],
             ..Default::default()
@@ -94,6 +102,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 data: Some(Data::Gauge(Gauge {
                     data_points: vec![NumberDataPoint {
                         value: Some(number_data_point::Value::AsInt(1)),
+                        time_unix_nano: SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .expect("Time went backwards")
+                            .as_nanos() as u64,
                         ..Default::default()
                     }],
                 })),
