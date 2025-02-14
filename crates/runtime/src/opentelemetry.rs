@@ -23,6 +23,7 @@ use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_server::
 use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_server::MetricsServiceServer;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceResponse;
+use otel_arrow::proto_to_sdk;
 use otel_arrow::OtelToArrowConverter;
 use runtime_auth::layer::grpc::make_interceptor;
 use runtime_auth::GrpcAuth;
@@ -42,6 +43,7 @@ use crate::tls::TlsConfig;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Snafu)]
 pub enum Error {
     #[snafu(display("Unable to serve: {source}"))]
@@ -64,26 +66,27 @@ impl MetricsService for Service {
         &self,
         request: Request<ExportMetricsServiceRequest>,
     ) -> std::result::Result<Response<ExportMetricsServiceResponse>, Status> {
+        let mut flight_client = self.flight_client.clone();
         let request = request.into_inner();
         for resource_metric in request.resource_metrics {
-            if let Some(resource) = resource_metric.resource {
-                let mut converter = OtelToArrowConverter::new(resource_metric.scope_metrics.len());
+            let mut converter = OtelToArrowConverter::new(resource_metric.scope_metrics.len());
 
-                let batch = converter
-                    .convert(&resource_metric)
+            let sdk_resource_metric = proto_to_sdk(resource_metric)
+                .map_err(|e| Status::invalid_argument(e.to_string()))?;
+
+            let batch = converter
+                .convert(&sdk_resource_metric)
+                .map_err(|e| Status::internal(e.to_string()))?;
+            let name = sdk_resource_metric
+                .resource
+                .iter()
+                .find(|attr| *attr.0 == opentelemetry::Key::from_static_str("name"))
+                .map(|attr| attr.1.as_str());
+            if let Some(name) = name {
+                flight_client
+                    .publish(&name, vec![batch])
+                    .await
                     .map_err(|e| Status::internal(e.to_string()))?;
-                let name = resource
-                    .attributes
-                    .iter()
-                    .find(|attr| attr.key == "name")
-                    .map(|attr| attr.value.map(|v| v.to_string()))
-                    .flatten();
-                if let Some(name) = name {
-                    self.flight_client
-                        .publish(name, vec![batch])
-                        .await
-                        .map_err(|e| Status::internal(e.to_string()))?;
-                }
             }
         }
 

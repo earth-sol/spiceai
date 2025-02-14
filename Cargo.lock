@@ -8396,7 +8396,9 @@ dependencies = [
  "arrow-buffer",
  "async-trait",
  "opentelemetry",
+ "opentelemetry-proto",
  "opentelemetry_sdk",
+ "snafu",
 ]
 
 [[package]]

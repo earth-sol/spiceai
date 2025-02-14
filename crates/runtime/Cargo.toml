@@ -84,11 +84,7 @@ object_store = { workspace = true, features = ["aws", "http", "azure"] }
 once_cell = "1.19.0"
 opentelemetry.workspace = true
 opentelemetry-prometheus.workspace = true
-opentelemetry-proto = { version = "0.27", features = [
-    "gen-tonic-messages",
-    "gen-tonic",
-    "metrics",
-] }
+opentelemetry-proto.workspace = true
 opentelemetry_sdk.workspace = true
 otel-arrow = { path = "../otel-arrow" }
 package = { path = "../package" }
