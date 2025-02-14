@@ -57,7 +57,7 @@ pub enum Error {
 }
 
 pub struct Service {
-    flight_client: FlightClient,
+    flight_client: Option<FlightClient>,
 }
 
 #[async_trait]
@@ -66,7 +66,9 @@ impl MetricsService for Service {
         &self,
         request: Request<ExportMetricsServiceRequest>,
     ) -> std::result::Result<Response<ExportMetricsServiceResponse>, Status> {
-        let mut flight_client = self.flight_client.clone();
+        let Some(mut flight_client) = self.flight_client.clone() else {
+            return Err(Status::internal("Telemetry flight client not initialized"));
+        };
         let request = request.into_inner();
         for resource_metric in request.resource_metrics {
             let mut converter = OtelToArrowConverter::new(resource_metric.scope_metrics.len());
@@ -121,10 +123,10 @@ pub async fn start(
     )
     .await
     {
-        Ok(client) => client,
+        Ok(client) => Some(client),
         Err(e) => {
             tracing::trace!("Unable to initialize telemetry flight client: {e}");
-            return Err(Error::UnableToInitializeTelemetryExporter { source: e });
+            None
         }
     };
     let service = Service { flight_client };
