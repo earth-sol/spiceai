@@ -222,7 +222,7 @@ impl Parameters {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Parameters {
     params: Vec<(String, SecretString)>,
     prefix: &'static str,

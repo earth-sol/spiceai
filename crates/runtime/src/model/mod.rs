@@ -24,6 +24,7 @@ mod chat;
 mod embed;
 mod eval;
 mod metrics;
+pub mod params;
 mod tool_use;
 mod wrapper;
 

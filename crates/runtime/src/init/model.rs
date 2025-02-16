@@ -17,8 +17,8 @@ limitations under the License.
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    get_params_with_secrets, metrics, model::ENABLE_MODEL_SUPPORT_MESSAGE, status,
-    timing::TimeMeasurement, Runtime,
+    get_params_with_secrets, metrics, model::params::ModelParamsBuilder,
+    model::ENABLE_MODEL_SUPPORT_MESSAGE, status, timing::TimeMeasurement, Runtime,
 };
 use app::App;
 use model_components::model::Model;
@@ -87,21 +87,21 @@ impl Runtime {
 
         tracing::info!("Loading model [{}] from {}...", m.name, m.from);
 
-        // TODO: Have downstream code using model parameters to accept `Hashmap<String, Value>`.
-        // This will require handling secrets with `Value` type.
-        let p = m
-            .params
-            .clone()
-            .iter()
-            .map(|(k, v)| {
-                let k = k.clone();
-                match v.as_str() {
-                    Some(s) => (k, s.to_string()),
-                    None => (k, v.to_string()),
-                }
-            })
-            .collect::<HashMap<_, _>>();
-        let params = get_params_with_secrets(self.secrets(), &p).await;
+        let model_params = match ModelParamsBuilder::new(Arc::new(m.clone()))
+            .build(self.secrets())
+            .await
+        {
+            Ok(params) => params,
+            Err(err) => {
+                metrics::models::LOAD_ERROR.add(1, &[]);
+                self.status
+                    .update_model(&model.name, status::ComponentStatus::Error);
+                tracing::warn!("{err}");
+                return;
+            }
+        };
+
+        let params = model_params.secret_params;
 
         if matches!(source, Some(ModelSource::File)) {
             // Verify all referenced local files exist before attempting to load the model and determine its type.

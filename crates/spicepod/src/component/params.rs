@@ -120,7 +120,8 @@ impl<'de> Deserialize<'de> for Params {
     where
         D: Deserializer<'de>,
     {
-        let params = HashMap::<String, ParamValue>::deserialize(deserializer)?;
+        let params: HashMap<String, ParamValue> =
+            HashMap::<String, ParamValue>::deserialize(deserializer)?;
         Ok(Params { data: params })
     }
 }

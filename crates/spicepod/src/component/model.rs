@@ -23,7 +23,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[cfg_attr(feature = "schemars", derive(JsonSchema))]
 pub struct Model {
     pub from: String,
