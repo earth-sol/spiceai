@@ -127,7 +127,7 @@ pub(crate) async fn get(
     } else {
         HashMap::default()
     };
-    let models = match app.read().await.as_ref() {
+    let mut models = match app.read().await.as_ref() {
         Some(a) => a
             .models
             .iter()
@@ -154,6 +154,24 @@ pub(crate) async fn get(
                 .into_response();
         }
     };
+
+    let agent_chat = match app.read().await.as_ref() {
+        Some(a) => match (a.objective.clone(), a.orchestrator.clone()) {
+            (Some(_objective), Some(_orchestrator)) => Some(OpenAIModel {
+                id: a.name.clone(),
+                object: "model".to_string(),
+                owned_by: "spiceai".to_string(),
+                datasets: None,
+                status: None,
+            }),
+            _ => None,
+        },
+        None => None,
+    };
+
+    if let Some(agent_chat) = agent_chat {
+        models.push(agent_chat);
+    }
 
     match params.format {
         Format::Json => (

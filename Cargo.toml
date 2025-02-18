@@ -2,6 +2,7 @@
 default-members = ["bin/spiced"]
 members = [
     "bin/spiced/",
+    "crates/agent-orchestrator",
     "crates/app",
     "crates/arrow_sql_gen",
     "crates/arrow_tools",

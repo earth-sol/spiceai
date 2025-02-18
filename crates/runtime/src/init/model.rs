@@ -14,12 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use crate::{
     get_params_with_secrets, metrics, model::ENABLE_MODEL_SUPPORT_MESSAGE, status,
     timing::TimeMeasurement, Runtime,
 };
+use agent_orchestrator::AgentChat;
 use app::App;
 use model_components::model::Model;
 use opentelemetry::KeyValue;
@@ -63,11 +67,23 @@ impl Runtime {
         // Load tools before loading models.
         self.load_tools().await;
 
+        let mut model_names = HashSet::new();
         if let Some(app) = app_lock.as_ref() {
             for model in &app.models {
                 self.status
                     .update_model(&model.name, status::ComponentStatus::Initializing);
+                model_names.insert(model.name.clone());
                 self.load_model(model).await;
+            }
+
+            match (app.objective.clone(), app.orchestrator.clone()) {
+                (Some(objective), Some(orchestrator)) => {
+                    let llms_clone = Arc::clone(&self.llms);
+                    let mut llm_map = self.llms.write().await;
+                    let agent_chat = AgentChat::new(objective, orchestrator, llms_clone);
+                    llm_map.insert(app.name.clone(), Box::new(agent_chat));
+                }
+                _ => {}
             }
         }
     }

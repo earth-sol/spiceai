@@ -62,6 +62,16 @@ pub struct SpicepodDefinition {
     /// The kind of Spicepod
     pub kind: SpicepodKind,
 
+    /// The objective of the Spicepod
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub objective: Option<String>,
+
+    /// The orchestrator of the Spicepod
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub orchestrator: Option<String>,
+
     /// Optional runtime configuration
     #[serde(default, skip_serializing_if = "is_default")]
     pub runtime: Runtime,

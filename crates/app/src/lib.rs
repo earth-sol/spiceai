@@ -42,6 +42,10 @@ pub mod runtime;
 pub struct App {
     pub name: String,
 
+    pub objective: Option<String>,
+
+    pub orchestrator: Option<String>,
+
     pub secrets: Vec<Secret>,
 
     pub extensions: HashMap<String, Extension>,
@@ -90,6 +94,8 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct AppBuilder {
     name: String,
+    objective: Option<String>,
+    orchestrator: Option<String>,
     secrets: Vec<Secret>,
     extensions: HashMap<String, Extension>,
     catalogs: Vec<Catalog>,
@@ -107,6 +113,8 @@ impl AppBuilder {
     pub fn new(name: impl Into<String>) -> AppBuilder {
         AppBuilder {
             name: name.into(),
+            objective: None,
+            orchestrator: None,
             secrets: vec![],
             extensions: HashMap::new(),
             catalogs: vec![],
@@ -224,6 +232,8 @@ impl AppBuilder {
     pub fn build(self) -> App {
         App {
             name: self.name,
+            objective: self.objective,
+            orchestrator: self.orchestrator,
             secrets: self.secrets,
             extensions: self.extensions,
             catalogs: self.catalogs,
@@ -316,10 +326,15 @@ impl AppBuilder {
             spicepods.push(dependent_spicepod);
         }
 
+        let objective = spicepod_root.objective.clone();
+        let orchestrator = spicepod_root.orchestrator.clone();
+
         spicepods.push(spicepod_root);
 
         Ok(App {
             name: root_spicepod_name,
+            objective,
+            orchestrator,
             secrets,
             extensions,
             catalogs,

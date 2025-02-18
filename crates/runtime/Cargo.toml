@@ -10,6 +10,7 @@ version.workspace = true
 
 [dependencies]
 app = { path = "../app" }
+agent-orchestrator = { path = "../agent-orchestrator" }
 arrow.workspace = true
 arrow-csv = "53.3.0"
 arrow-flight = { workspace = true, features = ["flight-sql-experimental"] }
