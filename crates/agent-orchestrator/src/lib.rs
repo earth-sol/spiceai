@@ -56,7 +56,13 @@ impl Chat for AgentChat {
                 self.orchestrator
             )));
         };
-        let Some(physical_planner_model) = llm.get("agentic_physical_planner") else {
+        let Some(physical_tool_planner_model) = llm.get("agentic_physical_tool_planner") else {
+            return Err(OpenAIError::InvalidArgument(format!(
+                "Model {} not found.",
+                self.orchestrator
+            )));
+        };
+        let Some(physical_prompt_planner_model) = llm.get("agentic_physical_prompt_planner") else {
             return Err(OpenAIError::InvalidArgument(format!(
                 "Model {} not found.",
                 self.orchestrator
@@ -75,12 +81,17 @@ impl Chat for AgentChat {
         );
 
         // Now build the initial physical plan
-        let logical_plan_chat_request = plan.to_chat_request()?;
-        let response = physical_planner_model
-            .chat_request(logical_plan_chat_request)
-            .await?;
+        // let logical_plan_chat_request = plan.to_chat_request()?;
+        // let response = physical_planner_model
+        //     .chat_request(logical_plan_chat_request)
+        //     .await?;
 
-        let physical_plan = PhysicalPlan::plan(&plan)?;
+        let physical_plan = PhysicalPlan::plan(
+            &plan,
+            physical_tool_planner_model,
+            physical_prompt_planner_model,
+        )
+        .await?;
 
         // let physical_plan = PhysicalPlan::from_chat_completion(&response)
         //     .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
