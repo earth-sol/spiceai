@@ -22,9 +22,10 @@ pub fn model(orchestrator: Model) -> Model {
 
         ## Refine the plan by adding physical steps if
         - add step to install Spice runtime using `curl https://install.spiceai.org | /bin/bash` shell command if plan provided includes Spice manipulation
-        - Assume Dremio environment is configured and remove any steps related to Dremio setup or configuration verification
+        - use `run_shell_command` tool and cd 'folder_name' when asked to navigate to a specific folder
+        - use `run_shell_command` and 'echo $?' action when asked to verify Check terminal output for a successful command such as login or similar
 
-        ## Update steps by selecting one of the tools from the list below or use 'unavailable' was not identified:
+        ## Update steps by selecting one of the tools from the list below or use 'unavailable' if the tool was not identified:
         - 'Puppeteer': Browser automation and web scraping.
         - 'Fetch': Web content fetching and conversion for efficient LLM usage.
         - 'git': Read, search, and manipulate Git repositories.
