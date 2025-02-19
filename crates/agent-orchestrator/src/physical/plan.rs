@@ -45,18 +45,23 @@ pub struct Task {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ToolStep {
+    pub description: String,
+    pub tool: String,
+    pub body: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PromptStep {
+    pub description: String,
+    pub prompt: String,
+    pub target_model: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Step {
-    Tool {
-        description: String,
-        tool: String,
-        body: String,
-    },
-    Prompt {
-        position: u64,
-        description: String,
-        prompt: String,
-        target_model: String,
-    },
+    Tool(ToolStep),
+    Prompt(PromptStep),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -106,6 +111,7 @@ impl PhysicalPlan {
 
     pub async fn plan_request(
         req: CreateChatCompletionRequest,
+        step_type: StepType,
         model: &Box<dyn Chat>,
     ) -> Result<Step, async_openai::error::OpenAIError> {
         let completion = model.chat_request(req).await?;
@@ -118,17 +124,20 @@ impl PhysicalPlan {
                 OpenAIError::InvalidArgument("Could not find choice response".to_string())
             })?;
 
-        let step: Step = serde_json::from_str(body)?;
-
-        #[allow(clippy::match_same_arms)]
-        match step {
-            Step::Tool { .. } => {
+        let step: Step = match step_type {
+            StepType::Tool => {
                 // TODO: validate the tool is valid and retry if not
+                Step::Tool(serde_json::from_str::<ToolStep>(body).map_err(|e| {
+                    OpenAIError::InvalidArgument(format!("Failed to parse tool step: {e}"))
+                })?)
             }
-            Step::Prompt { .. } => {
+            StepType::Prompt => {
                 // TODO: validate the selected model is valid and retry if not
+                Step::Prompt(serde_json::from_str::<PromptStep>(body).map_err(|e| {
+                    OpenAIError::InvalidArgument(format!("Failed to parse prompt step: {e}"))
+                })?)
             }
-        }
+        };
 
         Ok(step)
     }
@@ -144,21 +153,19 @@ impl PhysicalPlan {
         for task in &logical_plan.tasks {
             let mut steps: Vec<Step> = vec![];
             for step in &task.steps {
+                println!("Generating physical plan for step: {:?}", step.uuid);
                 match step.action.into() {
                     StepType::Tool => {
                         let req = Self::build_request(None, steps.as_slice(), step)?;
-                        steps.push(Self::plan_request(req, tool_planner).await?);
+                        steps.push(Self::plan_request(req, StepType::Tool, tool_planner).await?);
                     }
                     StepType::Prompt => {
                         let message = vec![ChatCompletionRequestMessage::System(
-                            format!(
-                                "The following models are available for selection: {}",
-                                model_names.join(", ")
-                            )
-                            .into(),
+                            "The following models are available for selection: o3-mini".into(), // update to the actual list of models, trimming the agentic models
                         )];
                         let req = Self::build_request(Some(message), steps.as_slice(), step)?;
-                        steps.push(Self::plan_request(req, prompt_planner).await?);
+                        steps
+                            .push(Self::plan_request(req, StepType::Prompt, prompt_planner).await?);
                     }
                 }
             }
