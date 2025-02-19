@@ -90,10 +90,12 @@ impl Runtime {
                 let logical_planner =
                     agentic_logical_planner::planner_model(orchestrator_model.clone());
                 model_names.insert(logical_planner.name.clone());
-                self.load_model(&logical_planner).await;
-
                 let agent_chat = AgentChat::new(objective, orchestrator, llms_clone);
                 llm_map.insert(app.name.clone(), Box::new(agent_chat));
+                drop(llm_map);
+
+                // This requires the lock on `llms` to be released before loading the logical planner.
+                self.load_model(&logical_planner).await;
             }
         }
     }
