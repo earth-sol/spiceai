@@ -76,6 +76,7 @@ impl Runtime {
                 self.load_model(model).await;
             }
 
+            // Agentic mode
             if let (Some(objective), Some(orchestrator)) =
                 (app.objective.clone(), app.orchestrator.clone())
             {

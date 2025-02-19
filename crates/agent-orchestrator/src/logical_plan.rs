@@ -1,3 +1,4 @@
+use async_openai::types::CreateChatCompletionResponse;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -58,6 +59,18 @@ impl LogicalPlan {
         });
 
         Ok(plan)
+    }
+
+    pub fn from_chat_completion(
+        completion: &CreateChatCompletionResponse,
+    ) -> Result<Self, anyhow::Error> {
+        let body = completion
+            .choices
+            .first()
+            .and_then(|choice| choice.message.content.as_ref())
+            .ok_or_else(|| anyhow::anyhow!("No content in the response"))?;
+
+        Ok(Self::new(body)?)
     }
 }
 

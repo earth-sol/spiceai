@@ -63,6 +63,7 @@ dependencies = [
 name = "agent-orchestrator"
 version = "1.1.0-unstable"
 dependencies = [
+ "anyhow",
  "async-openai",
  "async-trait",
  "llms",

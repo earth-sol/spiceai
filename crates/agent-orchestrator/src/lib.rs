@@ -60,6 +60,10 @@ impl Chat for AgentChat {
         };
 
         let response = model.chat_request(req).await?;
+        let plan = LogicalPlan::from_chat_completion(&response)
+            .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
+
+        println!("Logical plan: {:?}", plan);
 
         Ok(response)
     }
