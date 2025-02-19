@@ -7,8 +7,9 @@ use std::{collections::HashMap, sync::Arc};
 use async_openai::{
     error::OpenAIError,
     types::{
-        ChatCompletionRequestMessage, ChatCompletionRequestUserMessageContent,
-        CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
+        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageContent,
+        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequest,
+        CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
     },
 };
 use async_trait::async_trait;
@@ -48,7 +49,7 @@ impl Chat for AgentChat {
 
     async fn chat_request(
         &self,
-        req: CreateChatCompletionRequest,
+        mut req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
         let llm = self.llms.read().await;
         let Some(logical_planner_model) = llm.get("agentic_logical_planner") else {
@@ -64,13 +65,7 @@ impl Chat for AgentChat {
             )));
         };
 
-        let prompt = format!(
-            "{}\n{}",
-            self.objective,
-            extract_request_content(&req)
-                .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?
-        );
-        let req = build_user_request(prompt)?;
+        add_system_message(&mut req, self.objective.clone());
 
         let response = logical_planner_model.chat_request(req).await?;
         let plan = LogicalPlan::from_chat_completion(&response)
@@ -93,23 +88,44 @@ impl Chat for AgentChat {
     }
 }
 
-fn build_user_request(prompt: String) -> Result<CreateChatCompletionRequest, OpenAIError> {
-    CreateChatCompletionRequestArgs::default()
-        .messages(vec![ChatCompletionRequestMessage::User(prompt.into())])
-        .build()
+fn add_system_message(req: &mut CreateChatCompletionRequest, message: String) {
+    req.messages
+        .insert(0, ChatCompletionRequestMessage::System(message.into()));
 }
 
-fn extract_request_content(req: &CreateChatCompletionRequest) -> Result<String, anyhow::Error> {
-    match &req.messages[0] {
-        ChatCompletionRequestMessage::User(user_message) => match &user_message.content {
-            ChatCompletionRequestUserMessageContent::Text(content) => Ok(content.clone()),
-            ChatCompletionRequestUserMessageContent::Array(_) => {
-                Err(anyhow::anyhow!("Invalid message content type"))
-            }
-        },
-        _ => Err(anyhow::anyhow!("Invalid message type")),
-    }
-}
+// fn build_user_request(prompt: String) -> Result<CreateChatCompletionRequest, OpenAIError> {
+//     CreateChatCompletionRequestArgs::default()
+//         .messages(vec![ChatCompletionRequestMessage::User(prompt.into())])
+//         .build()
+// }
+
+// fn extract_request_content(req: &CreateChatCompletionRequest) -> Result<String, anyhow::Error> {
+//     let mut content = String::new();
+
+//     for message in &req.messages {
+//         match message {
+//             ChatCompletionRequestMessage::User(user_message) => match &user_message.content {
+//                 ChatCompletionRequestUserMessageContent::Text(user_message) => {
+//                     content.push_str(user_message);
+//                 }
+//                 ChatCompletionRequestUserMessageContent::Array(_) => {
+//                     return Err(anyhow::anyhow!("Invalid message content type"));
+//                 }
+//             },
+//             ChatCompletionRequestMessage::System(system_message) => match &system_message.content {
+//                 ChatCompletionRequestSystemMessageContent::Text(system_message) => {
+//                     content.push_str(system_message);
+//                 }
+//                 ChatCompletionRequestSystemMessageContent::Array(_) => {
+//                     return Err(anyhow::anyhow!("Invalid message content type"));
+//                 }
+//             },
+//             _ => return Err(anyhow::anyhow!("Invalid message type")),
+//         }
+//     }
+
+//     Ok(content)
+// }
 
 // pub struct AgentJobOrchestrator {
 //     // INPUTS
