@@ -105,19 +105,17 @@ pub fn construct_model(
     }?;
 
     // Handle runtime wrapping
-    let system_prompt_str = component
-        .params
-        .get("system_prompt")
-        .cloned()
-        .map(|s| s.to_string());
+    let system_prompt_str = component.params.get("system_prompt").cloned();
     let system_prompt = match (
         system_prompt_str,
         component.params.get("treat_system_prompt_as_template"),
     ) {
-        (Some(prompt_str), Some(serde_json::Value::Bool(true))) => {
+        (Some(serde_json::Value::String(prompt_str)), Some(serde_json::Value::Bool(true))) => {
             Some(SystemPromptPattern::Template(prompt_str))
         }
-        (Some(prompt_str), _) => Some(SystemPromptPattern::Preinsert(prompt_str)),
+        (Some(serde_json::Value::String(prompt_str)), _) => {
+            Some(SystemPromptPattern::Prepend(prompt_str))
+        }
         _ => None,
     };
     let wrapper = ChatWrapper::new(

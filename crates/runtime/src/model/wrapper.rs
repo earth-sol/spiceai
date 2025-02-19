@@ -65,8 +65,13 @@ macro_rules! set_default_w_warning {
 }
 
 pub enum SystemPromptPattern {
-    Preinsert(String),
+    /// Prepend the system prompt to the set of request messages. Existing system messages are unaffected.
+    Prepend(String),
+
+    /// Override the first system prompt in the request. If no system prompt exists, it will be prepended.
     Override(String),
+
+    /// Replace all instances of `{key}` in the system prompt with the corresponding value in the request's metadata.
     Template(String),
 }
 
@@ -108,7 +113,7 @@ impl ChatWrapper {
         mut req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionRequest, OpenAIError> {
         match self.system_prompt.as_ref() {
-            Some(SystemPromptPattern::Preinsert(prompt)) => {
+            Some(SystemPromptPattern::Prepend(prompt)) => {
                 let system_message = ChatCompletionRequestSystemMessageArgs::default()
                     .content(prompt.clone())
                     .build()?;
@@ -128,11 +133,13 @@ impl ChatWrapper {
             }
             Some(SystemPromptPattern::Template(prompt)) => {
                 let mut new_prompt = prompt.clone();
-
                 if let Some(serde_json::Value::Object(m)) = req.metadata.as_ref() {
                     for (from, to) in m {
-                        new_prompt = new_prompt
-                            .replace(format!("{{{from}}}").as_str(), to.to_string().as_str());
+                        if let serde_json::Value::String(inner_to) = to {
+                            // basic Jinja-like templating. "{{from}}" -> "inner_to"
+                            new_prompt =
+                                new_prompt.replace(format!("{{{{{from}}}}}").as_str(), inner_to);
+                        }
                     }
                 }
                 let system_message = ChatCompletionRequestSystemMessageArgs::default()
