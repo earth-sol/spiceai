@@ -45,8 +45,35 @@ pub struct Step {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolType {
-    ChangeDirectory,
+    // Web tools
+    Puppeteer,
+    Fetch,
+    Git,
+
+    // File system tools
     CreateDirectory,
+    DirectoryTree,
+    EditFile,
+    GetFileInfo,
+    ListAllowedDirectories,
+    ListDirectory,
+    MoveFile,
+    ReadFile,
+    ReadMultipleFiles,
+    SearchFiles,
+    WriteFile,
+
+    // Terminal tools
+    #[serde(rename = "iterm-mcp::write_to_terminal")]
+    ItermWriteToTerminal,
+    #[serde(rename = "iterm-mcp::read_terminal_output")]
+    ItermReadTerminalOutput,
+    #[serde(rename = "iterm-mcp::send_control_character")]
+    ItermSendControlCharacter,
+    RunShellCommand,
+
+    // Legacy/existing tools
+    ChangeDirectory,
     ReadObject,
     WriteObject,
     ExecuteTerminal,

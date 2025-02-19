@@ -31,11 +31,29 @@ json_schema:
                   tool:
                     description: |
                       The specific tool name to use.
-                      For exampple, 'read_file', 'run_shell_command'.
+                      For example, 'read_file', 'run_shell_command', etc.
                     type: string
                     enum:
-                      - change_directory
+                      - Puppeteer
+                      - Fetch
+                      - git
                       - create_directory
+                      - directory_tree
+                      - edit_file
+                      - fetch
+                      - get_file_info
+                      - list_allowed_directories
+                      - list_directory
+                      - move_file
+                      - read_file
+                      - read_multiple_files
+                      - run_shell_command
+                      - search_files
+                      - iterm-mcp::write_to_terminal
+                      - iterm-mcp::read_terminal_output
+                      - iterm-mcp::send_control_character
+                      - write_file
+                      - change_directory
                       - read_object
                       - write_object
                       - execute_terminal
@@ -54,7 +72,7 @@ json_schema:
                 required:
                   - position
                   - description
-                  - type
+                  - tool
                   - action
                 additionalProperties: false
           required:
