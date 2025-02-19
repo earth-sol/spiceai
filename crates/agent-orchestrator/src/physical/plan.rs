@@ -1,7 +1,8 @@
 use async_openai::{
     error::OpenAIError,
     types::{
-        ChatCompletionRequestMessage, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
+        ChatCompletionRequestMessage, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+        CreateChatCompletionResponse,
     },
 };
 use llms::chat::Chat;
@@ -83,12 +84,11 @@ impl From<Action> for StepType {
 }
 
 impl PhysicalPlan {
-    pub async fn tool_plan_request(
-        preivous_steps: &[Step],
+    pub fn build_request(
+        previous_steps: &[Step],
         step: &logical::plan::Step,
-        model: &Box<dyn Chat>,
-    ) -> Result<Step, async_openai::error::OpenAIError> {
-        let previous_steps_body = serde_json::to_string(preivous_steps)?;
+    ) -> Result<CreateChatCompletionRequest, OpenAIError> {
+        let previous_steps_body = serde_json::to_string(previous_steps)?;
         let previous_steps_message = ChatCompletionRequestMessage::System(format!("The following steps have already been generated. For the purposes of this step, assume the previous steps have already been run successfully. Previous steps: {previous_steps_body}").into());
 
         let body = serde_json::to_string(step)?;
@@ -99,6 +99,15 @@ impl PhysicalPlan {
             ])
             .build()?;
 
+        Ok(req)
+    }
+
+    pub async fn plan_request(
+        previous_steps: &[Step],
+        step: &logical::plan::Step,
+        model: &Box<dyn Chat>,
+    ) -> Result<Step, async_openai::error::OpenAIError> {
+        let req = Self::build_request(previous_steps, step)?;
         let completion = model.chat_request(req).await?;
 
         let body = completion
@@ -109,11 +118,19 @@ impl PhysicalPlan {
                 OpenAIError::InvalidArgument("Could not find choice response".to_string())
             })?;
 
-        let tool: Step = serde_json::from_str(body)?;
+        let step: Step = serde_json::from_str(body)?;
 
-        // TODO: validate the tool is valid and retry if not
+        #[allow(clippy::match_same_arms)]
+        match step {
+            Step::Tool { .. } => {
+                // TODO: validate the tool is valid and retry if not
+            }
+            Step::Prompt { .. } => {
+                // TODO: validate the selected model is valid and retry if not
+            }
+        }
 
-        Ok(tool)
+        Ok(step)
     }
 
     pub async fn plan(
@@ -128,12 +145,12 @@ impl PhysicalPlan {
             for step in &task.steps {
                 match step.action.into() {
                     StepType::Tool => {
-                        steps.push(
-                            Self::tool_plan_request(steps.as_slice(), step, tool_planner).await?,
-                        );
+                        steps.push(Self::plan_request(steps.as_slice(), step, tool_planner).await?);
                     }
                     StepType::Prompt => {
-                        todo!(); // call the prompt physical planner
+                        steps.push(
+                            Self::plan_request(steps.as_slice(), step, prompt_planner).await?,
+                        );
                     }
                 }
             }
