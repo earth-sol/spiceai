@@ -9,7 +9,7 @@ pub fn model(orchestrator: Model) -> Model {
         model.params.insert(param.0, param.1);
     }
 
-    let yaml_str = include_str!("openai_response_format.yaml");
+    let yaml_str = include_str!("tool_response_format.yaml");
     let yaml_value: serde_json::Value =
         serde_yaml::from_str(yaml_str).expect("Failed to parse YAML");
 
