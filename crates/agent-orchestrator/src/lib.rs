@@ -80,7 +80,7 @@ impl Chat for AgentChat {
             .chat_request(logical_plan_chat_request)
             .await?;
 
-        let physical_plan = PhysicalPlan::plan(plan)?;
+        let physical_plan = PhysicalPlan::plan(&plan)?;
 
         // let physical_plan = PhysicalPlan::from_chat_completion(&response)
         //     .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;

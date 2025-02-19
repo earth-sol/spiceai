@@ -1,7 +1,7 @@
 use async_openai::types::CreateChatCompletionResponse;
 use serde::{Deserialize, Serialize};
 
-use crate::logical::plan::LogicalPlan;
+use crate::logical::plan::{Action, LogicalPlan};
 
 impl PhysicalPlan {
     pub fn new(body: &str) -> Result<Self, serde_json::Error> {
@@ -25,12 +25,11 @@ impl PhysicalPlan {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PhysicalPlan {
-    pub groups: Vec<ActionGroup>,
+    pub tasks: Vec<Task>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ActionGroup {
-    pub position: u64,
+pub struct Task {
     pub objective: String,
     pub steps: Vec<Step>,
 }
@@ -38,7 +37,6 @@ pub struct ActionGroup {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Step {
     Tool {
-        position: u64,
         description: String,
         tool: String,
         body: String,
@@ -51,51 +49,47 @@ pub enum Step {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolType {
-    // Web tools
-    Puppeteer,
-    Fetch,
-    Git,
+#[derive(Debug, Clone, Copy)]
+pub enum StepType {
+    Tool,
+    Prompt,
+}
 
-    // File system tools
-    CreateDirectory,
-    DirectoryTree,
-    EditFile,
-    GetFileInfo,
-    ListAllowedDirectories,
-    ListDirectory,
-    MoveFile,
-    ReadFile,
-    ReadMultipleFiles,
-    SearchFiles,
-    WriteFile,
-
-    // Terminal tools
-    #[serde(rename = "iterm-mcp::write_to_terminal")]
-    ItermWriteToTerminal,
-    #[serde(rename = "iterm-mcp::read_terminal_output")]
-    ItermReadTerminalOutput,
-    #[serde(rename = "iterm-mcp::send_control_character")]
-    ItermSendControlCharacter,
-    RunShellCommand,
-
-    // Legacy/existing tools
-    ChangeDirectory,
-    ReadObject,
-    WriteObject,
-    ExecuteTerminal,
-    Other,
-    Response,
-    RequestForInfo,
-    RetrieveMetadata,
-    Validation,
-    Improvement,
+impl From<Action> for StepType {
+    fn from(action: Action) -> Self {
+        match action {
+            Action::ChangeDirectory
+            | Action::CreateDirectory
+            | Action::ReadObject
+            | Action::WriteObject
+            | Action::ExecuteTerminal => StepType::Tool,
+            Action::Other
+            | Action::Response
+            | Action::RequestForInfo
+            | Action::RetrieveMetadata
+            | Action::Validation
+            | Action::Improvement => StepType::Prompt,
+        }
+    }
 }
 
 impl PhysicalPlan {
-    pub fn plan(_logical_plan: LogicalPlan) -> Result<Self, async_openai::error::OpenAIError> {
+    pub fn plan(logical_plan: &LogicalPlan) -> Result<Self, async_openai::error::OpenAIError> {
+        // for each task, convert the list of steps from the logical plan based on their StepType
+        let tasks: Vec<Task> = vec![];
+        for task in &logical_plan.tasks {
+            let steps: Vec<Step> = vec![];
+            for step in &task.steps {
+                match step.action.into() {
+                    StepType::Tool => {
+                        todo!(); // call the task physical planner
+                    }
+                    StepType::Prompt => {
+                        todo!(); // call the prompt physical planner
+                    }
+                }
+            }
+        }
         todo!();
     }
 }
