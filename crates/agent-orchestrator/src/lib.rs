@@ -71,7 +71,10 @@ impl Chat for AgentChat {
         let plan = LogicalPlan::from_chat_completion(&response)
             .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
 
-        println!("Logical plan: {:?}", plan);
+        println!(
+            "Logical plan: {}",
+            serde_json::to_string(&plan).expect("Failed to serialize logical plan")
+        );
 
         // Now build the initial physical plan
         let logical_plan_chat_request = plan.to_chat_request()?;
@@ -82,7 +85,10 @@ impl Chat for AgentChat {
         let physical_plan = PhysicalPlan::from_chat_completion(&response)
             .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
 
-        println!("Physical plan: {:?}", physical_plan);
+        println!(
+            "Physical plan: {}",
+            serde_json::to_string(&physical_plan).expect("Failed to serialize physical plan")
+        );
 
         Ok(response)
     }
