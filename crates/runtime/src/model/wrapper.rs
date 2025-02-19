@@ -21,7 +21,7 @@ use async_openai::{
     types::{
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
         ChatCompletionResponseStream, ChatCompletionStreamOptions, CreateChatCompletionRequest,
-        CreateChatCompletionResponse,
+        CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
     },
 };
 use async_trait::async_trait;
@@ -39,7 +39,7 @@ use super::metrics::request_labels;
 pub struct ChatWrapper {
     pub public_name: String,
     pub chat: Box<dyn Chat>,
-    pub system_prompt: Option<String>,
+    pub system_prompt: Option<SystemPromptPattern>,
     pub defaults: Vec<(String, serde_json::Value)>,
 }
 
@@ -64,11 +64,17 @@ macro_rules! set_default_w_warning {
     };
 }
 
+pub enum SystemPromptPattern {
+    Preinsert(String),
+    Override(String),
+    Template(String),
+}
+
 impl ChatWrapper {
     pub fn new(
         chat: Box<dyn Chat>,
         public_name: &str,
-        system_prompt: Option<String>,
+        system_prompt: Option<SystemPromptPattern>,
         defaults: Vec<(String, serde_json::Value)>,
     ) -> Self {
         let s = Self {
@@ -101,13 +107,43 @@ impl ChatWrapper {
         &self,
         mut req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionRequest, OpenAIError> {
-        if let Some(prompt) = self.system_prompt.clone() {
-            let system_message = ChatCompletionRequestSystemMessageArgs::default()
-                .content(prompt)
-                .build()?;
-            req.messages
-                .insert(0, ChatCompletionRequestMessage::System(system_message));
+        match self.system_prompt.as_ref() {
+            Some(SystemPromptPattern::Preinsert(prompt)) => {
+                let system_message = ChatCompletionRequestSystemMessageArgs::default()
+                    .content(prompt.clone())
+                    .build()?;
+                req.messages
+                    .insert(0, ChatCompletionRequestMessage::System(system_message));
+            }
+            Some(SystemPromptPattern::Override(prompt)) => {
+                let system_message = ChatCompletionRequestSystemMessageArgs::default()
+                    .content(prompt.clone())
+                    .build()?;
+                if let Some(ChatCompletionRequestMessage::System(_)) = req.messages.first() {
+                    req.messages[0] = ChatCompletionRequestMessage::System(system_message);
+                } else {
+                    req.messages
+                        .insert(0, ChatCompletionRequestMessage::System(system_message));
+                }
+            }
+            Some(SystemPromptPattern::Template(prompt)) => {
+                let mut new_prompt = prompt.clone();
+
+                if let Some(serde_json::Value::Object(m)) = req.metadata.as_ref() {
+                    for (from, to) in m {
+                        new_prompt = new_prompt
+                            .replace(format!("{{{from}}}").as_str(), to.to_string().as_str());
+                    }
+                }
+                let system_message = ChatCompletionRequestSystemMessageArgs::default()
+                    .content(new_prompt)
+                    .build()?;
+                req.messages
+                    .insert(0, ChatCompletionRequestMessage::System(system_message));
+            }
+            None => {}
         }
+
         Ok(req)
     }
 
@@ -235,8 +271,8 @@ impl Chat for ChatWrapper {
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
         let start = Instant::now();
 
-        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "ai_completion", stream=false, model = %req.model, input = %serde_json::to_string(&req).unwrap_or_default());
         let req = self.prepare_req(req)?;
+        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "ai_completion", stream=false, model = %req.model, input = %serde_json::to_string(&req).unwrap_or_default());
 
         let labels = request_labels(&req);
         if let Some(metadata) = &req.metadata {
