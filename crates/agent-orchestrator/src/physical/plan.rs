@@ -28,18 +28,25 @@ pub struct PhysicalPlan {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ActionGroup {
-    pub position: f64,
+    pub position: u64,
     pub objective: String,
     pub steps: Vec<Step>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Step {
-    pub position: f64,
-    pub description: String,
-    #[serde(rename = "tool")]
-    pub tool_type: ToolType,
-    pub action: String,
+pub enum Step {
+    Tool {
+        position: u64,
+        description: String,
+        tool: ToolType,
+        action: String,
+    },
+    Prompt {
+        position: u64,
+        description: String,
+        prompt: String,
+        target_model: String,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
