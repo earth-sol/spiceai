@@ -1,12 +1,6 @@
 use async_openai::types::CreateChatCompletionResponse;
 use serde::{Deserialize, Serialize};
 
-/// Represents a physical execution plan containing ordered groups of steps
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PhysicalPlan {
-    pub groups: Vec<Group>,
-}
-
 impl PhysicalPlan {
     pub fn new(body: &str) -> Result<Self, serde_json::Error> {
         let plan: PhysicalPlan = serde_json::from_str(body)?;
@@ -27,35 +21,28 @@ impl PhysicalPlan {
     }
 }
 
-/// A group of related steps working towards a specific objective
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Group {
-    /// The numerical order of this group, starting from 1
-    pub position: i64,
-    /// The objective this group of steps should achieve
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PhysicalPlan {
+    pub groups: Vec<ActionGroup>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ActionGroup {
+    pub position: f64,
     pub objective: String,
-    /// The ordered list of steps to execute
     pub steps: Vec<Step>,
 }
 
-/// A single executable step in the physical plan
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Step {
-    /// The numerical order of this step, starting from 1
-    pub position: i64,
-    /// Description of what this step does
+    pub position: f64,
     pub description: String,
-    /// The type of tool to use for this step
-    #[serde(rename = "type")]
-    pub tool: ToolType,
-    /// The specific action to perform
-    /// For execute_terminal, this is the command to run
-    /// For change_directory, this is the relative path
+    #[serde(rename = "tool")]
+    pub tool_type: ToolType,
     pub action: String,
 }
 
-/// The available types of tools that can be used in a step
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolType {
     ChangeDirectory,
