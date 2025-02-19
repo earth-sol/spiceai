@@ -85,29 +85,29 @@ impl From<Action> for StepType {
 
 impl PhysicalPlan {
     pub fn build_request(
+        messages: Option<Vec<ChatCompletionRequestMessage>>,
         previous_steps: &[Step],
         step: &logical::plan::Step,
     ) -> Result<CreateChatCompletionRequest, OpenAIError> {
+        let mut messages = messages.unwrap_or_default();
+
         let previous_steps_body = serde_json::to_string(previous_steps)?;
         let previous_steps_message = ChatCompletionRequestMessage::System(format!("The following steps have already been generated. For the purposes of this step, assume the previous steps have already been run successfully. Previous steps: {previous_steps_body}").into());
+        messages.push(previous_steps_message);
 
         let body = serde_json::to_string(step)?;
+        messages.push(ChatCompletionRequestMessage::User(body.into()));
         let req = CreateChatCompletionRequestArgs::default()
-            .messages(vec![
-                previous_steps_message,
-                ChatCompletionRequestMessage::User(body.into()),
-            ])
+            .messages(messages)
             .build()?;
 
         Ok(req)
     }
 
     pub async fn plan_request(
-        previous_steps: &[Step],
-        step: &logical::plan::Step,
+        req: CreateChatCompletionRequest,
         model: &Box<dyn Chat>,
     ) -> Result<Step, async_openai::error::OpenAIError> {
-        let req = Self::build_request(previous_steps, step)?;
         let completion = model.chat_request(req).await?;
 
         let body = completion
@@ -137,6 +137,7 @@ impl PhysicalPlan {
         logical_plan: &LogicalPlan,
         tool_planner: &Box<dyn Chat>,
         prompt_planner: &Box<dyn Chat>,
+        model_names: Vec<String>,
     ) -> Result<Self, async_openai::error::OpenAIError> {
         // for each task, convert the list of steps from the logical plan based on their StepType
         let mut tasks: Vec<Task> = vec![];
@@ -145,12 +146,19 @@ impl PhysicalPlan {
             for step in &task.steps {
                 match step.action.into() {
                     StepType::Tool => {
-                        steps.push(Self::plan_request(steps.as_slice(), step, tool_planner).await?);
+                        let req = Self::build_request(None, steps.as_slice(), step)?;
+                        steps.push(Self::plan_request(req, tool_planner).await?);
                     }
                     StepType::Prompt => {
-                        steps.push(
-                            Self::plan_request(steps.as_slice(), step, prompt_planner).await?,
-                        );
+                        let message = vec![ChatCompletionRequestMessage::System(
+                            format!(
+                                "The following models are available for selection: {}",
+                                model_names.join(", ")
+                            )
+                            .into(),
+                        )];
+                        let req = Self::build_request(Some(message), steps.as_slice(), step)?;
+                        steps.push(Self::plan_request(req, prompt_planner).await?);
                     }
                 }
             }

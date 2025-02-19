@@ -69,6 +69,8 @@ impl Chat for AgentChat {
             )));
         };
 
+        let model_names = llm.keys().map(String::clone).collect::<Vec<String>>();
+
         add_system_message(&mut req, self.objective.clone());
 
         let response = logical_planner_model.chat_request(req).await?;
@@ -80,21 +82,13 @@ impl Chat for AgentChat {
             serde_json::to_string_pretty(&plan).expect("Failed to serialize logical plan")
         );
 
-        // Now build the initial physical plan
-        // let logical_plan_chat_request = plan.to_chat_request()?;
-        // let response = physical_planner_model
-        //     .chat_request(logical_plan_chat_request)
-        //     .await?;
-
         let physical_plan = PhysicalPlan::plan(
             &plan,
             physical_tool_planner_model,
             physical_prompt_planner_model,
+            model_names,
         )
         .await?;
-
-        // let physical_plan = PhysicalPlan::from_chat_completion(&response)
-        //     .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
 
         println!(
             "Physical plan: {}",

@@ -17,15 +17,10 @@ pub fn prompt_planner_model(orchestrator: Model) -> Model {
         .params
         .insert("openai_response_format".to_string(), yaml_value);
 
-    model.params.insert("system_prompt".to_string(), serde_json::Value::String("You are an agentic planner responsible to provide clear guidelines for the physical steps required to complete the task.
-        Given a logical plan you are tasked to create updated physical plan to accomplish steps in the logical plan.
+    model.params.insert("system_prompt".to_string(), serde_json::Value::String("
+        You are an agentic task planner. Given a logical plan step input, you are tasked to provide a prompt text to run with a chat completion against the specified model.
 
-       ## Refine the plan by adding physical steps
-        - add step to install Spice runtime using `curl https://install.spiceai.org | /bin/bash` shell command if plan provided includes Spice manipulation
-        - use `run_shell_command` tool and cd 'folder_name' when asked to navigate to a specific folder
-        - use `run_shell_command` and 'echo $?' action when asked to verify Check terminal output for a successful command such as login or similar
-
-        ## Retrive available tools and update all steps by selecting one of the tool available. Must select a tool for each action.".to_string()));
+        Ensure the model you select is appropriate for the given task, and the prompt text is relevant to the task at hand.".to_string()));
 
     model
 }
@@ -47,15 +42,15 @@ pub fn tool_planner_model(orchestrator: Model) -> Model {
         .insert("openai_response_format".to_string(), yaml_value);
 
     model.params.insert("system_prompt".to_string(), serde_json::Value::String("
-        You are an agentic planner responsible to provide clear guidelines for the physical steps required to complete the task.
-        Given a logical plan you are tasked to create updated physical plan to accomplish steps in the logical plan.
+        You are an agentic task planner. Given a logical plan step input, you are tasked to provide the tool required to accomplish the step.
 
-       ## Refine the plan by adding physical steps
-        - add step to install Spice runtime using `curl https://install.spiceai.org | /bin/bash` shell command if plan provided includes Spice manipulation
+        Before providing the tool response, ensure you retrieve the list of all available tools and verify the tool is valid and available for the task.
+        You are responsible for generating the JSON body for the tool input, and the body should be referenced against the tool schema.
+
+
+       ## Refining task steps
         - use `run_shell_command` tool and cd 'folder_name' when asked to navigate to a specific folder
-        - use `run_shell_command` and 'echo $?' action when asked to verify Check terminal output for a successful command such as login or similar
-
-        ## Retrive available tools and update all steps by selecting one of the tool available. Must select a tool for each action.".to_string()));
+        - use `run_shell_command` and 'echo $?' action when asked to verify Check terminal output for a successful command such as login or similar".to_string()));
 
     model
 }
