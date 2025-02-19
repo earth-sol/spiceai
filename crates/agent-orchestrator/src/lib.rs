@@ -10,7 +10,8 @@ use async_openai::{
         ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent,
         ChatCompletionResponseMessage, ChatCompletionResponseStream,
         ChatCompletionStreamResponseDelta, CreateChatCompletionRequest,
-        CreateChatCompletionResponse, CreateChatCompletionStreamResponse, Role,
+        CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
+        CreateChatCompletionStreamResponse, Role,
     },
 };
 use async_trait::async_trait;
@@ -59,6 +60,14 @@ impl Chat for AgentChat {
             )));
         };
 
+        let prompt = format!(
+            "{}\n{}",
+            self.objective,
+            extract_request_content(&req)
+                .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?
+        );
+        let req = build_user_request(prompt)?;
+
         let response = model.chat_request(req).await?;
         let plan = LogicalPlan::from_chat_completion(&response)
             .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
@@ -66,6 +75,24 @@ impl Chat for AgentChat {
         println!("Logical plan: {:?}", plan);
 
         Ok(response)
+    }
+}
+
+fn build_user_request(prompt: String) -> Result<CreateChatCompletionRequest, OpenAIError> {
+    CreateChatCompletionRequestArgs::default()
+        .messages(vec![ChatCompletionRequestMessage::User(prompt.into())])
+        .build()
+}
+
+fn extract_request_content(req: &CreateChatCompletionRequest) -> Result<String, anyhow::Error> {
+    match &req.messages[0] {
+        ChatCompletionRequestMessage::User(user_message) => match &user_message.content {
+            ChatCompletionRequestUserMessageContent::Text(content) => Ok(content.clone()),
+            ChatCompletionRequestUserMessageContent::Array(_) => {
+                Err(anyhow::anyhow!("Invalid message content type"))
+            }
+        },
+        _ => Err(anyhow::anyhow!("Invalid message type")),
     }
 }
 
