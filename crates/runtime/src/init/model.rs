@@ -25,7 +25,8 @@ use crate::{
 };
 use agent_orchestrator::{
     logical::planner::model as logical_planner_model,
-    physical::planner::model as physical_planner_model, AgentChat,
+    physical::planner::prompt_planner_model as physical_prompt_planner_model,
+    physical::planner::tool_planner_model as physical_tool_planner_model, AgentChat,
 };
 use app::App;
 use model_components::model::Model;
@@ -93,15 +94,19 @@ impl Runtime {
                 };
                 let logical_planner = logical_planner_model(orchestrator_model.clone());
                 model_names.insert(logical_planner.name.clone());
-                let physical_planner = physical_planner_model(orchestrator_model.clone());
-                model_names.insert(physical_planner.name.clone());
+                let physical_prompt_planner =
+                    physical_prompt_planner_model(orchestrator_model.clone());
+                model_names.insert(physical_prompt_planner.name.clone());
+                let physical_tool_planner = physical_tool_planner_model(orchestrator_model.clone());
+                model_names.insert(physical_tool_planner.name.clone());
                 let agent_chat = AgentChat::new(objective, orchestrator, llms_clone);
                 llm_map.insert(app.name.clone(), Box::new(agent_chat));
                 drop(llm_map);
 
                 // This requires the lock on `llms` to be released before loading the logical/physical planners.
                 self.load_model(&logical_planner).await;
-                self.load_model(&physical_planner).await;
+                self.load_model(&physical_prompt_planner).await;
+                self.load_model(&physical_tool_planner).await;
             }
         }
     }
