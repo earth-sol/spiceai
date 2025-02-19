@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LogicalPlan {
-    pub tasks: Vec<Stage>,
+    pub tasks: Vec<Task>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -106,13 +106,13 @@ mod test {
                         {
                             "description": "Change to temporary directory",
                             "tags": ["filesystem"],
-                            "command": "change_directory",
-                            "command_string": "/tmp"
+                            "action": "change_directory",
+                            "input": "/tmp"
                         },
                         {
                             "description": "Create test directory",
-                            "command": "create_directory",
-                            "command_string": "/tmp/test"
+                            "action": "create_directory",
+                            "input": "/tmp/test"
                         }
                     ]
                 }
@@ -141,8 +141,8 @@ mod test {
                         {
                             "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
                             "description": "Step 1",
-                            "command": "change_directory",
-                            "command_string": "/tmp"
+                            "action": "change_directory",
+                            "input": "/tmp"
                         }
                     ]
                 }

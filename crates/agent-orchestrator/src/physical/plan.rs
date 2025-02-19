@@ -1,6 +1,8 @@
 use async_openai::types::CreateChatCompletionResponse;
 use serde::{Deserialize, Serialize};
 
+use crate::logical::plan::LogicalPlan;
+
 impl PhysicalPlan {
     pub fn new(body: &str) -> Result<Self, serde_json::Error> {
         let plan: PhysicalPlan = serde_json::from_str(body)?;
@@ -38,7 +40,7 @@ pub enum Step {
     Tool {
         position: u64,
         description: String,
-        tool: ToolType,
+        tool: String,
         body: String,
     },
     Prompt {
@@ -90,4 +92,10 @@ pub enum ToolType {
     RetrieveMetadata,
     Validation,
     Improvement,
+}
+
+impl PhysicalPlan {
+    pub fn plan(_logical_plan: LogicalPlan) -> Result<Self, async_openai::error::OpenAIError> {
+        todo!();
+    }
 }
