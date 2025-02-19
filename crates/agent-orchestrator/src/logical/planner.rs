@@ -35,7 +35,6 @@ pub fn model(orchestrator: Model) -> Model {
         - `read_object`: File/object content reading
         - `write_object`: File/object content writing
         - `execute_terminal`: Shell command execution (must be complete and valid)
-        - `write_stdio`: Interactive command I/O handling
         - `retrieve_metadata`: System/object metadata gathering
         - `validation`: State/data verification
         - `improvement`: System optimization proposals

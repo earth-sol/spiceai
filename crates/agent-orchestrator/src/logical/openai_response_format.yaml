@@ -33,7 +33,7 @@ json_schema:
                     items:
                       type: string
                   action:
-                    description: The command of the action to be taken
+                    description: The type of action to be taken
                     type: string
                     enum:
                       - change_directory

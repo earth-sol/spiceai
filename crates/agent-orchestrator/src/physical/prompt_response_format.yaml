@@ -4,9 +4,6 @@ json_schema:
   schema:
     type: object
     properties:
-      description:
-        description: A description of the step to be taken
-        type: string
       prompt:
         description: The text content of the prompt to provide to the model for a completion
         type: string
@@ -14,7 +11,6 @@ json_schema:
         description: The name of the model to target for the completion
         type: string
     required:
-      - description
       - tool
       - action
     additionalProperties: false

@@ -46,14 +46,12 @@ pub struct Task {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ToolStep {
-    pub description: String,
     pub tool: String,
     pub body: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PromptStep {
-    pub description: String,
     pub prompt: String,
     pub target_model: String,
 }
