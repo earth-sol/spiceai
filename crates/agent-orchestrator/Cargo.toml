@@ -13,6 +13,7 @@ snafu.workspace = true
 spicepod = { path = "../spicepod" }
 serde.workspace = true
 serde_json.workspace = true
+serde_yaml.workspace = true
 llms = { path = "../llms" }
 async-trait.workspace = true
 async-openai.workspace = true

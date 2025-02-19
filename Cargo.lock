@@ -68,6 +68,7 @@ dependencies = [
  "llms",
  "serde",
  "serde_json",
+ "serde_yaml",
  "snafu",
  "spicepod",
  "tokio",

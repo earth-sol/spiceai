@@ -18,6 +18,7 @@ use llms::chat::{nsql::SqlGeneration, Chat};
 use logical_plan::LogicalPlan;
 use tokio::sync::RwLock;
 
+pub mod agentic_logical_planner;
 mod logical_plan;
 
 pub struct AgentChat {

@@ -23,7 +23,7 @@ use crate::{
     get_params_with_secrets, metrics, model::ENABLE_MODEL_SUPPORT_MESSAGE, status,
     timing::TimeMeasurement, Runtime,
 };
-use agent_orchestrator::AgentChat;
+use agent_orchestrator::{agentic_logical_planner, AgentChat};
 use app::App;
 use model_components::model::Model;
 use opentelemetry::KeyValue;
@@ -76,14 +76,24 @@ impl Runtime {
                 self.load_model(model).await;
             }
 
-            match (app.objective.clone(), app.orchestrator.clone()) {
-                (Some(objective), Some(orchestrator)) => {
-                    let llms_clone = Arc::clone(&self.llms);
-                    let mut llm_map = self.llms.write().await;
-                    let agent_chat = AgentChat::new(objective, orchestrator, llms_clone);
-                    llm_map.insert(app.name.clone(), Box::new(agent_chat));
-                }
-                _ => {}
+            if let (Some(objective), Some(orchestrator)) =
+                (app.objective.clone(), app.orchestrator.clone())
+            {
+                let llms_clone = Arc::clone(&self.llms);
+                let mut llm_map = self.llms.write().await;
+
+                let Some(orchestrator_model) = app.models.iter().find(|m| m.name == orchestrator)
+                else {
+                    tracing::error!("Orchestrator model [{}] not found", orchestrator);
+                    return;
+                };
+                let logical_planner =
+                    agentic_logical_planner::planner_model(orchestrator_model.clone());
+                model_names.insert(logical_planner.name.clone());
+                self.load_model(&logical_planner).await;
+
+                let agent_chat = AgentChat::new(objective, orchestrator, llms_clone);
+                llm_map.insert(app.name.clone(), Box::new(agent_chat));
             }
         }
     }
