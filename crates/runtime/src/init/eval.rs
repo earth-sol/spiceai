@@ -27,7 +27,7 @@ use crate::{
     datafusion::SPICE_EVAL_SCHEMA,
     internal_table::create_internal_accelerated_table,
     model::{
-        builtin_scorer, EVAL_RESULTS_TABLE_REFERENCE, EVAL_RESULTS_TABLE_SCHEMA,
+        builtin_scorer, load_llm_scorer, EVAL_RESULTS_TABLE_REFERENCE, EVAL_RESULTS_TABLE_SCHEMA,
         EVAL_RESULTS_TABLE_TIME_COLUMN, EVAL_RUNS_TABLE_PRIMARY_KEY, EVAL_RUNS_TABLE_REFERENCE,
         EVAL_RUNS_TABLE_SCHEMA, EVAL_RUNS_TABLE_TIME_COLUMN,
     },
@@ -41,7 +41,21 @@ impl Runtime {
         for (name, scorer) in builtin_scorer() {
             let mut reg = self.eval_scorers.write().await;
             reg.insert(name.to_string(), Arc::clone(&scorer));
-            tracing::debug!("Successfully loaded eval scorer {name}");
+            tracing::debug!("Successfully loaded built-in eval scorer {name}");
+        }
+        let evals = self.evals.read().await;
+        for eval in evals.iter() {
+            for scorer in &eval.scorers {
+                let models = self.llms.read().await;
+                for (name, _) in models.iter() {
+                    if scorer == name {
+                        let llm_scorer = load_llm_scorer(name, Arc::clone(&self.llms));
+                        let mut reg = self.eval_scorers.write().await;
+                        reg.insert(name.to_string(), Arc::clone(&llm_scorer));
+                        tracing::debug!("Successfully loaded LLM eval scorer {name}");
+                    }
+                }
+            }
         }
     }
 

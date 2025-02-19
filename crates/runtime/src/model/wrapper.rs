@@ -39,7 +39,7 @@ use super::metrics::request_labels;
 pub struct ChatWrapper {
     pub public_name: String,
     pub chat: Box<dyn Chat>,
-    pub system_prompt: Option<String>,
+    pub system_prompt: Option<SystemPromptPattern>,
     pub defaults: Vec<(String, serde_json::Value)>,
 }
 
@@ -64,11 +64,22 @@ macro_rules! set_default_w_warning {
     };
 }
 
+pub enum SystemPromptPattern {
+    /// Prepend the system prompt to the set of request messages. Existing system messages are unaffected.
+    Prepend(String),
+
+    /// Override the first system prompt in the request. If no system prompt exists, it will be prepended.
+    Override(String),
+
+    /// Replace all instances of `{key}` in the system prompt with the corresponding value in the request's metadata.
+    Template(String),
+}
+
 impl ChatWrapper {
     pub fn new(
         chat: Box<dyn Chat>,
         public_name: &str,
-        system_prompt: Option<String>,
+        system_prompt: Option<SystemPromptPattern>,
         defaults: Vec<(String, serde_json::Value)>,
     ) -> Self {
         let s = Self {
@@ -101,13 +112,46 @@ impl ChatWrapper {
         &self,
         mut req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionRequest, OpenAIError> {
-        if let Some(prompt) = self.system_prompt.clone() {
-            let system_message = ChatCompletionRequestSystemMessageArgs::default()
-                .content(prompt)
-                .build()?;
-            req.messages
-                .insert(0, ChatCompletionRequestMessage::System(system_message));
+        match self.system_prompt.as_ref() {
+            Some(SystemPromptPattern::Prepend(prompt)) => {
+                let system_message = ChatCompletionRequestSystemMessageArgs::default()
+                    .content(prompt.clone())
+                    .build()?;
+                req.messages
+                    .insert(0, ChatCompletionRequestMessage::System(system_message));
+            }
+            Some(SystemPromptPattern::Override(prompt)) => {
+                let system_message = ChatCompletionRequestSystemMessageArgs::default()
+                    .content(prompt.clone())
+                    .build()?;
+                if let Some(ChatCompletionRequestMessage::System(_)) = req.messages.first() {
+                    req.messages[0] = ChatCompletionRequestMessage::System(system_message);
+                } else {
+                    req.messages
+                        .insert(0, ChatCompletionRequestMessage::System(system_message));
+                }
+            }
+            Some(SystemPromptPattern::Template(prompt)) => {
+                let mut new_prompt = prompt.clone();
+                if let Some(serde_json::Value::Object(ref m)) = req.metadata.as_ref() {
+                    for (from, to) in m {
+                        if let serde_json::Value::String(inner_to) = to {
+                            // basic Jinja-like templating. "{{from}}" -> "inner_to"
+                            new_prompt = new_prompt
+                                .replace(format!("{{{{{from}}}}}").as_str(), inner_to.as_str());
+                        }
+                    }
+                }
+                req.metadata = None;
+                let system_message = ChatCompletionRequestSystemMessageArgs::default()
+                    .content(new_prompt)
+                    .build()?;
+                req.messages
+                    .insert(0, ChatCompletionRequestMessage::System(system_message));
+            }
+            None => {}
         }
+
         Ok(req)
     }
 
@@ -235,8 +279,8 @@ impl Chat for ChatWrapper {
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
         let start = Instant::now();
 
-        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "ai_completion", stream=false, model = %req.model, input = %serde_json::to_string(&req).unwrap_or_default());
         let req = self.prepare_req(req)?;
+        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "ai_completion", stream=false, model = %req.model, input = %serde_json::to_string(&req).unwrap_or_default());
 
         let labels = request_labels(&req);
         if let Some(metadata) = &req.metadata {

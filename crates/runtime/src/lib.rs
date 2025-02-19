@@ -567,12 +567,12 @@ impl Runtime {
             let self_clone = self.clone();
             async move {
                 self_clone.load_models().await;
-            }
-        });
+                //     }
+                // });
 
-        let eval_scorer = tokio::spawn({
-            let self_clone = self.clone();
-            async move {
+                // let eval_scorer = tokio::spawn({
+                //     let self_clone = self.clone();
+                //     async move {
                 let app_lock = self_clone.app.read().await;
 
                 if !cfg!(feature = "models")
@@ -601,7 +601,7 @@ impl Runtime {
             datasets,
             catalogs,
             models,
-            eval_scorer
+            // eval_scorer
         );
 
         if let Err(err) = load_result {

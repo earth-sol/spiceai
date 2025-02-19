@@ -16,8 +16,10 @@ limitations under the License.
 
 use std::{collections::HashMap, sync::Arc};
 
+use crate::LLMModelStore;
 use async_trait::async_trait;
 use match_::MatchScorer;
+use model_scorer::LLMScorer;
 use tokio::sync::RwLock;
 
 use super::{DatasetInput, DatasetOutput};
@@ -26,6 +28,7 @@ pub mod fuzzy_match;
 pub mod includes;
 pub mod json_match;
 pub mod match_;
+pub mod model_scorer;
 
 #[async_trait]
 pub trait Scorer: Sync + Send {
@@ -71,6 +74,13 @@ pub fn builtin_scorer() -> Vec<(&'static str, Arc<dyn Scorer>)> {
         ("includes", Arc::new(includes::Includes {})),
         ("fuzzy_match", Arc::new(fuzzy_match::FuzzyMatch {})),
     ]
+}
+
+pub fn load_llm_scorer(name: &str, llm_store: Arc<RwLock<LLMModelStore>>) -> Arc<dyn Scorer> {
+    Arc::new(LLMScorer {
+        name: name.to_string(),
+        llm_store: llm_store,
+    })
 }
 
 #[allow(clippy::cast_precision_loss)]
