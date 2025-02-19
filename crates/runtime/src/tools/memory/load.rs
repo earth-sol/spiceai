@@ -24,10 +24,8 @@ use snafu::ResultExt;
 use std::{borrow::Cow, sync::Arc};
 use tracing_futures::Instrument;
 
-use crate::{
-    tools::{utils::parameters, SpiceModelTool},
-    Runtime,
-};
+use crate::{tools::utils::parameters, Runtime};
+use tools::SpiceModelTool;
 
 use super::memory_table_name;
 
@@ -40,24 +38,26 @@ pub struct LoadMemoryParams {
 pub struct LoadMemoryTool {
     name: String,
     description: Option<String>,
+    rt: Arc<Runtime>,
 }
 
 impl LoadMemoryTool {
     #[must_use]
-    pub fn new(name: &str, description: Option<String>) -> Self {
+    pub fn new(rt: Arc<Runtime>) -> Self {
         Self {
-            name: name.to_string(),
-            description,
+            name: "load_memory".to_string(),
+            description: Some("Load memories previously saved by the language model.".to_string()),
+            rt,
         }
     }
-}
 
-impl Default for LoadMemoryTool {
-    fn default() -> Self {
-        Self::new(
-            "load_memory",
-            Some("Load memories previously saved by the language model.".to_string()),
-        )
+    #[must_use]
+    pub fn new_with_name(name: &str, rt: Arc<Runtime>) -> Self {
+        Self {
+            name: name.to_string(),
+            description: Some("Load memories previously saved by the language model.".to_string()),
+            rt,
+        }
     }
 }
 
@@ -75,19 +75,15 @@ impl SpiceModelTool for LoadMemoryTool {
         parameters::<LoadMemoryParams>()
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-        rt: Arc<Runtime>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::load_memory", tool = self.name().to_string(), input = arg);
 
-        let table_name = memory_table_name(&rt).await?;
+        let table_name = memory_table_name(&self.rt).await?;
         let result: Result<Value, Box<dyn std::error::Error + Send + Sync>> = async {
             let params: LoadMemoryParams = serde_json::from_str(arg).boxed()?;
             let last_interval = fundu::parse_duration(params.last.as_str()).boxed()?;
 
-            let batches = rt
+            let batches = self.rt
                 .datafusion()
                 .query_builder(
                     &format!(

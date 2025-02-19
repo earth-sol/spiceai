@@ -125,6 +125,8 @@ fn spicepod_definition(datasets: Vec<Dataset>, evals: Vec<Eval>) -> SpicepodDefi
         version: SpicepodVersion::V1,
         kind: SpicepodKind::Spicepod,
         name: "spicepod".to_string(),
+        objective: None,
+        orchestrator: None,
         datasets: datasets
             .into_iter()
             .map(ComponentOrReference::Component)

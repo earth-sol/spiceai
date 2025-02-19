@@ -57,11 +57,7 @@ impl SpiceModelTool for McpToolWrapper {
         Some(self.spec.input_schema.clone())
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-        _rt: Arc<Runtime>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let span: Span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::mcp", tool = self.name().to_string(), input = arg);
         let tool_use_result: Result<Value, Box<dyn std::error::Error + Send + Sync>> = async {
             let client = self.client.read().await;

@@ -13,8 +13,9 @@ use async_openai::{
 use async_trait::async_trait;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
-use physical::plan::PhysicalPlan;
+use physical::plan::{PhysicalPlan, Step};
 use tokio::sync::RwLock;
+use tools::SpiceModelTool;
 
 pub mod logical;
 pub mod physical;
@@ -23,6 +24,7 @@ pub struct AgentChat {
     objective: String,
     orchestrator: String,
     llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
+    tools: HashMap<String, Arc<dyn SpiceModelTool>>,
 }
 
 impl AgentChat {
@@ -30,11 +32,13 @@ impl AgentChat {
         objective: String,
         orchestrator: String,
         llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
+        tools: HashMap<String, Arc<dyn SpiceModelTool>>,
     ) -> Self {
         Self {
             objective,
             orchestrator,
             llms,
+            tools,
         }
     }
 }
@@ -139,29 +143,32 @@ fn add_system_message(req: &mut CreateChatCompletionRequest, message: String) {
 //     Ok(content)
 // }
 
-// pub struct AgentJobOrchestrator {
+// pub struct PhysicalJobOrchestrator {
 //     // INPUTS
-//     job: Job,
-//     request: String,
+//     plan: PhysicalPlan,
 
 //     // JOB STATE
-//     plan: LogicalPlan,
-//     execution_history: Vec<StepResult>,
+//     execution_history: Vec<Vec<ChatCompletionRequestMessage>>,
 // }
 
-// impl AgentJobOrchestrator {
-//     pub fn new(job: Job, request: String) -> Self {
-//         Self { job, request }
+// impl PhysicalJobOrchestrator {
+//     #[must_use]
+//     pub fn new(plan: PhysicalPlan) -> Self {
+//         Self {
+//             plan,
+//             execution_history: vec![],
+//         }
 //     }
 // }
 
-// impl AgentJobOrchestrator {
-//     pub async fn start(&mut self) {
-//         self.plan().await;
-//         self.execute().await;
+// impl PhysicalJobOrchestrator {
+//     pub async fn execute(&mut self) {}
+
+//     fn execute_step(
+//         &mut self,
+//         step_history: &[ChatCompletionRequestMessage],
+//         step: &Step,
+//     ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
+//         todo!()
 //     }
-
-//     async fn plan(&mut self) {}
-
-//     async fn execute(&mut self) {}
 // }

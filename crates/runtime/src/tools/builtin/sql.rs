@@ -17,15 +17,13 @@ use arrow::array::RecordBatch;
 use async_trait::async_trait;
 use std::{borrow::Cow, sync::Arc};
 
-use crate::{
-    tools::{utils::parameters, SpiceModelTool},
-    Runtime,
-};
+use crate::{tools::utils::parameters, Runtime};
 use futures::TryStreamExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use snafu::ResultExt;
+use tools::SpiceModelTool;
 use tracing::Span;
 use tracing_futures::Instrument;
 
@@ -37,24 +35,17 @@ pub struct SqlToolParams {
 pub struct SqlTool {
     name: String,
     description: Option<String>,
+    rt: Arc<Runtime>,
 }
 
 impl SqlTool {
     #[must_use]
-    pub fn new(name: &str, description: Option<String>) -> Self {
+    pub fn new(name: &str, description: Option<String>, rt: Arc<Runtime>) -> Self {
         Self {
             name: name.to_string(),
             description,
+            rt,
         }
-    }
-}
-
-impl Default for SqlTool {
-    fn default() -> Self {
-        Self::new(
-            "sql",
-            Some(r#"Run an SQL query on the data source. Columns with capitals must be quoted. When needed quote each part of catalog.schema.table: "catalog"."schema"."table". Avoid 'SELECT *', and columns with `_offset` or `_embedding` suffix."#.to_string()),
-        )
     }
 }
 
@@ -72,16 +63,13 @@ impl SpiceModelTool for SqlTool {
         parameters::<SqlToolParams>()
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-        rt: Arc<Runtime>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let span: Span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::sql", tool = self.name().to_string(), input = arg);
         let tool_use_result: Result<Value, Box<dyn std::error::Error + Send + Sync>> = async {
             let req: SqlToolParams = serde_json::from_str(arg)?;
 
-            let query_result = rt
+            let query_result = self
+                .rt
                 .datafusion()
                 .query_builder(&req.query)
                 .build()

@@ -33,6 +33,7 @@ use model_components::model::Model;
 use opentelemetry::KeyValue;
 use snafu::prelude::*;
 use spicepod::component::model::{Model as SpicepodModel, ModelSource, ModelType};
+use tools::SpiceModelTool;
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -60,7 +61,7 @@ pub enum Error {
 }
 
 impl Runtime {
-    pub(crate) async fn load_models(&self) {
+    pub(crate) async fn load_models(self: Arc<Self>) {
         let app_lock = self.app.read().await;
 
         if !cfg!(feature = "models") && app_lock.as_ref().is_some_and(|s| !s.models.is_empty()) {
@@ -69,7 +70,7 @@ impl Runtime {
         }
 
         // Load tools before loading models.
-        self.load_tools().await;
+        Arc::clone(&self).load_tools().await;
 
         let mut model_names = HashSet::new();
         if let Some(app) = app_lock.as_ref() {
@@ -99,7 +100,15 @@ impl Runtime {
                 model_names.insert(physical_prompt_planner.name.clone());
                 let physical_tool_planner = physical_tool_planner_model(orchestrator_model.clone());
                 model_names.insert(physical_tool_planner.name.clone());
-                let agent_chat = AgentChat::new(objective, orchestrator, llms_clone);
+
+                let mut tools: HashMap<String, Arc<dyn SpiceModelTool>> = HashMap::new();
+                for (_, tool) in self.tools.read().await.iter() {
+                    for t in tool.tools().await {
+                        tools.insert(t.name().to_string(), t);
+                    }
+                }
+
+                let agent_chat = AgentChat::new(objective, orchestrator, llms_clone, tools);
                 llm_map.insert(app.name.clone(), Box::new(agent_chat));
                 drop(llm_map);
 

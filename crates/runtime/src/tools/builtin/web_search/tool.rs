@@ -14,16 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::{borrow::Cow, collections::HashMap};
 
-use crate::{
-    tools::{utils::parameters, SpiceModelTool},
-    Runtime,
-};
+use crate::tools::utils::parameters;
 use async_trait::async_trait;
 use secrecy::SecretString;
 use serde_json::Value;
 use snafu::ResultExt;
+use tools::SpiceModelTool;
 use tracing::Span;
 use tracing_futures::Instrument;
 
@@ -69,11 +67,7 @@ impl SpiceModelTool for WebSearchTool {
         parameters::<WebSearchParams>()
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-        _rt: Arc<Runtime>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let span: Span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::websearch", tool = self.name().to_string(), input = arg);
 
         let result: Result<Value, Box<dyn std::error::Error + Send + Sync>> = async {

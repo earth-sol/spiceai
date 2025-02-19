@@ -13,16 +13,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-use crate::{
-    tools::{utils::parameters, SpiceModelTool},
-    Runtime,
-};
+use crate::{tools::utils::parameters, Runtime};
 use arrow::util::pretty::pretty_format_batches;
 use arrow_tools::record_batch::{truncate_numeric_column_length, truncate_string_columns};
 use async_trait::async_trait;
 use serde_json::Value;
 use snafu::ResultExt;
 use std::{borrow::Cow, sync::Arc};
+use tools::SpiceModelTool;
 use tracing::Span;
 use tracing_futures::Instrument;
 
@@ -39,15 +37,17 @@ pub struct SampleDataTool {
     // Overrides
     name: Option<String>,
     description: Option<String>,
+    rt: Arc<Runtime>,
 }
 
 impl SampleDataTool {
     #[must_use]
-    pub fn new(method: SampleTableMethod) -> Self {
+    pub fn new(method: SampleTableMethod, rt: Arc<Runtime>) -> Self {
         Self {
             method,
             name: None,
             description: None,
+            rt,
         }
     }
 
@@ -83,16 +83,12 @@ impl SpiceModelTool for SampleDataTool {
         }
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-        rt: Arc<Runtime>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let params = self.method.parse_args(arg).boxed()?;
         let span: Span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::sample_data", tool = self.name().to_string(), input = format!("{params}"), sample_method = self.method.name());
 
         async {
-            let mut batch = params.sample(rt.datafusion()).await?;
+            let mut batch = params.sample(self.rt.datafusion()).await?;
 
             // truncate large text fields
             batch = truncate_string_columns(&batch, 512)?;
