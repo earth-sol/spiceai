@@ -124,4 +124,69 @@ mod test {
         assert!(plan.groups[1].steps[0].uuid.is_some());
         assert!(plan.groups[1].steps[1].uuid.is_some());
     }
+
+    #[test]
+    fn test_logical_plan_retains_uuid() {
+        let body = r#"
+        {
+            "groups": [
+                {
+                    "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
+                    "position": 1,
+                    "objective": "Group 1",
+                    "steps": [
+                        {
+                            "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
+                            "position": 1,
+                            "description": "Step 1",
+                            "type": "change_directory",
+                            "action": "/tmp"
+                        },
+                        {
+                            "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
+                            "position": 2,
+                            "description": "Step 2",
+                            "type": "create_directory",
+                            "action": "/tmp/test"
+                        }
+                    ]
+                },
+                {
+                    "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
+                    "position": 2,
+                    "objective": "Group 2",
+                    "steps": [
+                        {
+                            "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
+                            "position": 1,
+                            "description": "Step 1",
+                            "type": "read_object",
+                            "action": "/tmp/test.txt"
+                        },
+                        {
+                            "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
+                            "position": 2,
+                            "description": "Step 2",
+                            "type": "write_object",
+                            "action": "/tmp/test.txt"
+                        }
+                    ]
+                }
+            ]
+        }
+        "#;
+
+        let plan = LogicalPlan::new(body).expect("Should be able to parse the body");
+
+        assert_eq!(plan.groups.len(), 2);
+        assert_eq!(plan.groups[0].steps.len(), 2);
+        assert_eq!(plan.groups[1].steps.len(), 2);
+
+        assert_eq!(
+            plan.groups[0].uuid,
+            Some(
+                Uuid::parse_str("d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b").expect("Should be a UUID")
+            )
+        );
+    }
 }
