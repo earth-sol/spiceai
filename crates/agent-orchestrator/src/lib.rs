@@ -50,48 +50,17 @@ impl Chat for AgentChat {
         &self,
         req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
-        // let content = match &req.messages[0] {
-        //     ChatCompletionRequestMessage::User(user_message) => match &user_message.content {
-        //         ChatCompletionRequestUserMessageContent::Text(text) => text,
-        //         _ => todo!(),
-        //     },
-        //     _ => todo!(),
-        // };
-
-        // let initial_prompt = format!("Objective: {}\n\nRequest: {}", self.objective, content);
-
-        // let llm = self.llms.read().await;
-        // let model = llm.get(self.orchestrator.as_str()).unwrap();
-
-        //let req = CreateChatCompletionRequest {messages:vec![ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage{content:ChatCompletionRequestSystemMessageContent::Text(initial_prompt),},)], model: todo!(), store: todo!(), reasoning_effort: todo!(), metadata: todo!(), frequency_penalty: todo!(), logit_bias: todo!(), logprobs: todo!(), top_logprobs: todo!(), max_tokens: todo!(), max_completion_tokens: todo!(), n: todo!(), modalities: todo!(), prediction: todo!(), audio: todo!(), presence_penalty: todo!(), response_format: todo!(), seed: todo!(), service_tier: todo!(), stop: todo!(), stream: todo!(), stream_options: todo!(), temperature: todo!(), top_p: todo!(), tools: todo!(), tool_choice: todo!(), parallel_tool_calls: todo!(), user: todo!(), function_call: todo!(), functions: todo!() }};
-
-        let resp = CreateChatCompletionResponse {
-            id: String::new(),
-            choices: vec![ChatChoice {
-                index: 0,
-                message: ChatCompletionResponseMessage {
-                    role: Role::Assistant,
-                    content: Some("Hello, world!".to_string()),
-                    refusal: None,
-                    tool_calls: None,
-                    function_call: None,
-                    audio: None,
-                },
-                finish_reason: None,
-                logprobs: None,
-            }],
-            created: 0,
-            model: String::new(),
-            service_tier: None,
-            system_fingerprint: None,
-            object: String::new(),
-            usage: None,
+        let llm = self.llms.read().await;
+        let Some(model) = llm.get("agentic_logical_planner") else {
+            return Err(OpenAIError::InvalidArgument(format!(
+                "Model {} not found.",
+                self.orchestrator
+            )));
         };
 
-        Ok(resp)
+        let response = model.chat_request(req).await?;
 
-        // let response = model.chat_request(req).await?;
-        // Ok(response)
+        Ok(response)
     }
 }
 
