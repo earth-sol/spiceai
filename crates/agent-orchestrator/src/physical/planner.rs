@@ -41,7 +41,10 @@ pub fn model(orchestrator: Model) -> Model {
         - 'read_multiple_files': Read the contents of multiple files simultaneously.
         - 'run_shell_command': Run a shell command and return its output.
         - 'search_files': Recursively search for files and directories matching a pattern.
-        - 'write_file': Create a new file or completely overwrite an existing file with new content.".to_string()));
+        - 'iterm-mcp::write_to_terminal' - writes to the active terminal terminal,  and execute shell command
+        - 'iterm-mcp::read_terminal_output' - to read nd monitor output form the terminal and.
+        - 'iterm-mcp::send_control_character' - to send a control character to the activeterminal and for write_stdio type actions
+        - 'write_file': create a new file or completely overwrite an existing file with new content.".to_string()));
 
     model
 }
