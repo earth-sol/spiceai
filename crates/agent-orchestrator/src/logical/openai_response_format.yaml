@@ -4,63 +4,66 @@ json_schema:
   schema:
     type: object
     properties:
-      groups:
-        description: A group of actions to accomplish a specific task
+      tasks:
+        description: The list of stages involved in completing the task
         type: array
         items:
           type: object
           properties:
-            position:
-              description: The numerical order of this group of steps, starting from 1
-              type: number
             objective:
-              description: The objective of this group of steps, and what they should achieve
+              description: The objective of this stage, and what it should achieve
               type: string
+            tags:
+              description: Optional tags to categorize or label this stage
+              type: array
+              items:
+                type: string
             steps:
               description: The list of steps involved in completing the task
               type: array
               items:
                 type: object
                 properties:
-                  position:
-                    description: The numerical order of this step, starting from 1
-                    type: number
                   description:
                     description: A description of the step to be taken
                     type: string
-                  type:
-                    description: The type of action to be taken
+                  tags:
+                    description: Optional tags to categorize or label this step
+                    type: array
+                    items:
+                      type: string
+                  action:
+                    description: The command of the action to be taken
                     type: string
                     enum:
-                    - change_directory
-                    - create_directory
-                    - read_object
-                    - write_object
-                    - execute_terminal
-                    - other
-                    - response
-                    - request_for_info
-                    - retrieve_metadata
-                    - validation
-                    - improvement
-                  action:
+                      - change_directory
+                      - create_directory
+                      - read_object
+                      - write_object
+                      - execute_terminal
+                      - other
+                      - response
+                      - request_for_info
+                      - retrieve_metadata
+                      - validation
+                      - improvement
+                  input:
                     description: |
-                      The specific action to be taken.
+                      The input to the action. This could be the content of a file to be written, or the
+                      name of a file to be read.
                       For example, for a execute_terminal type, this would be the command to run.
                       For a change directory, the relative path of the directory to change to.
                     type: string
                 required:
-                - position
-                - description
-                - type
-                - action
+                  - description
+                  - action
+                  - input
                 additionalProperties: false
           required:
-          - position
-          - objective
-          - steps
+            - objective
+            - steps
           additionalProperties: false
     required:
-    - groups
+      - tasks
     additionalProperties: false
 strict: true

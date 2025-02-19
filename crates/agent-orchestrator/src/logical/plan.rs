@@ -10,15 +10,16 @@ use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LogicalPlan {
-    pub groups: Vec<Group>,
+    pub tasks: Vec<Stage>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Group {
+pub struct Task {
     #[serde(default)]
     pub uuid: Option<Uuid>,
-    pub position: i64,
     pub objective: String,
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
     pub steps: Vec<Step>,
 }
 
@@ -26,15 +27,16 @@ pub struct Group {
 pub struct Step {
     #[serde(default)]
     pub uuid: Option<Uuid>,
-    pub position: i64,
     pub description: String,
-    pub r#type: StepType,
-    pub action: String,
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
+    pub action: Action,
+    pub input: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum StepType {
+pub enum Action {
     ChangeDirectory,
     CreateDirectory,
     ReadObject,
@@ -52,15 +54,15 @@ impl LogicalPlan {
     pub fn new(body: &str) -> Result<Self, serde_json::Error> {
         let mut plan: LogicalPlan = serde_json::from_str(body)?;
 
-        plan.groups.iter_mut().for_each(|group| {
-            group.steps.iter_mut().for_each(|step| {
+        plan.tasks.iter_mut().for_each(|task| {
+            task.steps.iter_mut().for_each(|step| {
                 if step.uuid.is_none() {
                     step.uuid = Some(Uuid::new_v4());
                 }
             });
 
-            if group.uuid.is_none() {
-                group.uuid = Some(Uuid::new_v4());
+            if task.uuid.is_none() {
+                task.uuid = Some(Uuid::new_v4());
             }
         });
 
@@ -96,40 +98,21 @@ mod test {
     fn test_new_logical_plan() {
         let body = r#"
         {
-            "groups": [
+            "tasks": [
                 {
-                    "position": 1,
-                    "objective": "Group 1",
+                    "objective": "Task 1",
+                    "tags": ["setup"],
                     "steps": [
                         {
-                            "position": 1,
-                            "description": "Step 1",
-                            "type": "change_directory",
-                            "action": "/tmp"
+                            "description": "Change to temporary directory",
+                            "tags": ["filesystem"],
+                            "command": "change_directory",
+                            "command_string": "/tmp"
                         },
                         {
-                            "position": 2,
-                            "description": "Step 2",
-                            "type": "create_directory",
-                            "action": "/tmp/test"
-                        }
-                    ]
-                },
-                {
-                    "position": 2,
-                    "objective": "Group 2",
-                    "steps": [
-                        {
-                            "position": 1,
-                            "description": "Step 1",
-                            "type": "read_object",
-                            "action": "/tmp/test.txt"
-                        },
-                        {
-                            "position": 2,
-                            "description": "Step 2",
-                            "type": "write_object",
-                            "action": "/tmp/test.txt"
+                            "description": "Create test directory",
+                            "command": "create_directory",
+                            "command_string": "/tmp/test"
                         }
                     ]
                 }
@@ -139,63 +122,27 @@ mod test {
 
         let plan = LogicalPlan::new(body).expect("Should be able to parse the body");
 
-        assert_eq!(plan.groups.len(), 2);
-        assert_eq!(plan.groups[0].steps.len(), 2);
-        assert_eq!(plan.groups[1].steps.len(), 2);
-
-        assert!(plan.groups[0].uuid.is_some());
-        assert!(plan.groups[0].steps[0].uuid.is_some());
-        assert!(plan.groups[0].steps[1].uuid.is_some());
-
-        assert!(plan.groups[1].uuid.is_some());
-        assert!(plan.groups[1].steps[0].uuid.is_some());
-        assert!(plan.groups[1].steps[1].uuid.is_some());
+        assert_eq!(plan.tasks.len(), 1);
+        assert_eq!(plan.tasks[0].steps.len(), 2);
+        assert!(plan.tasks[0].uuid.is_some());
+        assert!(plan.tasks[0].steps[0].uuid.is_some());
+        assert!(plan.tasks[0].steps[1].uuid.is_some());
     }
 
     #[test]
     fn test_logical_plan_retains_uuid() {
         let body = r#"
         {
-            "groups": [
+            "tasks": [
                 {
                     "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
-                    "position": 1,
-                    "objective": "Group 1",
+                    "objective": "Stage 1",
                     "steps": [
                         {
                             "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
-                            "position": 1,
                             "description": "Step 1",
-                            "type": "change_directory",
-                            "action": "/tmp"
-                        },
-                        {
-                            "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
-                            "position": 2,
-                            "description": "Step 2",
-                            "type": "create_directory",
-                            "action": "/tmp/test"
-                        }
-                    ]
-                },
-                {
-                    "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
-                    "position": 2,
-                    "objective": "Group 2",
-                    "steps": [
-                        {
-                            "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
-                            "position": 1,
-                            "description": "Step 1",
-                            "type": "read_object",
-                            "action": "/tmp/test.txt"
-                        },
-                        {
-                            "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
-                            "position": 2,
-                            "description": "Step 2",
-                            "type": "write_object",
-                            "action": "/tmp/test.txt"
+                            "command": "change_directory",
+                            "command_string": "/tmp"
                         }
                     ]
                 }
@@ -205,12 +152,9 @@ mod test {
 
         let plan = LogicalPlan::new(body).expect("Should be able to parse the body");
 
-        assert_eq!(plan.groups.len(), 2);
-        assert_eq!(plan.groups[0].steps.len(), 2);
-        assert_eq!(plan.groups[1].steps.len(), 2);
-
+        assert_eq!(plan.tasks.len(), 1);
         assert_eq!(
-            plan.groups[0].uuid,
+            plan.tasks[0].uuid,
             Some(
                 Uuid::parse_str("d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b").expect("Should be a UUID")
             )
