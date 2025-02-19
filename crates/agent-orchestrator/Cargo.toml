@@ -17,4 +17,4 @@ llms = { path = "../llms" }
 async-trait.workspace = true
 async-openai.workspace = true
 tokio.workspace = true
-uuid.workspace = true
+uuid = { workspace = true, features = ["v4", "serde", "fast-rng"]}
