@@ -125,21 +125,21 @@ install: build
 
 .PHONY: install-with-models
 install-with-models:
-	make install SPICED_NON_DEFAULT_FEATURES="models"
+	make install SPICED_NON_DEFAULT_FEATURES="models,mcp"
 
 .PHONY: install-with-models-dev
 install-with-models-dev:
-	make install-dev SPICED_NON_DEFAULT_FEATURES="models"
+	make install-dev SPICED_NON_DEFAULT_FEATURES="models,mcp"
 
 .PHONY: install-with-models-metal-dev
 install-with-models-metal-dev:
-	make install-dev SPICED_NON_DEFAULT_FEATURES="models,metal"
+	make install-dev SPICED_NON_DEFAULT_FEATURES="models,mcp,metal"
 
 install-with-models-metal:
-	make install SPICED_NON_DEFAULT_FEATURES="models,metal"
+	make install SPICED_NON_DEFAULT_FEATURES="models,mcp,metal"
 
 install-with-models-cuda:
-	make install SPICED_NON_DEFAULT_FEATURES="models,cuda"
+	make install SPICED_NON_DEFAULT_FEATURES="models,mcp,cuda"
 
 .PHONY: install-with-odbc
 install-with-odbc:
