@@ -7,14 +7,14 @@ pub struct LogicalPlan {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Group {
-    pub id: i64,
+    pub position: i64,
     pub objective: String,
     pub steps: Vec<Step>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Step {
-    pub id: i64,
+    pub position: i64,
     pub description: String,
     pub r#type: StepType,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -35,4 +35,10 @@ pub enum StepType {
     RetrieveMetadata,
     Validation,
     Improvement,
+}
+
+impl LogicalPlan {
+    pub fn new(body: &str) -> Result<Self, serde_json::Error> {
+        let plan: LogicalPlan = serde_json::from_Str(body)?;
+    }
 }

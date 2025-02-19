@@ -71,6 +71,7 @@ dependencies = [
  "snafu",
  "spicepod",
  "tokio",
+ "uuid 1.13.1",
 ]
 
 [[package]]
