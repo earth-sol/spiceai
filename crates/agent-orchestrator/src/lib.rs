@@ -73,7 +73,7 @@ impl Chat for AgentChat {
 
         println!(
             "Logical plan: {}",
-            serde_json::to_string(&plan).expect("Failed to serialize logical plan")
+            serde_json::to_string_pretty(&plan).expect("Failed to serialize logical plan")
         );
 
         // Now build the initial physical plan
@@ -87,7 +87,8 @@ impl Chat for AgentChat {
 
         println!(
             "Physical plan: {}",
-            serde_json::to_string(&physical_plan).expect("Failed to serialize physical plan")
+            serde_json::to_string_pretty(&physical_plan)
+                .expect("Failed to serialize physical plan")
         );
 
         Ok(response)
