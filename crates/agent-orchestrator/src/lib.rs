@@ -7,9 +7,7 @@ use std::{collections::HashMap, sync::Arc};
 use async_openai::{
     error::OpenAIError,
     types::{
-        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageContent,
-        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequest,
-        CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
+        ChatCompletionRequestMessage, CreateChatCompletionRequest, CreateChatCompletionResponse,
     },
 };
 use async_trait::async_trait;
