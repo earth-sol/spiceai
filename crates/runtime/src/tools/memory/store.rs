@@ -54,24 +54,26 @@ impl From<StoreMemoryParams> for Vec<MemoryTableElement> {
 pub struct StoreMemoryTool {
     name: String,
     description: Option<String>,
+    rt: Arc<Runtime>,
 }
 
 impl StoreMemoryTool {
     #[must_use]
-    pub fn new(name: &str, description: Option<String>) -> Self {
+    pub fn new(rt: Arc<Runtime>) -> Self {
         Self {
-            name: name.to_string(),
-            description,
+            name: "store_memory".to_string(),
+            description: Some("Record any details from 'user' messages that are worth remembering for future conversations.".to_string()),
+            rt,
         }
     }
-}
 
-impl Default for StoreMemoryTool {
-    fn default() -> Self {
-        Self::new(
-            "store_memory",
-            Some("Record any details from 'user' messages that are worth remembering for future conversations.".to_string()),
-        )
+    #[must_use]
+    pub fn new_with_name(name: &str, rt: Arc<Runtime>) -> Self {
+        Self {
+            name: name.to_string(),
+            description: Some("Record any details from 'user' messages that are worth remembering for future conversations.".to_string()),
+            rt,
+        }
     }
 }
 
@@ -89,20 +91,17 @@ impl SpiceModelTool for StoreMemoryTool {
         parameters::<StoreMemoryParams>()
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-        rt: Arc<Runtime>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::store_memory", tool = self.name().to_string(), input = arg);
-        let table_name = memory_table_name(&rt).await?;
+        let table_name = memory_table_name(&self.rt).await?;
         let result: Result<Value, Box<dyn std::error::Error + Send + Sync>> = async {
             let params: StoreMemoryParams = serde_json::from_str(arg).boxed()?;
 
             let elements: Vec<MemoryTableElement> = params.into();
             let batch: RecordBatch = try_from(&elements).boxed()?;
 
-            rt.datafusion()
+            self.rt
+                .datafusion()
                 .write_data(
                     &table_name,
                     DataUpdate {

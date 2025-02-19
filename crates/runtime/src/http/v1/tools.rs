@@ -27,9 +27,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
-    tools::{factory::default_available_catalogs, SpiceModelTool, Tooling},
+    tools::{factory::default_available_catalogs, Tooling},
     Runtime,
 };
+use tools::SpiceModelTool;
 
 /// Summary of a tool available to run, and the schema of its input parameters.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash, Default, Deserialize)]
@@ -62,7 +63,7 @@ struct ListToolElement {
 pub(crate) async fn list(Extension(rt): Extension<Arc<Runtime>>) -> Response {
     let tools = &*rt.tools.read().await;
 
-    let default_catalogs = default_available_catalogs();
+    let default_catalogs = default_available_catalogs(Arc::clone(&rt));
 
     let tools = stream::iter(tools.iter())
         .then(|(name, t)| {
@@ -175,10 +176,10 @@ pub(crate) async fn post(
         let Some(Tooling::Tool(tool)) = tools.get(&tool_name) else {
             return not_found(format!("Tool {tool_name} not found").as_str());
         };
-        Arc::clone(tool)
+        Arc::clone(&tool)
     };
 
-    match tool.call(body.as_str(), Arc::clone(&rt)).await {
+    match tool.call(body.as_str()).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,

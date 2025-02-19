@@ -33,11 +33,9 @@ use serde_json::Value;
 use spicepod::semantic::Column;
 use std::{borrow::Cow, sync::Arc};
 
-use crate::{
-    tools::{utils::parameters, SpiceModelTool},
-    Runtime,
-};
+use crate::{tools::utils::parameters, Runtime};
 use snafu::ResultExt;
+use tools::SpiceModelTool;
 use tracing_futures::Instrument;
 
 /// A tool to retrieve the schema of one or more available SQL tables.
@@ -72,27 +70,37 @@ impl TableSchemaToolParams {
 pub struct TableSchemaTool {
     name: String,
     description: Option<String>,
+    rt: Arc<Runtime>,
 }
 
 impl TableSchemaTool {
     #[must_use]
-    pub fn new(name: &str, description: Option<String>) -> Self {
+    pub fn new(name: &str, description: Option<String>, rt: Arc<Runtime>) -> Self {
         Self {
             name: name.to_string(),
             description,
+            rt,
         }
+    }
+
+    #[must_use]
+    pub fn default(rt: Arc<Runtime>) -> Self {
+        Self::new(
+            "table_schema",
+            Some("Get the schema of a table.".to_string()),
+            rt,
+        )
     }
 
     pub async fn get_schema(
         &self,
-        rt: Arc<Runtime>,
         req: &TableSchemaToolParams,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::table_schema", tool = self.name().to_string(), input = serde_json::to_string(&req).boxed()?);
         let TableSchemaToolParams { tables, output } = req;
 
         // Precompute extra column details only if needed (for `full` output).
-        let column_info = match (output, rt.app.read().await.clone()) {
+        let column_info = match (output, self.rt.app.read().await.clone()) {
             (OutputType::Full, Some(app)) => tables
                 .iter()
                 .map(|t| {
@@ -106,7 +114,8 @@ impl TableSchemaTool {
 
         let mut table_schemas: Vec<Value> = Vec::with_capacity(tables.len());
         for (i, t) in tables.iter().enumerate() {
-            let base_schema = rt
+            let base_schema = self
+                .rt
                 .df
                 .get_arrow_schema(t)
                 .instrument(span.clone())
@@ -214,14 +223,6 @@ impl TableSchemaTool {
             .build()
     }
 }
-impl Default for TableSchemaTool {
-    fn default() -> Self {
-        Self::new(
-            "table_schema",
-            Some("Retrieve the schema of all available SQL tables".to_string()),
-        )
-    }
-}
 
 #[async_trait]
 impl SpiceModelTool for TableSchemaTool {
@@ -236,12 +237,8 @@ impl SpiceModelTool for TableSchemaTool {
         parameters::<TableSchemaToolParams>()
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-        rt: Arc<Runtime>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let req: TableSchemaToolParams = serde_json::from_str(arg)?;
-        self.get_schema(rt, &req).await
+        self.get_schema(&req).await
     }
 }

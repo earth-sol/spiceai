@@ -48,9 +48,10 @@ use snafu::prelude::*;
 use spicepod::component::eval::Eval;
 use status::ComponentStatus;
 use tls::TlsConfig;
+use tokio::sync::Mutex;
 use tokio::sync::{oneshot::error::RecvError, RwLock};
 use tokio_util::sync::CancellationToken;
-use tools::factory::default_available_catalogs;
+use tools::factory::{default_available_catalogs, ToolFactory};
 use tools::{catalog::SpiceToolCatalog, Tooling};
 pub use util::shutdown_signal;
 
@@ -301,6 +302,7 @@ pub struct Runtime {
     models: Arc<RwLock<HashMap<String, Model>>>,
     llms: Arc<RwLock<LLMModelStore>>,
     embeds: Arc<RwLock<EmbeddingModelStore>>,
+    tool_factories: Arc<Mutex<HashMap<String, ToolFactory>>>,
     tools: Arc<RwLock<HashMap<String, Tooling>>>,
     evals: Arc<RwLock<Vec<Eval>>>,
     eval_scorers: EvalScorerRegistry,
@@ -349,6 +351,11 @@ impl Runtime {
     #[must_use]
     pub fn app(&self) -> Arc<RwLock<Option<Arc<App>>>> {
         Arc::clone(&self.app)
+    }
+
+    #[must_use]
+    pub fn tool_factories(&self) -> Arc<Mutex<HashMap<String, ToolFactory>>> {
+        Arc::clone(&self.tool_factories)
     }
 
     /// Requests a loaded extension, or will attempt to load it if part of the autoloaded extensions.
@@ -522,7 +529,7 @@ impl Runtime {
     }
 
     /// Updates all of the component statuses to `Initializing`.
-    pub async fn set_components_initializing(&self) {
+    pub async fn set_components_initializing(self: Arc<Self>) {
         let app_lock = self.app.read().await;
         let Some(app) = app_lock.as_ref() else {
             return;
@@ -550,7 +557,7 @@ impl Runtime {
                     .update_tool(&tool.name, ComponentStatus::Initializing);
             }
 
-            for tool_catalog in default_available_catalogs() {
+            for tool_catalog in default_available_catalogs(Arc::clone(&self)) {
                 self.status
                     .update_tool_catalog(tool_catalog.name(), ComponentStatus::Initializing);
             }
@@ -573,8 +580,8 @@ impl Runtime {
     ///
     /// The future returned by this function will not resolve until all components have been loaded and marked as ready.
     /// This includes waiting for the first refresh of any accelerated tables to complete.
-    pub async fn load_components(&self) {
-        self.set_components_initializing().await;
+    pub async fn load_components(self: Arc<Self>) {
+        Arc::clone(&self).set_components_initializing().await;
 
         self.start_extensions().await;
 
@@ -583,7 +590,7 @@ impl Runtime {
 
         // Spawn each component load in its own task to run in parallel
         let task_history = tokio::spawn({
-            let self_clone = self.clone();
+            let self_clone = Arc::clone(&self);
             async move {
                 if let Err(err) = self_clone.init_task_history().await {
                     tracing::warn!("Creating internal task history table: {err}");
@@ -592,36 +599,30 @@ impl Runtime {
         });
 
         let results_cache = tokio::spawn({
-            let self_clone = self.clone();
+            let self_clone = Arc::clone(&self);
             async move {
                 self_clone.init_results_cache().await;
             }
         });
 
         let datasets = tokio::spawn({
-            let self_clone = Arc::new(self.clone());
+            let self_clone = Arc::clone(&self);
             async move {
                 self_clone.load_datasets().await;
             }
         });
 
         let catalogs = tokio::spawn({
-            let self_clone = self.clone();
+            let self_clone = Arc::clone(&self);
             async move {
                 self_clone.load_catalogs().await;
             }
         });
 
         let models = tokio::spawn({
-            let self_clone = self.clone();
+            let self_clone = Arc::clone(&self);
             async move {
-                self_clone.load_models().await;
-            }
-        });
-
-        let eval_scorer = tokio::spawn({
-            let self_clone = self.clone();
-            async move {
+                Arc::clone(&self_clone).load_models().await;
                 let app_lock = self_clone.app.read().await;
 
                 if !cfg!(feature = "models")
@@ -644,14 +645,7 @@ impl Runtime {
         });
 
         // Wait for all tasks to complete
-        let load_result = tokio::try_join!(
-            task_history,
-            results_cache,
-            datasets,
-            catalogs,
-            models,
-            eval_scorer
-        );
+        let load_result = tokio::try_join!(task_history, results_cache, datasets, catalogs, models);
 
         if let Err(err) = load_result {
             tracing::error!("Could not start the Spice runtime: {err}");
@@ -696,7 +690,7 @@ impl Runtime {
         dataconnector::unregister_all().await;
         catalogconnector::unregister_all().await;
         dataaccelerator::unregister_all().await;
-        tools::factory::unregister_all_factories().await;
+        tools::factory::unregister_all_factories(self).await;
         document_parse::unregister_all().await;
 
         // Shutdown HTTP & Metrics servers last

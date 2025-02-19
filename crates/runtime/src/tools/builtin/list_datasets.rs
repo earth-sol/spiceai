@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 use async_trait::async_trait;
 use datafusion::sql::TableReference;
 use itertools::Itertools;
@@ -23,14 +24,15 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use crate::{
     datafusion::{SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA},
-    tools::SpiceModelTool,
     Runtime,
 };
+use tools::SpiceModelTool;
 
 pub struct ListDatasetsTool {
     name: String,
     description: Option<String>,
     table_allowlist: Option<Vec<String>>,
+    rt: Arc<Runtime>,
 }
 
 impl ListDatasetsTool {
@@ -39,21 +41,23 @@ impl ListDatasetsTool {
         name: &str,
         description: Option<String>,
         table_allowlist: Option<Vec<&str>>,
+        rt: Arc<Runtime>,
     ) -> Self {
         Self {
             name: name.to_string(),
             description,
             table_allowlist: table_allowlist.map(|t| t.iter().map(ToString::to_string).collect()),
+            rt,
         }
     }
-}
 
-impl Default for ListDatasetsTool {
-    fn default() -> Self {
+    #[must_use]
+    pub fn default(rt: Arc<Runtime>) -> Self {
         Self::new(
             "list_datasets",
             Some("List all SQL tables available.".to_string()),
             None,
+            rt,
         )
     }
 }
@@ -72,14 +76,10 @@ impl SpiceModelTool for ListDatasetsTool {
         None
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-        rt: Arc<Runtime>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::list_datasets", tool = self.name().to_string(), input = arg);
 
-        let elements = get_dataset_elements(Arc::clone(&rt), self.table_allowlist.as_deref())
+        let elements = get_dataset_elements(Arc::clone(&self.rt), self.table_allowlist.as_deref())
             .await
             .iter()
             .map(serde_json::value::to_value)

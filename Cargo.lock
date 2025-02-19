@@ -10317,6 +10317,7 @@ dependencies = [
  "tokio-util",
  "tonic",
  "tonic-health",
+ "tools",
  "tower 0.5.2",
  "tower-http",
  "tracing",
@@ -12430,6 +12431,14 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tonic",
+]
+
+[[package]]
+name = "tools"
+version = "1.1.0-unstable"
+dependencies = [
+ "async-trait",
+ "serde_json",
 ]
 
 [[package]]

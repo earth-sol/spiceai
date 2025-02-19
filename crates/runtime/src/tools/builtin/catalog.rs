@@ -20,8 +20,11 @@ use snafu::{ResultExt, Snafu};
 use spicepod::component::tool::Tool;
 use std::{collections::HashMap, sync::Arc};
 
-use crate::tools::{
-    catalog::SpiceToolCatalog, factory::IndividualToolFactory, options::SpiceToolsOptions,
+use crate::{
+    tools::{
+        catalog::SpiceToolCatalog, factory::IndividualToolFactory, options::SpiceToolsOptions,
+    },
+    Runtime,
 };
 
 use super::{
@@ -32,8 +35,8 @@ use super::{
     sql::SqlTool,
     table_schema::TableSchemaTool,
     web_search::WebSearchTool,
-    SpiceModelTool,
 };
+use tools::SpiceModelTool;
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -48,10 +51,17 @@ pub enum Error {
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub struct BuiltinToolCatalog {}
+pub struct BuiltinToolCatalog {
+    rt: Arc<Runtime>,
+}
 
 impl BuiltinToolCatalog {
+    pub(crate) fn new(rt: Arc<Runtime>) -> Self {
+        Self { rt }
+    }
+
     pub(crate) fn construct_builtin(
+        &self,
         id: &str,
         name: Option<&str>,
         description: Option<String>,
@@ -63,20 +73,36 @@ impl BuiltinToolCatalog {
                 WebSearchTool::try_new(name, description, params)
                     .context(FailedToConstructToolSnafu { id: id.to_string() })?,
             )),
-            "get_readiness" => Ok(Arc::new(GetReadinessTool::new(name, description))),
-            "document_similarity" => Ok(Arc::new(DocumentSimilarityTool::new(name, description))),
-            "table_schema" => Ok(Arc::new(TableSchemaTool::new(name, description))),
-            "sql" => Ok(Arc::new(SqlTool::new(name, description))),
+            "get_readiness" => Ok(Arc::new(GetReadinessTool::new(
+                name,
+                description,
+                Arc::clone(&self.rt),
+            ))),
+            "document_similarity" => Ok(Arc::new(DocumentSimilarityTool::new(
+                name,
+                description,
+                Arc::clone(&self.rt),
+            ))),
+            "table_schema" => Ok(Arc::new(TableSchemaTool::new(
+                name,
+                description,
+                Arc::clone(&self.rt),
+            ))),
+            "sql" => Ok(Arc::new(SqlTool::new(
+                name,
+                description,
+                Arc::clone(&self.rt),
+            ))),
             "sample_distinct_columns" => Ok(Arc::new(
-                SampleDataTool::new(SampleTableMethod::DistinctColumns)
+                SampleDataTool::new(SampleTableMethod::DistinctColumns, Arc::clone(&self.rt))
                     .with_overrides(Some(name), description.as_deref()),
             )),
             "random_sample" => Ok(Arc::new(
-                SampleDataTool::new(SampleTableMethod::RandomSample)
+                SampleDataTool::new(SampleTableMethod::RandomSample, Arc::clone(&self.rt))
                     .with_overrides(Some(name), description.as_deref()),
             )),
             "top_n_sample" => Ok(Arc::new(
-                SampleDataTool::new(SampleTableMethod::TopNSample)
+                SampleDataTool::new(SampleTableMethod::TopNSample, Arc::clone(&self.rt))
                     .with_overrides(Some(name), description.as_deref()),
             )),
             "list_datasets" => {
@@ -87,6 +113,7 @@ impl BuiltinToolCatalog {
                     name,
                     description,
                     table_allowlist,
+                    Arc::clone(&self.rt),
                 )))
             }
             _ => Err(Error::UnknownBuiltinTool { id: id.to_string() }),
@@ -105,7 +132,7 @@ impl IndividualToolFactory for BuiltinToolCatalog {
             .split_once(':')
             .map_or(component.from.as_str(), |(_, id)| id);
 
-        Self::construct_builtin(
+        self.construct_builtin(
             id,
             Some(component.name.as_str()),
             component.description.clone(),
@@ -120,7 +147,7 @@ impl SpiceToolCatalog for BuiltinToolCatalog {
     async fn all(&self) -> Vec<Arc<dyn SpiceModelTool>> {
         let mut tools = vec![];
         for t in SpiceToolsOptions::Auto.tools_by_name() {
-            match Self::construct_builtin(t, None, None, &HashMap::new()) {
+            match self.construct_builtin(t, None, None, &HashMap::new()) {
                 Ok(tool) => tools.push(tool),
                 Err(e) => tracing::warn!("Failed to construct builtin tool: '{}'. Error: {}", t, e),
             }
@@ -129,7 +156,8 @@ impl SpiceToolCatalog for BuiltinToolCatalog {
     }
 
     async fn get(&self, name: &str) -> Option<Arc<dyn SpiceModelTool>> {
-        Self::construct_builtin(name, None, None, &HashMap::new()).ok()
+        self.construct_builtin(name, None, None, &HashMap::new())
+            .ok()
     }
 
     fn name(&self) -> &'static str {

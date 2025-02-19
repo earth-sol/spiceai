@@ -24,29 +24,24 @@ use crate::{
     embeddings::vector_search::{
         parse_explicit_primary_keys, SearchRequest, SearchRequestAIJson, VectorSearch,
     },
-    tools::{utils::parameters, SpiceModelTool},
+    tools::utils::parameters,
     Runtime,
 };
+use tools::SpiceModelTool;
 
 pub struct DocumentSimilarityTool {
     name: String,
     description: Option<String>,
+    rt: Arc<Runtime>,
 }
 impl DocumentSimilarityTool {
     #[must_use]
-    pub fn new(name: &str, description: Option<String>) -> Self {
+    pub fn new(name: &str, description: Option<String>, rt: Arc<Runtime>) -> Self {
         Self {
             name: name.to_string(),
             description,
+            rt,
         }
-    }
-}
-impl Default for DocumentSimilarityTool {
-    fn default() -> Self {
-        Self::new(
-            "document_similarity",
-            Some("Search and retrieve documents from available datasets".to_string()),
-        )
     }
 }
 
@@ -64,11 +59,7 @@ impl SpiceModelTool for DocumentSimilarityTool {
         parameters::<SearchRequestAIJson>()
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-        rt: Arc<Runtime>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::document_similarity", tool = self.name().to_string(), input = arg);
 
         let tool_use_result = async {
@@ -76,9 +67,9 @@ impl SpiceModelTool for DocumentSimilarityTool {
             tracing::trace!("document_similarity tool use function call request: {req:?}");
 
             let vs = VectorSearch::new(
-                rt.datafusion(),
-                Arc::clone(&rt.embeds),
-                parse_explicit_primary_keys(Arc::clone(&rt.app)).await,
+                self.rt.datafusion(),
+                Arc::clone(&self.rt.embeds),
+                parse_explicit_primary_keys(Arc::clone(&self.rt.app)).await,
             );
 
             let search_request = SearchRequest::try_from(req)?;
