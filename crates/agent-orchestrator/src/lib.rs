@@ -13,7 +13,10 @@ use async_openai::{
 use async_trait::async_trait;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
-use physical::plan::{PhysicalPlan, Step};
+use physical::{
+    executor::PhysicalJobExecutor,
+    plan::{PhysicalPlan, Step},
+};
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
 
@@ -100,6 +103,12 @@ impl Chat for AgentChat {
                 .expect("Failed to serialize physical plan")
         );
 
+        let mut executor =
+            PhysicalJobExecutor::new(physical_plan, Arc::clone(&self.llms), self.tools.clone());
+        executor.execute().await.map_err(|e| {
+            OpenAIError::InvalidArgument(format!("Error executing physical plan: {e}"))
+        })?;
+
         Ok(response)
     }
 }
@@ -141,34 +150,4 @@ fn add_system_message(req: &mut CreateChatCompletionRequest, message: String) {
 //     }
 
 //     Ok(content)
-// }
-
-// pub struct PhysicalJobOrchestrator {
-//     // INPUTS
-//     plan: PhysicalPlan,
-
-//     // JOB STATE
-//     execution_history: Vec<Vec<ChatCompletionRequestMessage>>,
-// }
-
-// impl PhysicalJobOrchestrator {
-//     #[must_use]
-//     pub fn new(plan: PhysicalPlan) -> Self {
-//         Self {
-//             plan,
-//             execution_history: vec![],
-//         }
-//     }
-// }
-
-// impl PhysicalJobOrchestrator {
-//     pub async fn execute(&mut self) {}
-
-//     fn execute_step(
-//         &mut self,
-//         step_history: &[ChatCompletionRequestMessage],
-//         step: &Step,
-//     ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
-//         todo!()
-//     }
 // }
