@@ -133,12 +133,13 @@ impl ChatWrapper {
             }
             Some(SystemPromptPattern::Template(prompt)) => {
                 let mut new_prompt = prompt.clone();
-                if let Some(serde_json::Value::Object(m)) = req.metadata.as_ref() {
+                if let Some(serde_json::Value::Object(mut m)) = req.metadata.as_ref() {
                     for (from, to) in m {
                         if let serde_json::Value::String(inner_to) = to {
                             // basic Jinja-like templating. "{{from}}" -> "inner_to"
-                            new_prompt =
-                                new_prompt.replace(format!("{{{{{from}}}}}").as_str(), inner_to);
+                            new_prompt = new_prompt
+                                .replace(format!("{{{{{from}}}}}").as_str(), inner_to.as_str());
+                            m.remove(&from);
                         }
                     }
                 }
