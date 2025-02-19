@@ -1,0 +1,51 @@
+type: json_schema
+json_schema:
+  name: agentic_physical_planner
+  schema:
+    type: object
+    properties:
+      groups:
+        description: A group of actions to accomplish a specific task
+        type: array
+        items:
+          type: object
+          properties:
+            position:
+              description: The numerical order of this group of steps, starting from 1
+              type: number
+            objective:
+              description: The objective of this group of steps, and what they should achieve
+              type: string
+            steps:
+              description: The list of steps involved in completing the task
+              type: array
+              items:
+                type: object
+                properties:
+                  position:
+                    description: The numerical order of this step, starting from 1
+                    type: number
+                  description:
+                    description: A description of the step to be taken
+                    type: string
+                  tool:
+                    description: The specific name of the tool to use
+                    type: string
+                  body:
+                    description: The parameters to call the tool with, provided as a JSON object. The body must conform to the schema of the tool being called.
+                    type: string
+                required:
+                  - position
+                  - description
+                  - tool
+                  - body
+                additionalProperties: false
+          required:
+            - position
+            - objective
+            - steps
+          additionalProperties: false
+    required:
+      - groups
+    additionalProperties: false
+strict: true

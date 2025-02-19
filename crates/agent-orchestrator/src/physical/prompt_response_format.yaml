@@ -1,0 +1,51 @@
+type: json_schema
+json_schema:
+  name: agentic_physical_planner
+  schema:
+    type: object
+    properties:
+      groups:
+        description: A group of actions to accomplish a specific task
+        type: array
+        items:
+          type: object
+          properties:
+            position:
+              description: The numerical order of this group of steps, starting from 1
+              type: number
+            objective:
+              description: The objective of this group of steps, and what they should achieve
+              type: string
+            steps:
+              description: The list of steps involved in completing the task
+              type: array
+              items:
+                type: object
+                properties:
+                  position:
+                    description: The numerical order of this step, starting from 1
+                    type: number
+                  description:
+                    description: A description of the step to be taken
+                    type: string
+                  prompt:
+                    description: The text content of the prompt to provide to the model for a completion
+                    type: string
+                  target_model:
+                    description: The name of the model to target for the completion
+                    type: string
+                required:
+                  - position
+                  - description
+                  - tool
+                  - action
+                additionalProperties: false
+          required:
+            - position
+            - objective
+            - steps
+          additionalProperties: false
+    required:
+      - groups
+    additionalProperties: false
+strict: true

@@ -39,7 +39,7 @@ pub enum Step {
         position: u64,
         description: String,
         tool: ToolType,
-        action: String,
+        body: String,
     },
     Prompt {
         position: u64,
