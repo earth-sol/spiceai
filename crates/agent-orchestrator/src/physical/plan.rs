@@ -1,9 +1,30 @@
+use async_openai::types::CreateChatCompletionResponse;
 use serde::{Deserialize, Serialize};
 
 /// Represents a physical execution plan containing ordered groups of steps
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PhysicalPlan {
     pub groups: Vec<Group>,
+}
+
+impl PhysicalPlan {
+    pub fn new(body: &str) -> Result<Self, serde_json::Error> {
+        let plan: PhysicalPlan = serde_json::from_str(body)?;
+
+        Ok(plan)
+    }
+
+    pub fn from_chat_completion(
+        completion: &CreateChatCompletionResponse,
+    ) -> Result<Self, anyhow::Error> {
+        let body = completion
+            .choices
+            .first()
+            .and_then(|choice| choice.message.content.as_ref())
+            .ok_or_else(|| anyhow::anyhow!("No content in the response"))?;
+
+        Ok(Self::new(body)?)
+    }
 }
 
 /// A group of related steps working towards a specific objective

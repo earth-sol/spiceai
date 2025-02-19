@@ -14,6 +14,7 @@ use async_openai::{
 use async_trait::async_trait;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
+use physical::plan::PhysicalPlan;
 use tokio::sync::RwLock;
 
 pub mod logical;
@@ -50,7 +51,13 @@ impl Chat for AgentChat {
         req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
         let llm = self.llms.read().await;
-        let Some(model) = llm.get("agentic_logical_planner") else {
+        let Some(logical_planner_model) = llm.get("agentic_logical_planner") else {
+            return Err(OpenAIError::InvalidArgument(format!(
+                "Model {} not found.",
+                self.orchestrator
+            )));
+        };
+        let Some(physical_planner_model) = llm.get("agentic_physical_planner") else {
             return Err(OpenAIError::InvalidArgument(format!(
                 "Model {} not found.",
                 self.orchestrator
@@ -65,11 +72,22 @@ impl Chat for AgentChat {
         );
         let req = build_user_request(prompt)?;
 
-        let response = model.chat_request(req).await?;
+        let response = logical_planner_model.chat_request(req).await?;
         let plan = LogicalPlan::from_chat_completion(&response)
             .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
 
         println!("Logical plan: {:?}", plan);
+
+        // Now build the initial physical plan
+        let logical_plan_chat_request = plan.to_chat_request()?;
+        let response = physical_planner_model
+            .chat_request(logical_plan_chat_request)
+            .await?;
+
+        let physical_plan = PhysicalPlan::from_chat_completion(&response)
+            .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
+
+        println!("Physical plan: {:?}", physical_plan);
 
         Ok(response)
     }

@@ -1,4 +1,10 @@
-use async_openai::types::CreateChatCompletionResponse;
+use async_openai::{
+    error::OpenAIError,
+    types::{
+        ChatCompletionRequestMessage, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+        CreateChatCompletionResponse,
+    },
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -43,7 +49,6 @@ pub enum StepType {
 }
 
 impl LogicalPlan {
-    #[allow(clippy::missing_errors_doc)]
     pub fn new(body: &str) -> Result<Self, serde_json::Error> {
         let mut plan: LogicalPlan = serde_json::from_str(body)?;
 
@@ -62,7 +67,6 @@ impl LogicalPlan {
         Ok(plan)
     }
 
-    #[allow(clippy::missing_errors_doc)]
     pub fn from_chat_completion(
         completion: &CreateChatCompletionResponse,
     ) -> Result<Self, anyhow::Error> {
@@ -73,6 +77,14 @@ impl LogicalPlan {
             .ok_or_else(|| anyhow::anyhow!("No content in the response"))?;
 
         Ok(Self::new(body)?)
+    }
+
+    pub fn to_chat_request(&self) -> Result<CreateChatCompletionRequest, OpenAIError> {
+        let body = serde_json::to_string(self)?;
+        let req = CreateChatCompletionRequestArgs::default()
+            .messages(vec![ChatCompletionRequestMessage::User(body.into())])
+            .build()?;
+        Ok(req)
     }
 }
 
