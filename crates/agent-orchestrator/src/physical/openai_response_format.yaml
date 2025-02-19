@@ -1,0 +1,68 @@
+type: json_schema
+json_schema:
+  name: agentic_physical_planner
+  schema:
+    type: object
+    properties:
+      groups:
+        description: A group of actions to accomplish a specific task
+        type: array
+        items:
+          type: object
+          properties:
+            position:
+              description: The numerical order of this group of steps, starting from 1
+              type: number
+            objective:
+              description: The objective of this group of steps, and what they should achieve
+              type: string
+            steps:
+              description: The list of steps involved in completing the task
+              type: array
+              items:
+                type: object
+                properties:
+                  position:
+                    description: The numerical order of this step, starting from 1
+                    type: number
+                  description:
+                    description: A description of the step to be taken
+                    type: string
+                  tool:
+                    description: |
+                      The specific tool name to use.
+                      For exampple, 'read_file', 'run_shell_command'.
+                    type: string
+                    enum:
+                      - change_directory
+                      - create_directory
+                      - read_object
+                      - write_object
+                      - execute_terminal
+                      - other
+                      - response
+                      - request_for_info
+                      - retrieve_metadata
+                      - validation
+                      - improvement
+                  action:
+                    description: |
+                      The specific action to be taken.
+                      For example, for a execute_terminal type, this would be the command to run.
+                      For a change directory, the relative path of the directory to change to.
+                    type: string
+                required:
+                  - position
+                  - description
+                  - type
+                  - action
+                additionalProperties: false
+          required:
+            - position
+            - objective
+            - steps
+          additionalProperties: false
+    required:
+      - groups
+    additionalProperties: false
+strict: true

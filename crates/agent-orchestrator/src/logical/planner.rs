@@ -2,8 +2,7 @@ use serde_yaml;
 use spicepod::component::model::Model;
 
 #[must_use]
-#[allow(clippy::missing_panics_doc)]
-pub fn planner_model(orchestrator: Model) -> Model {
+pub fn model(orchestrator: Model) -> Model {
     let mut model = Model::new(orchestrator.from, "agentic_logical_planner");
 
     for param in orchestrator.params {
@@ -52,7 +51,7 @@ mod tests {
     #[test]
     fn test_planner_model() {
         let orchestrator = Model::new("openai:gpt-4o", "orchestrator");
-        let model = planner_model(orchestrator);
+        let model = model(orchestrator);
         assert_eq!(model.name, "agentic_logical_planner");
     }
 }

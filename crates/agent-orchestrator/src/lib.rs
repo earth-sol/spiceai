@@ -1,26 +1,23 @@
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::doc_markdown)]
+
 use std::{collections::HashMap, sync::Arc};
 
 use async_openai::{
-    error::{ApiError, OpenAIError},
+    error::OpenAIError,
     types::{
-        ChatChoice, ChatChoiceStream, ChatCompletionRequestAssistantMessage,
-        ChatCompletionRequestDeveloperMessage, ChatCompletionRequestDeveloperMessageContent,
-        ChatCompletionRequestFunctionMessage, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessage, ChatCompletionRequestToolMessage,
-        ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent,
-        ChatCompletionResponseMessage, ChatCompletionResponseStream,
-        ChatCompletionStreamResponseDelta, CreateChatCompletionRequest,
-        CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
-        CreateChatCompletionStreamResponse, Role,
+        ChatCompletionRequestMessage, ChatCompletionRequestUserMessageContent,
+        CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
     },
 };
 use async_trait::async_trait;
 use llms::chat::{nsql::SqlGeneration, Chat};
-use logical_plan::LogicalPlan;
+use logical::plan::LogicalPlan;
 use tokio::sync::RwLock;
 
-pub mod agentic_logical_planner;
-mod logical_plan;
+pub mod logical;
+pub mod physical;
 
 pub struct AgentChat {
     objective: String,

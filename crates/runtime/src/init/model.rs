@@ -23,7 +23,10 @@ use crate::{
     get_params_with_secrets, metrics, model::ENABLE_MODEL_SUPPORT_MESSAGE, status,
     timing::TimeMeasurement, Runtime,
 };
-use agent_orchestrator::{agentic_logical_planner, AgentChat};
+use agent_orchestrator::{
+    logical::planner::model as logical_planner_model,
+    physical::planner::model as physical_planner_model, AgentChat,
+};
 use app::App;
 use model_components::model::Model;
 use opentelemetry::KeyValue;
@@ -88,15 +91,17 @@ impl Runtime {
                     tracing::error!("Orchestrator model [{}] not found", orchestrator);
                     return;
                 };
-                let logical_planner =
-                    agentic_logical_planner::planner_model(orchestrator_model.clone());
+                let logical_planner = logical_planner_model(orchestrator_model.clone());
                 model_names.insert(logical_planner.name.clone());
+                let physical_planner = physical_planner_model(orchestrator_model.clone());
+                model_names.insert(physical_planner.name.clone());
                 let agent_chat = AgentChat::new(objective, orchestrator, llms_clone);
                 llm_map.insert(app.name.clone(), Box::new(agent_chat));
                 drop(llm_map);
 
-                // This requires the lock on `llms` to be released before loading the logical planner.
+                // This requires the lock on `llms` to be released before loading the logical/physical planners.
                 self.load_model(&logical_planner).await;
+                self.load_model(&physical_planner).await;
             }
         }
     }

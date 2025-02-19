@@ -43,6 +43,7 @@ pub enum StepType {
 }
 
 impl LogicalPlan {
+    #[allow(clippy::missing_errors_doc)]
     pub fn new(body: &str) -> Result<Self, serde_json::Error> {
         let mut plan: LogicalPlan = serde_json::from_str(body)?;
 
@@ -61,6 +62,7 @@ impl LogicalPlan {
         Ok(plan)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn from_chat_completion(
         completion: &CreateChatCompletionResponse,
     ) -> Result<Self, anyhow::Error> {
