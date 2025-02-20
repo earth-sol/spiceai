@@ -58,6 +58,7 @@ pub async fn tool_call_agentic_retry(
         body: message,
         task_uuid: tool_step.task_uuid,
         model: tool_step.model,
+        success_criteria: tool_step.success_criteria,
     })
 }
 
