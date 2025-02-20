@@ -84,8 +84,7 @@ pub fn tool_planner_model(physical_planner: Model) -> Model {
         # Guidelines
 
         Guidelines for tool selection:
-        - For filesystem navigation: Use 'run_shell_command' with 'cd <directory>'
-        - For command verification: Use 'run_shell_command' with 'echo $?'
+        - Prefer using terminal tool for shell commands execution
         - Always verify tool exists before recommending
         - Choose the most direct and efficient tool for the task
         - Ensure tool parameters match schema requirements

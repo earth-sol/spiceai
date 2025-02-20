@@ -2,9 +2,7 @@ use std::{collections::HashMap, io::Write, sync::Arc};
 
 use super::plan::{PhysicalPlan, PromptStep, Step, ToolStep};
 use async_openai::types::{
-    ChatCompletionRequestMessage, ChatCompletionRequestToolMessageArgs,
-    ChatCompletionRequestToolMessageContent, ChatCompletionRequestUserMessageArgs,
-    ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs,
+    ChatCompletionRequestMessage, ChatCompletionRequestToolMessageArgs, ChatCompletionRequestToolMessageContent, ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs
 };
 use llms::chat::Chat;
 use tokio::sync::RwLock;
@@ -15,6 +13,7 @@ pub struct PhysicalJobExecutor {
     plan: PhysicalPlan,
     llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
     tools: HashMap<String, Arc<dyn SpiceModelTool>>,
+    summarization_model: String,
 
     // JOB STATE
     execution_history: Vec<Vec<ChatCompletionRequestMessage>>,
@@ -26,12 +25,14 @@ impl PhysicalJobExecutor {
         plan: PhysicalPlan,
         llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
         tools: HashMap<String, Arc<dyn SpiceModelTool>>,
+        summarization_model: String,
     ) -> Self {
         Self {
             plan,
             llms,
             tools,
             execution_history: vec![],
+            summarization_model,
         }
     }
 }
@@ -41,12 +42,16 @@ impl PhysicalJobExecutor {
         // reset physical plan execution log
         reset_execution_log();
 
+        let mut step_history = vec![];
+
         for task in &self.plan.tasks {
             tracing::info!("Executing task: {}", task.objective);
-            let mut step_history = vec![];
+
+            tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
+
             for step in &task.steps {
                 let output = self
-                    .execute_step(&step_history, step)
+                    .execute_step(&mut step_history, step)
                     .await
                     .inspect_err(|err| {
                         trace_execution_progress(step, &err.to_string());
@@ -55,7 +60,9 @@ impl PhysicalJobExecutor {
                 step_history.push(output);
             }
 
-            self.execution_history.push(step_history);
+            self.execution_history.push(step_history.clone());
+
+            step_history = self.summarize_executed_steps(&self.summarization_model, &step_history).await?;
         }
 
         Ok(())
@@ -63,7 +70,7 @@ impl PhysicalJobExecutor {
 
     async fn execute_step(
         &self,
-        step_history: &[ChatCompletionRequestMessage],
+        step_history: &mut Vec<ChatCompletionRequestMessage>,
         step: &Step,
     ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
         match step {
@@ -74,7 +81,7 @@ impl PhysicalJobExecutor {
 
     async fn execute_prompt(
         &self,
-        step_history: &[ChatCompletionRequestMessage],
+        step_history: &mut Vec<ChatCompletionRequestMessage>,
         step: &PromptStep,
     ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
         let prompt = step.prompt.clone();
@@ -83,8 +90,10 @@ impl PhysicalJobExecutor {
             .get(&step.model)
             .ok_or_else(|| anyhow::anyhow!("Model {} not found", step.model))?;
 
-        let mut messages = step_history.to_vec();
-        messages.push(ChatCompletionRequestMessage::User(prompt.into()));
+        step_history.push(ChatCompletionRequestMessage::User(prompt.into()));
+
+        let messages = step_history.to_vec();
+
         let req = CreateChatCompletionRequestArgs::default()
             .messages(messages)
             .model(step.model.clone())
@@ -100,11 +109,11 @@ impl PhysicalJobExecutor {
 
         trace_execution_progress(&Step::Prompt(step.clone()), &message);
 
-        let tool_message = ChatCompletionRequestToolMessageArgs::default()
-            .content(ChatCompletionRequestToolMessageContent::Text(message))
+        let tool_message = ChatCompletionRequestUserMessageArgs::default()
+            .content(ChatCompletionRequestUserMessageContent::Text(message))
             .build()
             .map_err(|e| anyhow::anyhow!("Error building tool message: {}", e.to_string()))?;
-        Ok(ChatCompletionRequestMessage::Tool(tool_message))
+        Ok(ChatCompletionRequestMessage::User(tool_message))
     }
 
     async fn execute_tool(
@@ -190,6 +199,55 @@ impl PhysicalJobExecutor {
             tracing::error!("Tool call failed: {second_line}");
             Ok(true)
         }
+    }
+
+    async fn summarize_executed_steps(
+        &self,
+        model: &str,
+        step_history: &[ChatCompletionRequestMessage],
+    ) -> Result<Vec<ChatCompletionRequestMessage>, anyhow::Error> {
+        let mut messages: Vec<ChatCompletionRequestMessage> = vec![];// step_history.to_vec();
+
+        let content = step_history
+            .iter()
+            .map(|msg| format!("{msg:?}"))
+            .collect::<Vec<String>>()
+            .join("\n\n");
+
+        messages.push(ChatCompletionRequestMessage::User(
+            format!(r#"
+            Summarize the <STEPS> below that have been executed previously.
+             - Only include main results, list of steps completed, 
+             - Incldue learnings, hints and important details that could be useful to effectively execute further tasks.
+
+            Summary must be concise, clear and short.
+
+            <STEPS>
+
+            {content}
+            "#).into(),
+        ));
+
+        let llms = &*self.llms.read().await;
+        let model = llms
+            .get(model)
+            .ok_or_else(|| anyhow::anyhow!("Model {} not found", model))?;
+
+        let req = CreateChatCompletionRequestArgs::default()
+            .messages(messages)
+            .build()
+            .map_err(|e| {
+                anyhow::anyhow!("Error building chat completion request: {}", e.to_string())
+            })?;
+        let response = model.chat_request(req).await?;
+
+        let Some(summary) = response.choices[0].message.content.clone() else {
+            return Err(anyhow::anyhow!("No message content found"));
+        };
+
+        let message = ChatCompletionRequestUserMessageContent::Text(summary);
+
+        return Ok(vec![ChatCompletionRequestMessage::User(message.into())]);
     }
 }
 

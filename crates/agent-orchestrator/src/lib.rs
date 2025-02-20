@@ -254,8 +254,12 @@ impl Chat for AgentChat {
 
         let physical_plan = physical_plan.expect("Physical plan is required");
 
-        let mut executor =
-            PhysicalJobExecutor::new(physical_plan, Arc::clone(&self.llms), self.tools.clone());
+        let mut executor = PhysicalJobExecutor::new(
+            physical_plan,
+            Arc::clone(&self.llms),
+            self.tools.clone(),
+            "agentic_physical_prompt_planner".to_string(),
+        );
         executor.execute().await.map_err(|e| {
             OpenAIError::InvalidArgument(format!("Error executing physical plan: {e}"))
         })?;
