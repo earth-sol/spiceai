@@ -153,40 +153,40 @@ impl PhysicalPlan {
         Ok(req)
     }
 
-    pub fn build_verification_request(
-        messages: Option<Vec<ChatCompletionRequestMessage>>,
-        previous_steps: &[Step],
-        step: &logical::plan::Step,
-    ) -> Result<CreateChatCompletionRequest, OpenAIError> {
-        let mut messages = messages.unwrap_or_default();
+    // pub fn build_verification_request(
+    //     messages: Option<Vec<ChatCompletionRequestMessage>>,
+    //     previous_steps: &[Step],
+    //     step: &logical::plan::Step,
+    // ) -> Result<CreateChatCompletionRequest, OpenAIError> {
+    //     let mut messages = messages.unwrap_or_default();
 
-        let previous_steps_body = serde_json::to_string(previous_steps)?;
-        let previous_steps_message = ChatCompletionRequestMessage::System(
-            format!("The following steps have been planned already: {previous_steps_body}.").into(),
-        );
-        messages.push(previous_steps_message);
+    //     let previous_steps_body = serde_json::to_string(previous_steps)?;
+    //     let previous_steps_message = ChatCompletionRequestMessage::System(
+    //         format!("The following steps have been planned already: {previous_steps_body}.").into(),
+    //     );
+    //     messages.push(previous_steps_message);
 
-        let body = serde_json::to_string(step)?;
-        messages.push(ChatCompletionRequestMessage::User(
-            format!("# Goal
+    //     let body = serde_json::to_string(step)?;
+    //     messages.push(ChatCompletionRequestMessage::User(
+    //         format!("# Goal
 
-            Create a physical plan step to verify the logical plan step was successful, based on the success criteria.
-            
-            # Logical Plan Step
-            
-            {body}
-            
-            # Success Criteria
-            
-            {}
-            ", step.success_criteria).into(),
-        ));
-        let req = CreateChatCompletionRequestArgs::default()
-            .messages(messages)
-            .build()?;
+    //         Create a physical plan step to verify the logical plan step was successful, based on the success criteria.
 
-        Ok(req)
-    }
+    //         # Logical Plan Step
+
+    //         {body}
+
+    //         # Success Criteria
+
+    //         {}
+    //         ", step.success_criteria).into(),
+    //     ));
+    //     let req = CreateChatCompletionRequestArgs::default()
+    //         .messages(messages)
+    //         .build()?;
+
+    //     Ok(req)
+    // }
 
     pub async fn plan_request(
         req: CreateChatCompletionRequest,
@@ -217,6 +217,7 @@ impl PhysicalPlan {
             StepType::Prompt => {
                 // TODO: validate the selected model is valid and retry if not
                 Step::Prompt(serde_json::from_str::<PromptStep>(body).map_err(|e| {
+                    println!("{body}");
                     OpenAIError::InvalidArgument(format!("Failed to parse prompt step: {e}"))
                 })?)
             }
@@ -243,13 +244,6 @@ impl PhysicalPlan {
                             .await?
                             .with_task_id(task.uuid),
                     );
-
-                    let req = Self::build_verification_request(None, steps.as_slice(), step)?;
-                    steps.push(
-                        Self::plan_request(req, StepType::Tool, tool_planner)
-                            .await?
-                            .with_task_id(task.uuid),
-                    );
                 }
                 StepType::Prompt => {
                     let message = vec![ChatCompletionRequestMessage::System(
@@ -262,13 +256,6 @@ impl PhysicalPlan {
                         step,
                         &task.objective,
                     )?;
-                    steps.push(
-                        Self::plan_request(req, StepType::Prompt, prompt_planner)
-                            .await?
-                            .with_task_id(task.uuid),
-                    );
-
-                    let req = Self::build_verification_request(None, steps.as_slice(), step)?;
                     steps.push(
                         Self::plan_request(req, StepType::Prompt, prompt_planner)
                             .await?
