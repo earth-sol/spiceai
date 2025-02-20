@@ -76,6 +76,8 @@ pub fn tool_planner_model(physical_planner: Model) -> Model {
         - Always verify tool exists before recommending
         - Choose the most direct and efficient tool for the task
         - Ensure tool parameters match schema requirements
+        
+        If the logical plan step specifies an action where no sufficient tool is available, respond with the tool 'unknown'.
 
         Remember: Accuracy in tool selection and parameter specification is critical for successful task execution.".to_string()));
 

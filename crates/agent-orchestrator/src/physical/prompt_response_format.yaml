@@ -1,6 +1,6 @@
 type: json_schema
 json_schema:
-  name: agentic_physical_planner
+  name: prompt_step
   schema:
     type: object
     properties:

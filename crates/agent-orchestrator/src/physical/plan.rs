@@ -91,6 +91,7 @@ impl PhysicalPlan {
         messages: Option<Vec<ChatCompletionRequestMessage>>,
         previous_steps: &[Step],
         step: &logical::plan::Step,
+        objective: &str,
     ) -> Result<CreateChatCompletionRequest, OpenAIError> {
         let mut messages = messages.unwrap_or_default();
 
@@ -99,7 +100,9 @@ impl PhysicalPlan {
         messages.push(previous_steps_message);
 
         let body = serde_json::to_string(step)?;
-        messages.push(ChatCompletionRequestMessage::User(body.into()));
+        messages.push(ChatCompletionRequestMessage::User(
+            format!("Task Objective: {objective}.\nThis step of the task is: {body}").into(),
+        ));
         let req = CreateChatCompletionRequestArgs::default()
             .messages(messages)
             .build()?;
@@ -140,6 +143,42 @@ impl PhysicalPlan {
         Ok(step)
     }
 
+    pub async fn plan_task(
+        task: &logical::plan::Task,
+        tool_planner: &dyn Chat,
+        prompt_planner: &dyn Chat,
+        model_names: &[String],
+    ) -> Result<Task, async_openai::error::OpenAIError> {
+        tracing::info!("Generating physical plan for task: {}", task.objective);
+        let mut steps: Vec<Step> = vec![];
+        for step in &task.steps {
+            tracing::info!("Generating physical plan for step: {:?}", step.uuid);
+            match step.action.into() {
+                StepType::Tool => {
+                    let req = Self::build_request(None, steps.as_slice(), step, &task.objective)?;
+                    steps.push(Self::plan_request(req, StepType::Tool, tool_planner).await?);
+                }
+                StepType::Prompt => {
+                    let message = vec![ChatCompletionRequestMessage::System(
+                        "The following models are available for selection: o3-mini".into(), // update to the actual list of models, trimming the agentic models
+                    )];
+                    let req = Self::build_request(
+                        Some(message),
+                        steps.as_slice(),
+                        step,
+                        &task.objective,
+                    )?;
+                    steps.push(Self::plan_request(req, StepType::Prompt, prompt_planner).await?);
+                }
+            }
+        }
+
+        Ok(Task {
+            objective: task.objective.clone(),
+            steps,
+        })
+    }
+
     pub async fn plan(
         logical_plan: &LogicalPlan,
         tool_planner: &dyn Chat,
@@ -147,32 +186,11 @@ impl PhysicalPlan {
         model_names: Vec<String>,
     ) -> Result<Self, async_openai::error::OpenAIError> {
         // for each task, convert the list of steps from the logical plan based on their StepType
-        let mut tasks: Vec<Task> = vec![];
-        for task in &logical_plan.tasks {
-            let mut steps: Vec<Step> = vec![];
-            for step in &task.steps {
-                tracing::info!("Generating physical plan for step: {:?}", step.uuid);
-                match step.action.into() {
-                    StepType::Tool => {
-                        let req = Self::build_request(None, steps.as_slice(), step)?;
-                        steps.push(Self::plan_request(req, StepType::Tool, tool_planner).await?);
-                    }
-                    StepType::Prompt => {
-                        let message = vec![ChatCompletionRequestMessage::System(
-                            "The following models are available for selection: o3-mini".into(), // update to the actual list of models, trimming the agentic models
-                        )];
-                        let req = Self::build_request(Some(message), steps.as_slice(), step)?;
-                        steps
-                            .push(Self::plan_request(req, StepType::Prompt, prompt_planner).await?);
-                    }
-                }
-            }
-
-            tasks.push(Task {
-                objective: task.objective.clone(),
-                steps,
-            });
-        }
+        let futs = logical_plan
+            .tasks
+            .iter()
+            .map(|t| Self::plan_task(t, tool_planner, prompt_planner, model_names.as_slice()));
+        let tasks = futures::future::try_join_all(futs).await?;
 
         Ok(Self { tasks })
     }
