@@ -61,7 +61,9 @@ pub fn tool_planner_model(physical_planner: Model) -> Model {
         .params
         .insert("openai_response_format".to_string(), yaml_value);
 
-    model.params.insert("system_prompt".to_string(), serde_json::Value::String("
+
+    let tools_str = include_str!("tools.json");
+    model.params.insert("system_prompt".to_string(), serde_json::Value::String(format!("
         You are an intelligent tool selection system designed to match tasks with appropriate tools. Your primary responsibility is to analyze logical plan steps and determine the most effective tool for execution.
 
         Core responsibilities:
@@ -71,15 +73,19 @@ pub fn tool_planner_model(physical_planner: Model) -> Model {
         4. Ensure the tool selection is optimal for the task's requirements
 
         Tool selection guidelines:
-        - For filesystem navigation: Use 'run_shell_command' with 'cd {directory}'
+        - For filesystem navigation: Use 'run_shell_command' with 'cd <directory>'
         - For command verification: Use 'run_shell_command' with 'echo $?'
         - Always verify tool exists before recommending
         - Choose the most direct and efficient tool for the task
         - Ensure tool parameters match schema requirements
         
         If the logical plan step specifies an action where no sufficient tool is available, respond with the tool 'unknown'.
+        Do not hallucinate about the completion of the task or tool. You are not responsible for running any tools, only planning the tools to run.
+        You should only respond with the tool to execute, and the contents of the tool input.
 
-        Remember: Accuracy in tool selection and parameter specification is critical for successful task execution.".to_string()));
+        Remember: Accuracy in tool selection and parameter specification is critical for successful task execution.
+        
+        The following tools are available: {tools_str}")));
 
     model
 }

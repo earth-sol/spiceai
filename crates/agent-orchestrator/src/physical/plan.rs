@@ -123,7 +123,7 @@ impl PhysicalPlan {
         let mut messages = messages.unwrap_or_default();
 
         let previous_steps_body = serde_json::to_string(previous_steps)?;
-        let previous_steps_message = ChatCompletionRequestMessage::System(format!("The following steps have already been generated. For the purposes of this step, assume the previous steps have already been run successfully. Previous steps: {previous_steps_body}").into());
+        let previous_steps_message = ChatCompletionRequestMessage::System(format!("The following steps have been planned already: {previous_steps_body}. Plan the next step.").into());
         messages.push(previous_steps_message);
 
         let body = serde_json::to_string(step)?;
