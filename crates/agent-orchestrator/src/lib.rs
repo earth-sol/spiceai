@@ -23,7 +23,7 @@ pub mod logical;
 pub mod physical;
 
 pub struct AgentChat {
-    objective: String,
+    _objective: String,
     orchestrator: String,
     executor: String,
     llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
@@ -39,7 +39,7 @@ impl AgentChat {
         tools: HashMap<String, Arc<dyn SpiceModelTool>>,
     ) -> Self {
         Self {
-            objective,
+            _objective: objective,
             orchestrator,
             executor,
             llms,
@@ -291,6 +291,7 @@ fn get_done_message() -> CreateChatCompletionResponse {
     }
 }
 
+#[allow(dead_code)]
 fn add_system_message(req: &mut CreateChatCompletionRequest, message: String) {
     req.messages
         .insert(0, ChatCompletionRequestMessage::System(message.into()));
