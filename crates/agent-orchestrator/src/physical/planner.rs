@@ -2,10 +2,15 @@ use serde_yaml;
 use spicepod::component::model::Model;
 
 #[must_use]
-pub fn prompt_planner_model(orchestrator: Model) -> Model {
-    let mut model = Model::new(orchestrator.from, "agentic_physical_prompt_planner");
+pub fn prompt_planner_model(physical_planner: Model) -> Model {
+    tracing::info!(
+        "Initializing physical prompt planner model {}",
+        physical_planner.name
+    );
 
-    for param in orchestrator.params {
+    let mut model = Model::new(physical_planner.from, "agentic_physical_prompt_planner");
+
+    for param in physical_planner.params {
         model.params.insert(param.0, param.1);
     }
 
@@ -36,10 +41,15 @@ pub fn prompt_planner_model(orchestrator: Model) -> Model {
 }
 
 #[must_use]
-pub fn tool_planner_model(orchestrator: Model) -> Model {
-    let mut model = Model::new(orchestrator.from, "agentic_physical_tool_planner");
+pub fn tool_planner_model(physical_planner: Model) -> Model {
+    tracing::info!(
+        "Initializing physical tool planner model [{}]",
+        physical_planner.name
+    );
 
-    for param in orchestrator.params {
+    let mut model = Model::new(physical_planner.from, "agentic_physical_tool_planner");
+
+    for param in physical_planner.params {
         model.params.insert(param.0, param.1);
     }
 
@@ -78,16 +88,16 @@ mod tests {
 
     #[test]
     fn test_physical_prompt_planner_model() {
-        let orchestrator = Model::new("openai:gpt-4o", "orchestrator");
-        let model = prompt_planner_model(orchestrator);
+        let physical_planner = Model::new("openai:gpt-4o", "physical_planner");
+        let model = prompt_planner_model(physical_planner);
         assert_eq!(model.name, "agentic_physical_prompt_planner");
         assert_eq!(model.from, "openai:gpt-4o");
     }
 
     #[test]
     fn test_physical_tool_planner_model() {
-        let orchestrator = Model::new("openai:gpt-4o", "orchestrator");
-        let model = tool_planner_model(orchestrator);
+        let physical_planner = Model::new("openai:gpt-4o", "physical_planner");
+        let model = tool_planner_model(physical_planner);
         assert_eq!(model.name, "agentic_physical_tool_planner");
         assert_eq!(model.from, "openai:gpt-4o");
     }

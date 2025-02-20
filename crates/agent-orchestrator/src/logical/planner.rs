@@ -2,10 +2,15 @@ use serde_yaml;
 use spicepod::component::model::Model;
 
 #[must_use]
-pub fn model(orchestrator: Model) -> Model {
-    let mut model = Model::new(orchestrator.from, "agentic_logical_planner");
+pub fn model(logical_planner: Model) -> Model {
+    tracing::info!(
+        "Initializing logical planner model [{}]",
+        logical_planner.name
+    );
 
-    for param in orchestrator.params {
+    let mut model = Model::new(logical_planner.from, "agentic_logical_planner");
+
+    for param in logical_planner.params {
         model.params.insert(param.0, param.1);
     }
 
@@ -57,8 +62,8 @@ mod tests {
 
     #[test]
     fn test_planner_model() {
-        let orchestrator = Model::new("openai:gpt-4o", "orchestrator");
-        let model = model(orchestrator);
+        let logical_planner = Model::new("openai:gpt-4o", "logical_planner");
+        let model = model(logical_planner);
         assert_eq!(model.name, "agentic_logical_planner");
     }
 }

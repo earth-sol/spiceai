@@ -46,6 +46,10 @@ pub struct App {
 
     pub orchestrator: Option<String>,
 
+    pub logical_planner: Option<String>,
+
+    pub physical_planner: Option<String>,
+
     pub secrets: Vec<Secret>,
 
     pub extensions: HashMap<String, Extension>,
@@ -96,6 +100,8 @@ pub struct AppBuilder {
     name: String,
     objective: Option<String>,
     orchestrator: Option<String>,
+    logical_planner: Option<String>,
+    physical_planner: Option<String>,
     secrets: Vec<Secret>,
     extensions: HashMap<String, Extension>,
     catalogs: Vec<Catalog>,
@@ -115,6 +121,8 @@ impl AppBuilder {
             name: name.into(),
             objective: None,
             orchestrator: None,
+            logical_planner: None,
+            physical_planner: None,
             secrets: vec![],
             extensions: HashMap::new(),
             catalogs: vec![],
@@ -234,6 +242,8 @@ impl AppBuilder {
             name: self.name,
             objective: self.objective,
             orchestrator: self.orchestrator,
+            logical_planner: self.logical_planner,
+            physical_planner: self.physical_planner,
             secrets: self.secrets,
             extensions: self.extensions,
             catalogs: self.catalogs,
@@ -328,6 +338,8 @@ impl AppBuilder {
 
         let objective = spicepod_root.objective.clone();
         let orchestrator = spicepod_root.orchestrator.clone();
+        let logical_planner = spicepod_root.logical_planner.clone();
+        let physical_planner = spicepod_root.physical_planner.clone();
 
         spicepods.push(spicepod_root);
 
@@ -335,6 +347,8 @@ impl AppBuilder {
             name: root_spicepod_name,
             objective,
             orchestrator,
+            logical_planner,
+            physical_planner,
             secrets,
             extensions,
             catalogs,
