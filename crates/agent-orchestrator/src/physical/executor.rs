@@ -2,7 +2,8 @@ use std::{collections::HashMap, io::Write, sync::Arc};
 
 use super::plan::{PhysicalPlan, PromptStep, Step, ToolStep};
 use async_openai::types::{
-    ChatCompletionRequestMessage, ChatCompletionRequestToolMessageArgs, ChatCompletionRequestToolMessageContent, ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs
+    ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
+    ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs,
 };
 use llms::chat::Chat;
 use tokio::sync::RwLock;
@@ -103,7 +104,9 @@ impl PhysicalJobExecutor {
 
             self.execution_history.push(step_history.clone());
 
-            step_history = self.summarize_executed_steps(&self.summarization_model, &step_history).await?;
+            step_history = self
+                .summarize_executed_steps(&self.summarization_model, &step_history)
+                .await?;
         }
 
         // TODO: Generate a report of the execution and return as the output
@@ -138,7 +141,7 @@ impl PhysicalJobExecutor {
 
         step_history.push(ChatCompletionRequestMessage::User(prompt.into()));
 
-        let messages = step_history.to_vec();
+        let messages = step_history.clone();
 
         let req = CreateChatCompletionRequestArgs::default()
             .messages(messages)
@@ -256,7 +259,7 @@ impl PhysicalJobExecutor {
         model: &str,
         step_history: &[ChatCompletionRequestMessage],
     ) -> Result<Vec<ChatCompletionRequestMessage>, anyhow::Error> {
-        let mut messages: Vec<ChatCompletionRequestMessage> = vec![];// step_history.to_vec();
+        let mut messages: Vec<ChatCompletionRequestMessage> = vec![]; // step_history.to_vec();
 
         let content = step_history
             .iter()
@@ -265,7 +268,7 @@ impl PhysicalJobExecutor {
             .join("\n\n");
 
         messages.push(ChatCompletionRequestMessage::User(
-            format!(r#"
+            format!("
             Summarize the <STEPS> below that have been executed previously.
              - Only include main results, list of steps completed, 
              - Incldue learnings, hints and important details that could be useful to effectively execute further tasks.
@@ -275,7 +278,7 @@ impl PhysicalJobExecutor {
             <STEPS>
 
             {content}
-            "#).into(),
+            ").into(),
         ));
 
         let llms = &*self.llms.read().await;
@@ -297,7 +300,7 @@ impl PhysicalJobExecutor {
 
         let message = ChatCompletionRequestUserMessageContent::Text(summary);
 
-        return Ok(vec![ChatCompletionRequestMessage::User(message.into())]);
+        Ok(vec![ChatCompletionRequestMessage::User(message.into())])
     }
 }
 
