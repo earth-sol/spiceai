@@ -106,6 +106,7 @@ pub struct AppBuilder {
     orchestrator: Option<String>,
     logical_planner: Option<String>,
     physical_planner: Option<String>,
+    researcher: Option<String>,
     executor: Option<String>,
     secrets: Vec<Secret>,
     extensions: HashMap<String, Extension>,
@@ -128,6 +129,7 @@ impl AppBuilder {
             orchestrator: None,
             logical_planner: None,
             physical_planner: None,
+            researcher: None,
             executor: None,
             secrets: vec![],
             extensions: HashMap::new(),
@@ -250,6 +252,7 @@ impl AppBuilder {
             orchestrator: self.orchestrator,
             logical_planner: self.logical_planner,
             physical_planner: self.physical_planner,
+            researcher: self.researcher,
             executor: self.executor,
             secrets: self.secrets,
             extensions: self.extensions,
@@ -348,6 +351,7 @@ impl AppBuilder {
         let logical_planner = spicepod_root.logical_planner.clone();
         let physical_planner = spicepod_root.physical_planner.clone();
         let executor = spicepod_root.executor.clone();
+        let researcher = spicepod_root.researcher.clone();
 
         spicepods.push(spicepod_root);
 
@@ -357,6 +361,7 @@ impl AppBuilder {
             orchestrator,
             logical_planner,
             physical_planner,
+            researcher,
             executor,
             secrets,
             extensions,
