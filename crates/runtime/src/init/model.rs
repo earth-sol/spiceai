@@ -72,12 +72,10 @@ impl Runtime {
         // Load tools before loading models.
         Arc::clone(&self).load_tools().await;
 
-        let mut model_names = HashSet::new();
         if let Some(app) = app_lock.as_ref() {
             for model in &app.models {
                 self.status
                     .update_model(&model.name, status::ComponentStatus::Initializing);
-                model_names.insert(model.name.clone());
                 self.load_model(model).await;
             }
 
@@ -105,7 +103,6 @@ impl Runtime {
             return;
         };
         let logical_planner = logical_planner_model(logical.clone());
-        model_names.insert(logical_planner_name);
 
         // Load the physical planner model
         let Some(physical_planner_name) = app.physical_planner.clone() else {
@@ -120,9 +117,7 @@ impl Runtime {
             return;
         };
         let physical_prompt_planner = physical_prompt_planner_model(physical.clone());
-        model_names.insert(physical_planner_name.clone());
         let physical_tool_planner = physical_tool_planner_model(physical.clone());
-        model_names.insert(physical_planner_name);
 
         // Load executor model
         let executor_name = match app.executor.clone() {
@@ -136,7 +131,6 @@ impl Runtime {
             tracing::error!("Executor model [{:?}] not found", executor_name);
             return;
         };
-        model_names.insert(executor_name.clone());
 
         let mut tools: HashMap<String, Arc<dyn SpiceModelTool>> = HashMap::new();
         for (name, tool) in self.tools.read().await.iter() {
