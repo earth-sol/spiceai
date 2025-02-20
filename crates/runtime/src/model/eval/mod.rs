@@ -235,6 +235,7 @@ async fn run_eval(
     // Score the results
     let scorers_to_use = get_scorers_for_eval(eval, Arc::clone(&scorer_registry)).await?;
     let scores = score_results(&input, &actual, &ideal, &scorers_to_use).await;
+    println!("IDEAL {:?}", ideal);
     write_results(id, Arc::clone(&df), &input, &actual, &ideal, &scores).await?;
 
     // Compute metrics

@@ -88,18 +88,42 @@ impl Runtime {
                 let llms_clone = Arc::clone(&self.llms);
                 let mut llm_map = self.llms.write().await;
 
-                let Some(orchestrator_model) = app.models.iter().find(|m| m.name == orchestrator)
+                // Load the logical planner model
+                let logical_planner_name = match app.logical_planner.clone() {
+                    Some(p) => p,
+                    None => {
+                        tracing::error!("Logical planner not found");
+                        return;
+                    }
+                };
+                let Some(logical) = app.models.iter().find(|m| m.name == logical_planner_name)
                 else {
-                    tracing::error!("Orchestrator model [{}] not found", orchestrator);
+                    tracing::error!("Logical planner model [{}] not found", logical_planner_name);
                     return;
                 };
-                let logical_planner = logical_planner_model(orchestrator_model.clone());
-                model_names.insert(logical_planner.name.clone());
-                let physical_prompt_planner =
-                    physical_prompt_planner_model(orchestrator_model.clone());
-                model_names.insert(physical_prompt_planner.name.clone());
-                let physical_tool_planner = physical_tool_planner_model(orchestrator_model.clone());
-                model_names.insert(physical_tool_planner.name.clone());
+                let logical_planner = logical_planner_model(logical.clone());
+                model_names.insert(logical_planner_name);
+
+                // Load the physical planner model
+                let physical_planner_name = match app.physical_planner.clone() {
+                    Some(p) => p,
+                    None => {
+                        tracing::error!("Physical planner not found");
+                        return;
+                    }
+                };
+                let Some(physical) = app.models.iter().find(|m| m.name == physical_planner_name)
+                else {
+                    tracing::error!(
+                        "Physical planner model [{:?}] not found",
+                        physical_planner_name
+                    );
+                    return;
+                };
+                let physical_prompt_planner = physical_prompt_planner_model(physical.clone());
+                model_names.insert(physical_planner_name.clone());
+                let physical_tool_planner = physical_tool_planner_model(physical.clone());
+                model_names.insert(physical_planner_name);
 
                 let mut tools: HashMap<String, Arc<dyn SpiceModelTool>> = HashMap::new();
                 for (_, tool) in self.tools.read().await.iter() {

@@ -38,7 +38,7 @@ impl PhysicalJobExecutor {
 impl PhysicalJobExecutor {
     pub async fn execute(&mut self) -> Result<(), anyhow::Error> {
         for task in &self.plan.tasks {
-            tracing::info!("Executing task: {:?}", task.objective);
+            tracing::info!("Executing task: {}", task.objective);
             let mut step_history = vec![];
             for step in &task.steps {
                 let output = self
