@@ -181,7 +181,11 @@ impl PhysicalPlan {
             match step.action.into() {
                 StepType::Tool => {
                     let req = Self::build_request(None, steps.as_slice(), step, &task.objective)?;
-                    steps.push(Self::plan_request(req, StepType::Tool, tool_planner).await?);
+                    steps.push(
+                        Self::plan_request(req, StepType::Tool, tool_planner)
+                            .await?
+                            .with_task_id(task.uuid),
+                    );
                 }
                 StepType::Prompt => {
                     let message = vec![ChatCompletionRequestMessage::System(
@@ -193,7 +197,11 @@ impl PhysicalPlan {
                         step,
                         &task.objective,
                     )?;
-                    steps.push(Self::plan_request(req, StepType::Prompt, prompt_planner).await?);
+                    steps.push(
+                        Self::plan_request(req, StepType::Prompt, prompt_planner)
+                            .await?
+                            .with_task_id(task.uuid),
+                    );
                 }
             }
         }
