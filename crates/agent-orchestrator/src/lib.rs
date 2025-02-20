@@ -122,14 +122,20 @@ impl AgentChat {
         let logical_plan_json =
             serde_json::to_string_pretty(&plan).expect("Failed to serialize logical plan");
         tracing::info!("Logical plan: {logical_plan_json}");
-        if let Err(e) = std::fs::write(
+
+        // trace twice: once to dedicated log and also to the baseline
+        let trace_file_names = vec![
             format!(
                 "data/logical/logical_plan_{}.json",
                 chrono::Local::now().format("%Y%m%d_%H%M%S")
             ),
-            logical_plan_json,
-        ) {
-            tracing::error!("Failed to write logical plan: {e}");
+            "data/logical/logical_plan.json".to_string(),
+        ];
+
+        for file_name in trace_file_names {
+            if let Err(e) = std::fs::write(file_name, &logical_plan_json) {
+                tracing::error!("Failed to write logical plan: {e}");
+            }
         }
 
         Ok(plan)
@@ -153,14 +159,20 @@ impl AgentChat {
         let physical_plan_json = serde_json::to_string_pretty(&physical_plan)
             .expect("Failed to serialize physical plan");
         tracing::info!("Physical plan: {physical_plan_json}");
-        if let Err(e) = std::fs::write(
+
+        // trace twice: once to dedicated log and also to the baseline
+        let trace_file_names = vec![
             format!(
                 "data/physical/physical_plan_{}.json",
                 chrono::Local::now().format("%Y%m%d_%H%M%S")
             ),
-            physical_plan_json,
-        ) {
-            tracing::error!("Failed to write physical plan: {e}");
+            "data/physical/physical_plan.json".to_string(),
+        ];
+
+        for file_name in trace_file_names {
+            if let Err(e) = std::fs::write(file_name, &physical_plan_json) {
+                tracing::error!("Failed to write physical plan: {e}");
+            }
         }
 
         Ok(physical_plan)

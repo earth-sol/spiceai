@@ -37,6 +37,9 @@ impl PhysicalJobExecutor {
 
 impl PhysicalJobExecutor {
     pub async fn execute(&mut self) -> Result<(), anyhow::Error> {
+        // reset physical plan execution log
+        reset_execution_log();
+
         for task in &self.plan.tasks {
             tracing::info!("Executing task: {}", task.objective);
             let mut step_history = vec![];
@@ -152,6 +155,13 @@ fn trace_execution_progress(step: &Step, output: &str) {
     log_execution_update(&format!("Task ID: {task_id}, tool response:\n{output}",));
 }
 
+fn reset_execution_log() {
+    let log_path = "data/physical/physical_plan_execution.log";
+    if let Err(e) = std::fs::remove_file(log_path) {
+        tracing::error!("Failed to reset execution log file: {e}");
+    }
+}
+
 fn log_execution_update(update_message: &str) {
     tracing::debug!(update_message);
 
@@ -159,14 +169,10 @@ fn log_execution_update(update_message: &str) {
     let mut options = std::fs::OpenOptions::new();
     options.create(true).append(true);
 
-    if let Err(e) = options.open(log_path).and_then(|mut file| {
-        writeln!(
-            file,
-            "{} {}",
-            chrono::Local::now().format("%Y%m%d_%H%M%S"),
-            update_message
-        )
-    }) {
+    if let Err(e) = options
+        .open(log_path)
+        .and_then(|mut file| writeln!(file, "{}", update_message))
+    {
         tracing::error!("Failed to write execution update to log: {e}");
     }
 }
