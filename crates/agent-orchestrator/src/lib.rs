@@ -13,10 +13,7 @@ use async_openai::{
 use async_trait::async_trait;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
-use physical::{
-    executor::PhysicalJobExecutor,
-    plan::{PhysicalPlan, Step},
-};
+use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
 
@@ -80,9 +77,30 @@ impl Chat for AgentChat {
 
         add_system_message(&mut req, self.objective.clone());
 
-        let response = logical_planner_model.chat_request(req).await?;
-        let plan = LogicalPlan::from_chat_completion(&response)
-            .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
+        let response = logical_planner_model.chat_request(req.clone()).await?;
+
+        // Attempt to convert the chat response to a logical plan. If the JSONSchema format is not satisfied, reattempt once.
+        let plan = match LogicalPlan::from_chat_completion(&response) {
+            Ok(plan) => plan,
+            Err(logical::plan::ConversionError::JsonSchema(e)) => {
+                tracing::warn!(
+                    "Logical plan created did not satisfy JSONSchema format. Reattempting.\n   Initial Error: {e}"
+                );
+                let response = logical_planner_model.chat_request(req).await?;
+                LogicalPlan::from_chat_completion(&response)
+                    .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?
+            }
+            Err(logical::plan::ConversionError::SerdeJson(e)) => {
+                return Err(OpenAIError::InvalidArgument(format!(
+                    "Failed to convert chat response to logical plan: {e}"
+                )))
+            }
+            Err(logical::plan::ConversionError::SerdeYaml(e)) => {
+                return Err(OpenAIError::InvalidArgument(format!(
+                    "Failed to convert chat response to logical plan: {e}"
+                )))
+            }
+        };
 
         let logical_plan_json =
             serde_json::to_string_pretty(&plan).expect("Failed to serialize logical plan");

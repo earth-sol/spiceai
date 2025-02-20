@@ -1,4 +1,3 @@
-use serde_yaml;
 use spicepod::component::model::Model;
 
 #[must_use]
