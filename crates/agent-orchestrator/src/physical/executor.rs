@@ -149,10 +149,7 @@ fn trace_execution_progress(step: &Step, output: &str) {
             ));
         }
     }
-    log_execution_update(&format!(
-        "Task ID: {task_id}, tool response:\n{:?}",
-        output
-    ));
+    log_execution_update(&format!("Task ID: {task_id}, tool response:\n{output}",));
 }
 
 fn log_execution_update(update_message: &str) {

@@ -79,7 +79,7 @@ pub fn builtin_scorer() -> Vec<(&'static str, Arc<dyn Scorer>)> {
 pub fn load_llm_scorer(name: &str, llm_store: Arc<RwLock<LLMModelStore>>) -> Arc<dyn Scorer> {
     Arc::new(LLMScorer {
         name: name.to_string(),
-        llm_store: llm_store,
+        llm_store,
     })
 }
 

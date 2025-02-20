@@ -50,6 +50,7 @@ pub struct ToolStep {
     pub task_uuid: Option<Uuid>,
     pub tool: String,
     pub body: String,
+    pub target_model: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -66,6 +67,7 @@ pub enum Step {
 }
 
 impl Step {
+    #[must_use]
     pub fn task_id(&self) -> Option<Uuid> {
         match self {
             Step::Tool(tool_step) => tool_step.task_uuid,
@@ -81,6 +83,7 @@ pub enum StepType {
 }
 
 impl Step {
+    #[must_use]
     pub fn with_task_id(mut self, task_uuid: Option<Uuid>) -> Self {
         match &mut self {
             Step::Tool(tool_step) => tool_step.task_uuid = task_uuid,
@@ -182,7 +185,7 @@ impl PhysicalPlan {
                 }
                 StepType::Prompt => {
                     let message = vec![ChatCompletionRequestMessage::System(
-                        "The following models are available for selection: o3-mini".into(), // update to the actual list of models, trimming the agentic models
+                        "The following models are available for selection: gpt-4o".into(), // update to the actual list of models, trimming the agentic models
                     )];
                     let req = Self::build_request(
                         Some(message),

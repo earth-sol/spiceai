@@ -10,8 +10,12 @@ json_schema:
       body:
         description: The parameters to call the tool with, provided as a JSON object. The body must conform to the schema of the tool being called.
         type: string
+      target_model:
+        description: The name of the model to verify the tool response
+        type: string
     required:
       - tool
       - body
+      - target_model
     additionalProperties: false
 strict: true

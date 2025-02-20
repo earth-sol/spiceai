@@ -39,13 +39,13 @@ impl Scorer for LLMScorer {
         ideal: &DatasetOutput,
     ) -> f32 {
         let store = self.llm_store.read().await;
-        let scorer = store.get(&self.name).unwrap();
+        let scorer = store.get(&self.name).expect("Failed to get scorer");
         let prompt = "YO".to_string();
         let req = CreateChatCompletionRequestArgs::default()
             .messages(vec![ChatCompletionRequestUserMessageArgs::default()
                 .content(prompt)
                 .build()
-                .unwrap()
+                .expect("Failed to build user message")
                 .into()])
             .store(true)
             .metadata(json!({
@@ -54,7 +54,7 @@ impl Scorer for LLMScorer {
                 "input": format!("{:?}", input),
             }))
             .build()
-            .unwrap();
+            .expect("Failed to build chat completion request");
         match scorer.chat_request(req).await {
             Ok(response) => {
                 let resp = response
@@ -63,9 +63,11 @@ impl Scorer for LLMScorer {
                     .next()
                     .and_then(|c| c.message.content);
                 tracing::info!("LLM response: {:?}", resp);
-                let json_resp: Value = serde_json::from_str(&resp.unwrap()).unwrap();
-                let score = json_resp["score"].as_f64().unwrap();
-                score as f32
+                let json_resp: Value =
+                    serde_json::from_str(&resp.expect("Failed to parse LLM response"))
+                        .expect("Failed to parse LLM response");
+                let score = json_resp["score"].as_f64().expect("Failed to get score") as f32;
+                score
             }
             Err(e) => {
                 tracing::error!("Error running LLM model: {:?}", e);
