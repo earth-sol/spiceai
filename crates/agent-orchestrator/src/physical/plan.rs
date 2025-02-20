@@ -157,7 +157,7 @@ impl PhysicalPlan {
                     OpenAIError::InvalidArgument(format!("Failed to parse tool step: {e}"))
                 })?;
 
-                step.model = "gpt-4o".to_string();
+                step.model = "executor-gpt-4o".to_string();
 
                 Step::Tool(step)
             }
