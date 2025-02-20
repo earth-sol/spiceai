@@ -7,19 +7,19 @@ json_schema:
       tool:
         description: The specific name of the tool to use
         type: string
-      body:
-        description: The parameters to call the tool with, provided as a JSON object. The body must conform to the schema of the tool being called.
+      success_criteria:
+        description: At the completion of this step, what should be true? What is the measure of knowing the step is complete?
         type: string
       model:
         description: The name of the model to verify the tool response
         type: string
-      success_criteria:
-        description: At the completion of this step, what should be true? What is the measure of knowing the step is complete?
+      body:
+        description: The parameters to call the tool with, provided as a JSON object. The body must conform to the schema of the tool being called.
         type: string
     required:
       - tool
-      - body
       - model
       - success_criteria
+      - body
     additionalProperties: false
 strict: true

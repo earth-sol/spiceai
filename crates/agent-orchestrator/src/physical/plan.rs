@@ -210,16 +210,20 @@ impl PhysicalPlan {
                     OpenAIError::InvalidArgument(format!("Failed to parse tool step: {e}"))
                 })?;
 
-                step.model = "executor-gpt-4o".to_string();
+                step.model = "orchestrator-o3-mini".to_string();
 
                 Step::Tool(step)
             }
             StepType::Prompt => {
                 // TODO: validate the selected model is valid and retry if not
-                Step::Prompt(serde_json::from_str::<PromptStep>(body).map_err(|e| {
+                let mut step = serde_json::from_str::<PromptStep>(body).map_err(|e| {
                     println!("{body}");
                     OpenAIError::InvalidArgument(format!("Failed to parse prompt step: {e}"))
-                })?)
+                })?;
+
+                step.model = "orchestrator-o3-mini".to_string();
+
+                Step::Prompt(step)
             }
         };
 

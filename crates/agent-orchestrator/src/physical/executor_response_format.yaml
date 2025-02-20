@@ -1,0 +1,25 @@
+type: json_schema
+json_schema:
+  name: success_criteria_verification
+  schema:
+    type: object
+    properties:
+      status:
+        description: The status of the success criteria verification. Inconclusive means there is not enough information to determine if either success or failure is true.
+        type: string
+        enum:
+          - succeeded
+          - failed
+          - inconclusive
+      reason:
+        description: Your reasoning for whether the success criteria was met
+        type: string
+      wait:
+        description: If the status is a failure or inconclusive, whether to wait and re-check the success criteria after a time-delay (if you believe it may be met in the future)
+        type: boolean
+    required:
+      - success
+      - reason
+      - wait
+    additionalProperties: false
+strict: true

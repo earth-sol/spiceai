@@ -32,6 +32,9 @@ json_schema:
                     type: array
                     items:
                       type: string
+                  success_criteria:
+                    description: At the completion of this step, what should be true? What is the measure of knowing the step is complete?
+                    type: string
                   action:
                     description: The type of action to be taken
                     type: string
@@ -54,14 +57,11 @@ json_schema:
                       For example, for a execute_terminal type, this would be the command to run.
                       For a change directory, the relative path of the directory to change to.
                     type: string
-                  success_criteria:
-                    description: At the completion of this step, what should be true? What is the measure of knowing the step is complete?
-                    type: string
                 required:
                   - description
+                  - success_criteria
                   - action
                   - input
-                  - success_criteria
                 additionalProperties: false
           required:
             - objective

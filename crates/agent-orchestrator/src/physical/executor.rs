@@ -1,11 +1,16 @@
 use std::{collections::HashMap, io::Write, sync::Arc};
 
 use super::plan::{PhysicalPlan, PromptStep, Step, ToolStep};
-use async_openai::types::{
-    ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
-    ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs,
+use async_openai::{
+    error::OpenAIError,
+    types::{
+        ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
+        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, ResponseFormat,
+        ResponseFormatJsonSchema,
+    },
 };
 use llms::chat::Chat;
+use serde::Deserialize;
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
 pub struct PhysicalJobExecutor {
@@ -167,7 +172,7 @@ impl PhysicalJobExecutor {
 
     async fn execute_tool(
         &self,
-        _step_history: &[ChatCompletionRequestMessage],
+        step_history: &[ChatCompletionRequestMessage],
         step: &ToolStep,
     ) -> Result<ChatCompletionRequestMessage, ExecuteToolError> {
         let tool = self
@@ -192,16 +197,20 @@ impl PhysicalJobExecutor {
             .map_err(|e| anyhow::anyhow!("Error building tool message: {}", e.to_string()))?;
         let request_message = ChatCompletionRequestMessage::User(tool_message);
 
-        // let tool_result = self
-        //     .tool_call_succeeded(step_history, request_message.clone(), &step.model)
-        //     .await?;
+        let tool_result = self
+            .tool_call_succeeded(
+                step_history,
+                request_message.clone(),
+                &step.model,
+                &step.success_criteria,
+            )
+            .await?;
 
         // match tool_result {
-        //     ToolCallResult::Success => Ok(request_message),
-        //     ToolCallResult::Failure(failure_reason) => Err(ExecuteToolError::ToolCallFailed {
-        //         reason: failure_reason,
-        //         tool_output: request_message,
-        //     }),
+        //     ToolCallResult::Success => (),
+        //     ToolCallResult::Failure(failure_reason) => {
+        //         tracing::error!("Tool call failed: {failure_reason}");
+        //     }
         // }
 
         Ok(request_message)
@@ -213,24 +222,58 @@ impl PhysicalJobExecutor {
         step_history: &[ChatCompletionRequestMessage],
         tool_output: ChatCompletionRequestMessage,
         model: &str,
+        success_criteria: &str,
     ) -> Result<ToolCallResult, anyhow::Error> {
         let mut messages = step_history.to_vec();
         messages.push(tool_output);
         messages.push(ChatCompletionRequestMessage::User(
-            r#"
-            The previous message was a tool call.
-            Validate that the tool call was successful and return ONLY the literal word "true" or ONLY the literal word "false" on the first line.
-            On the second line, explain why you think the tool call was successful or not.
+            format!("# Goal
+
+            The previous message was a tool call. Classify if the previous tool call was successful or not, based on the output of the tool call and the step's success criteria.
+
+            # Success Criteria
+
+            {success_criteria}
+
+            # Guidelines
+
+            1. A non-zero status code does not always mean the tool call failed - ensure you inspect the relevant tool output, or call additional tools if needed, to determine if the output actually indicates a failure.
+            2. Validate that the tool call was successful, and return ONLY the literal word \"true\" or ONLY the literal word \"false\" on the first line.
+            3. If the tool call message indicates a terminal command was executed, ensure you retrieve the relevant terminal output and classify based on the retrieved terminal output.
+            4. On the second line, explain why you think the tool call was successful or not.
+            5. Ensure you consider that the existence of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure.
+            6. Use any of your available tools to verify the success criteria has been met.
+            7. If there is no evidence or confirmation from the tool output that the success criteria has been met, make tool calls to retrieve the relevant information to verify the success criteria has been met.
             
-            Ensure you consider that the existence of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure."#.into(),
-        ));
+            # Example Successful Classification Process
+
+            1. Inspect the tool output. The tool output talks about a terminal command that completed with status code 4, with a method to access terminal logs based on a terminal ID.
+            2. Because the status code is non-zero, we need to inspect the terminal logs to determine if the command actually failed.
+            3. A tool call is made to retrieve the relevant terminal logs.
+            4. The terminal logs include no error messages, and the command output is as expected.
+            5. The tool call is classified as successful.
+            
+            # Example Failed Classification Process
+
+            1. Inspect the tool step. The tool step talks about removing some files.
+            2. Because the tool step talks about removing files, we need to inspect the filesystem to determine if the files were actually removed.
+            3. A tool call is made to retrieve the relevant filesystem information.
+            4. The filesystem information includes the list of files, and the files are still present.
+            5. The tool call is classified as failed.
+            ",
+        ).into()));
 
         let llms = &*self.llms.read().await;
         let model = llms
             .get(model)
             .ok_or_else(|| anyhow::anyhow!("Model {} not found", model))?;
 
+        let yaml_str = include_str!("executor_response_format.yaml");
+        let yaml_value: ResponseFormat =
+            serde_yaml::from_str(yaml_str).expect("Failed to parse YAML");
+
         let req = CreateChatCompletionRequestArgs::default()
+            .response_format(yaml_value)
             .messages(messages)
             .build()
             .map_err(|e| {
@@ -242,16 +285,37 @@ impl PhysicalJobExecutor {
             return Err(anyhow::anyhow!("No message content found"));
         };
 
-        let mut lines = message.lines();
-        let first_line = lines.next().unwrap_or_default();
-        let second_line = lines.next().unwrap_or_default();
+        let verification = serde_json::from_str::<VerificationResponse>(&message).map_err(|e| {
+            OpenAIError::InvalidArgument(format!("Failed to parse verification response: {e}"))
+        })?;
 
-        if first_line.trim().to_lowercase() == "true" {
+        if verification.status == VerificationStatus::Succeeded {
             Ok(ToolCallResult::Success)
         } else {
-            tracing::error!("Tool call failed: {second_line}");
-            Ok(ToolCallResult::Failure(second_line.to_string()))
+            tracing::error!("Tool call failed: {}", verification.reason);
+
+            if verification.wait {
+                tracing::warn!("Model thinks waiting might be needed to verify result");
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+            }
+
+            if verification.status == VerificationStatus::Inconclusive {
+                tracing::warn!("Model thinks the result is inconclusive");
+            }
+            Ok(ToolCallResult::Failure(verification.reason))
         }
+
+        // let mut lines = message.lines();
+        // let first_line = lines.next().unwrap_or_default();
+        // let second_line = lines.next().unwrap_or_default();
+
+        // if first_line.trim().to_lowercase() == "true" {
+        //     tracing::info!("Tool call success: {second_line}");
+        //     Ok(ToolCallResult::Success)
+        // } else {
+        //     tracing::error!("Tool call failed: {second_line}");
+        //     Ok(ToolCallResult::Failure(second_line.to_string()))
+        // }
     }
 
     async fn summarize_executed_steps(
@@ -346,4 +410,19 @@ fn log_execution_update(update_message: &str) {
     {
         tracing::error!("Failed to write execution update to log: {e}");
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VerificationResponse {
+    pub status: VerificationStatus,
+    pub reason: String,
+    pub wait: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum VerificationStatus {
+    Succeeded,
+    Failed,
+    Inconclusive,
 }
