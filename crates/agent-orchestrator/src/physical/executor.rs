@@ -3,7 +3,8 @@ use std::{collections::HashMap, io::Write, sync::Arc};
 use super::plan::{PhysicalPlan, PromptStep, Step, ToolStep};
 use async_openai::types::{
     ChatCompletionRequestMessage, ChatCompletionRequestToolMessageArgs,
-    ChatCompletionRequestToolMessageContent, CreateChatCompletionRequestArgs,
+    ChatCompletionRequestToolMessageContent, ChatCompletionRequestUserMessageArgs,
+    ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs,
 };
 use llms::chat::Chat;
 use tokio::sync::RwLock;
@@ -66,7 +67,7 @@ impl PhysicalJobExecutor {
         step: &Step,
     ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
         match step {
-            Step::Tool(tool_step) => self.execute_tool(tool_step).await,
+            Step::Tool(tool_step) => self.execute_tool(step_history, tool_step).await,
             Step::Prompt(prompt_step) => self.execute_prompt(step_history, prompt_step).await,
         }
     }
@@ -108,6 +109,7 @@ impl PhysicalJobExecutor {
 
     async fn execute_tool(
         &self,
+        step_history: &[ChatCompletionRequestMessage],
         step: &ToolStep,
     ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
         let tool = self
@@ -120,16 +122,59 @@ impl PhysicalJobExecutor {
             .await
             .map_err(|e| anyhow::anyhow!("Error calling tool {}: {}", step.tool, e.to_string()))?;
 
-        trace_execution_progress(&Step::Tool(step.clone()), &response.to_string());
+        let response_str = response.to_string();
 
-        let tool_message_content =
-            ChatCompletionRequestToolMessageContent::Text(response.to_string());
+        trace_execution_progress(&Step::Tool(step.clone()), &response_str);
 
-        let tool_message = ChatCompletionRequestToolMessageArgs::default()
+        let tool_message_content = ChatCompletionRequestUserMessageContent::Text(response_str);
+
+        let tool_message = ChatCompletionRequestUserMessageArgs::default()
             .content(tool_message_content)
             .build()
             .map_err(|e| anyhow::anyhow!("Error building tool message: {}", e.to_string()))?;
-        Ok(ChatCompletionRequestMessage::Tool(tool_message))
+        let request_message = ChatCompletionRequestMessage::User(tool_message);
+
+        let success = self
+            .tool_call_succeeded(step_history, request_message.clone(), &step.target_model)
+            .await?;
+
+        if !success {
+            return Err(anyhow::anyhow!("Tool call failed"));
+        }
+
+        Ok(request_message)
+    }
+
+    async fn tool_call_succeeded(
+        &self,
+        step_history: &[ChatCompletionRequestMessage],
+        tool_output: ChatCompletionRequestMessage,
+        target_model: &str,
+    ) -> Result<bool, anyhow::Error> {
+        let mut messages = step_history.to_vec();
+        messages.push(tool_output);
+        messages.push(ChatCompletionRequestMessage::User(
+            r#"The previous message was a tool call. Validate that the tool call was successful and return ONLY the literal word "true" if it was, otherwise return ONLY the literal word "false"."#.into(),
+        ));
+
+        let llms = &*self.llms.read().await;
+        let model = llms
+            .get(target_model)
+            .ok_or_else(|| anyhow::anyhow!("Model {} not found", target_model))?;
+
+        let req = CreateChatCompletionRequestArgs::default()
+            .messages(messages)
+            .build()
+            .map_err(|e| {
+                anyhow::anyhow!("Error building chat completion request: {}", e.to_string())
+            })?;
+        let response = model.chat_request(req).await?;
+
+        let Some(message) = response.choices[0].message.content.clone() else {
+            return Err(anyhow::anyhow!("No message content found"));
+        };
+
+        Ok(message.trim().to_lowercase() == "true")
     }
 }
 
