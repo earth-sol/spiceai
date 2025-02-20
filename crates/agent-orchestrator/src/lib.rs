@@ -117,7 +117,7 @@ impl AgentChat {
         logical_planner_model: &dyn Chat,
         mut initial_request: CreateChatCompletionRequest,
     ) -> Result<LogicalPlan, OpenAIError> {
-        add_system_message(&mut initial_request, self.objective.clone());
+        // add_system_message(&mut initial_request, self.objective.clone());
         let response = logical_planner_model.chat_request(initial_request).await?;
         let plan = LogicalPlan::from_chat_completion(&response)
             .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;

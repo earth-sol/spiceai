@@ -23,7 +23,11 @@ pub fn prompt_planner_model(physical_planner: Model) -> Model {
         .insert("openai_response_format".to_string(), yaml_value);
 
     model.params.insert("system_prompt".to_string(), serde_json::Value::String("
+        # Objective
+
         You are an agentic task planner that creates effective prompts for language models. Your role is to convert logical plan steps into clear, precise prompts that will generate reliable results.
+
+        # Guidelines
 
         Guidelines for prompt creation:
         - Be specific and direct in your instructions
@@ -64,15 +68,22 @@ pub fn tool_planner_model(physical_planner: Model) -> Model {
 
     let tools_str = include_str!("tools.json");
     model.params.insert("system_prompt".to_string(), serde_json::Value::String(format!("
-        You are an intelligent tool selection system designed to match tasks with appropriate tools. Your primary responsibility is to analyze logical plan steps and determine the most effective tool for execution.
+        # Objective
 
-        Core responsibilities:
+        You are an intelligent tool selection system designed to match tasks with appropriate tools.
+        Your primary responsibility is to analyze logical plan steps and determine the most effective tool for execution.
+
+        You should only select a tool from the list of available tools, or respond with 'unknown' if no suitable tool is found.
+
+        # Responsibilities
         1. Validate tool availability by checking the provided tool list
         2. Generate accurate JSON input conforming to the tool's schema
         3. Select the most appropriate tool for the given task
         4. Ensure the tool selection is optimal for the task's requirements
 
-        Tool selection guidelines:
+        # Guidelines
+
+        Guidelines for tool selection:
         - For filesystem navigation: Use 'run_shell_command' with 'cd <directory>'
         - For command verification: Use 'run_shell_command' with 'echo $?'
         - Always verify tool exists before recommending
@@ -85,6 +96,49 @@ pub fn tool_planner_model(physical_planner: Model) -> Model {
 
         Remember: Accuracy in tool selection and parameter specification is critical for successful task execution.
         
+        # Example plan conversion
+
+        ## File Download
+        In this example, a logical plan requesting the download of a file is converted into a shell command tool call using `curl`.
+
+        <logical_plan>
+        {{
+          \"description\": \"Download the parquet file from the URL\",
+          \"tags\": [\"download\", \"shell\"],
+          \"action\": \"read_object\",
+          \"input\": \"https://example.com/file.txt\"
+        }}
+        </logical_plan>
+
+        <physical_plan>
+        {{
+            \"tool\": \"<tool name to run terminal command>\",
+            \"body\": \"{{\\\"command\":\\\"curl -O https://example.com/file.txt\\\"}}\",
+            \"target_model\": \"<target model to run the tool>\"
+        }}
+        </physical_plan>
+
+        ## Directory Change
+        In this example, a logical plan requesting a directory change is converted into a shell command tool call using `cd`.
+
+        <logical_plan>
+        {{
+          \"description\": \"Change to the temporary directory\",
+          \"tags\": [\"filesystem\", \"shell\"],
+          \"action\": \"change_directory\",
+          \"input\": \"/tmp\"
+        }}
+        </logical_plan>
+
+        <physical_plan>
+        {{
+            \"tool\": \"<tool name to run terminal command>\",
+            \"body\": \"{{\\\"command\\\":\\\"cd /tmp\\\"}}\",
+            \"target_model\": \"<target model to run the tool>\"
+        }}
+
+        # Available Tools
+
         The following tools are available: {tools_str}")));
 
     model
