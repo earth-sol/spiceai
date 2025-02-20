@@ -8,20 +8,23 @@ use async_openai::{
     error::OpenAIError,
     types::{
         ChatChoice, ChatCompletionNamedToolChoice, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessageContent,
         ChatCompletionResponseMessage, ChatCompletionToolChoiceOption, ChatCompletionToolType,
-        CreateChatCompletionRequest, CreateChatCompletionResponse, FunctionName, Role,
+        CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
+        FunctionName, Role,
     },
 };
 use async_trait::async_trait;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
+use research::Research;
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
 
 pub mod logical;
 pub mod physical;
+pub mod pipeline;
+pub mod research;
 
 pub struct AgentChat {
     _objective: String,
@@ -48,76 +51,32 @@ impl AgentChat {
         }
     }
 
-    fn parse_request(
-        req: &CreateChatCompletionRequest,
-    ) -> Result<(Option<LogicalPlan>, Option<PhysicalPlan>), OpenAIError> {
-        let mut content = String::new();
-        tracing::debug!("Request: {req:?}");
-        let Some(message) = req.messages.last() else {
-            return Ok((None, None));
-        };
-        match message {
-            ChatCompletionRequestMessage::User(user_message) => {
-                if let ChatCompletionRequestUserMessageContent::Text(text) = &user_message.content {
-                    content.push_str(text);
-                }
-            }
-            // For some reason, we are getting a system message here from `spice chat`
-            ChatCompletionRequestMessage::System(system_message) => {
-                if let ChatCompletionRequestSystemMessageContent::Text(text) =
-                    &system_message.content
-                {
-                    content.push_str(text);
-                }
-            }
-            _ => return Ok((None, None)),
-        }
-
-        tracing::debug!("Request content: {content}");
-        let Some(last_line) = content.lines().last() else {
-            return Ok((None, None));
-        };
-        tracing::debug!("Last line: {last_line}");
-
-        if last_line.starts_with(".logical_plan") {
-            let logical_plan_file = last_line
-                .split(' ')
-                .nth(1)
-                .expect("Logical plan file not found");
-            tracing::debug!("Logical plan file: {logical_plan_file}");
-            let logical_plan_str = std::fs::read_to_string(logical_plan_file).map_err(|e| {
-                OpenAIError::InvalidArgument(format!("Error reading logical plan: {e}"))
-            })?;
-            tracing::info!("Logical plan from file: {logical_plan_str}");
-            let logical_plan = LogicalPlan::new(&logical_plan_str).map_err(|e| {
-                OpenAIError::InvalidArgument(format!("Error parsing logical plan: {e}"))
-            })?;
-            return Ok((Some(logical_plan), None));
-        }
-        if last_line.starts_with(".physical_plan") {
-            let physical_plan_file = last_line
-                .split(' ')
-                .nth(1)
-                .expect("Physical plan file not found");
-            tracing::debug!("Physical plan file: {physical_plan_file}");
-            let physical_plan_str = std::fs::read_to_string(physical_plan_file).map_err(|e| {
-                OpenAIError::InvalidArgument(format!("Error reading physical plan: {e}"))
-            })?;
-            tracing::info!("Physical plan from file: {physical_plan_str}");
-            let physical_plan = PhysicalPlan::new(&physical_plan_str).map_err(|e| {
-                OpenAIError::InvalidArgument(format!("Error parsing physical plan: {e}"))
-            })?;
-            return Ok((None, Some(physical_plan)));
-        }
-
-        Ok((None, None))
+    #[allow(clippy::unused_async)]
+    async fn generate_research(
+        &self,
+        _research_model: &dyn Chat,
+        prompt: String,
+    ) -> Result<Research, OpenAIError> {
+        let artifacts = vec![];
+        Ok(Research { prompt, artifacts })
     }
 
     async fn generate_logical_plan(
         &self,
         logical_planner_model: &dyn Chat,
-        mut initial_request: CreateChatCompletionRequest,
+        research: Research,
     ) -> Result<LogicalPlan, OpenAIError> {
+        let artifacts_prompt = research
+            .artifacts
+            .iter()
+            .map(|artifact| format!("{artifact}"))
+            .collect::<Vec<String>>()
+            .join("\n\n");
+        let mut initial_request = CreateChatCompletionRequestArgs::default()
+            .messages(vec![ChatCompletionRequestMessage::User(
+                format!("{}\n\n{}", artifacts_prompt, research.prompt).into(),
+            )])
+            .build()?;
         initial_request.tool_choice = Some(ChatCompletionToolChoiceOption::Named(
             ChatCompletionNamedToolChoice {
                 r#type: ChatCompletionToolType::Function,
@@ -241,40 +200,51 @@ impl Chat for AgentChat {
             )));
         };
 
-        let (mut logical_plan, mut physical_plan) = Self::parse_request(&req)
+        let mut pipeline = pipeline::AgentPipeline::try_new(&req)
             .map_err(|e| OpenAIError::InvalidArgument(format!("Error parsing request: {e}")))?;
 
-        if logical_plan.is_none() && physical_plan.is_none() {
-            logical_plan = Some(
-                self.generate_logical_plan(logical_planner_model.as_ref(), req)
-                    .await?,
-            );
+        loop {
+            match pipeline {
+                pipeline::AgentPipeline::Research { prompt } => {
+                    let research = self
+                        .generate_research(logical_planner_model.as_ref(), prompt)
+                        .await?;
+                    pipeline = pipeline::AgentPipeline::LogicalPlan(research);
+                }
+                pipeline::AgentPipeline::LogicalPlan(research) => {
+                    let logical_plan = self
+                        .generate_logical_plan(logical_planner_model.as_ref(), research)
+                        .await?;
+                    pipeline = pipeline::AgentPipeline::PhysicalPlan(logical_plan);
+                }
+                pipeline::AgentPipeline::PhysicalPlan(logical_plan) => {
+                    let physical_plan = self
+                        .generate_physical_plan(
+                            &logical_plan,
+                            physical_tool_planner_model.as_ref(),
+                            physical_prompt_planner_model.as_ref(),
+                        )
+                        .await?;
+                    pipeline = pipeline::AgentPipeline::Execution(physical_plan);
+                }
+                pipeline::AgentPipeline::Execution(physical_plan) => {
+                    let mut executor = PhysicalJobExecutor::new(
+                        physical_plan,
+                        Arc::clone(&self.llms),
+                        self.tools.clone(),
+                        "agentic_physical_prompt_planner".to_string(),
+
+                    );
+                    executor.execute().await.map_err(|e| {
+                        OpenAIError::InvalidArgument(format!("Error executing physical plan: {e}"))
+                    })?;
+                    pipeline = pipeline::AgentPipeline::Output("Done!".to_string());
+                }
+                pipeline::AgentPipeline::Output(_) => {
+                    return Ok(get_done_message());
+                }
+            }
         }
-
-        if let Some(plan) = logical_plan {
-            physical_plan = Some(
-                self.generate_physical_plan(
-                    &plan,
-                    physical_tool_planner_model.as_ref(),
-                    physical_prompt_planner_model.as_ref(),
-                )
-                .await?,
-            );
-        }
-
-        let physical_plan = physical_plan.expect("Physical plan is required");
-
-        let mut executor = PhysicalJobExecutor::new(
-            physical_plan,
-            Arc::clone(&self.llms),
-            self.tools.clone(),
-            "agentic_physical_prompt_planner".to_string(),
-        );
-        executor.execute().await.map_err(|e| {
-            OpenAIError::InvalidArgument(format!("Error executing physical plan: {e}"))
-        })?;
-
-        Ok(get_done_message())
     }
 }
 

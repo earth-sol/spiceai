@@ -123,12 +123,63 @@ impl PhysicalPlan {
         let mut messages = messages.unwrap_or_default();
 
         let previous_steps_body = serde_json::to_string(previous_steps)?;
-        let previous_steps_message = ChatCompletionRequestMessage::System(format!("The following steps have been planned already: {previous_steps_body}. Plan the next step.").into());
+        let previous_steps_message = ChatCompletionRequestMessage::System(
+            format!("The following steps have been planned already: {previous_steps_body}.").into(),
+        );
         messages.push(previous_steps_message);
 
         let body = serde_json::to_string(step)?;
         messages.push(ChatCompletionRequestMessage::User(
-            format!("Task Objective: {objective}.\nThis step of the task is: {body}").into(),
+            format!(
+                "# Goal
+            
+            Create a physical plan step to achieve the logical plan step.
+            Keep in mind the overall task objective while creating the physical plan step.
+
+            # Task Objective
+
+            {objective}
+
+            # Logical Plan Step
+
+            {body}"
+            )
+            .into(),
+        ));
+        let req = CreateChatCompletionRequestArgs::default()
+            .messages(messages)
+            .build()?;
+
+        Ok(req)
+    }
+
+    pub fn build_verification_request(
+        messages: Option<Vec<ChatCompletionRequestMessage>>,
+        previous_steps: &[Step],
+        step: &logical::plan::Step,
+    ) -> Result<CreateChatCompletionRequest, OpenAIError> {
+        let mut messages = messages.unwrap_or_default();
+
+        let previous_steps_body = serde_json::to_string(previous_steps)?;
+        let previous_steps_message = ChatCompletionRequestMessage::System(
+            format!("The following steps have been planned already: {previous_steps_body}.").into(),
+        );
+        messages.push(previous_steps_message);
+
+        let body = serde_json::to_string(step)?;
+        messages.push(ChatCompletionRequestMessage::User(
+            format!("# Goal
+
+            Create a physical plan step to verify the logical plan step was successful, based on the success criteria.
+            
+            # Logical Plan Step
+            
+            {body}
+            
+            # Success Criteria
+            
+            {}
+            ", step.success_criteria).into(),
         ));
         let req = CreateChatCompletionRequestArgs::default()
             .messages(messages)
@@ -192,6 +243,13 @@ impl PhysicalPlan {
                             .await?
                             .with_task_id(task.uuid),
                     );
+
+                    let req = Self::build_verification_request(None, steps.as_slice(), step)?;
+                    steps.push(
+                        Self::plan_request(req, StepType::Tool, tool_planner)
+                            .await?
+                            .with_task_id(task.uuid),
+                    );
                 }
                 StepType::Prompt => {
                     let message = vec![ChatCompletionRequestMessage::System(
@@ -204,6 +262,13 @@ impl PhysicalPlan {
                         step,
                         &task.objective,
                     )?;
+                    steps.push(
+                        Self::plan_request(req, StepType::Prompt, prompt_planner)
+                            .await?
+                            .with_task_id(task.uuid),
+                    );
+
+                    let req = Self::build_verification_request(None, steps.as_slice(), step)?;
                     steps.push(
                         Self::plan_request(req, StepType::Prompt, prompt_planner)
                             .await?
