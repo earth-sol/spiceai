@@ -80,14 +80,14 @@ impl PhysicalJobExecutor {
         let prompt = step.prompt.clone();
         let llms = &*self.llms.read().await;
         let model = llms
-            .get(&step.target_model)
-            .ok_or_else(|| anyhow::anyhow!("Model {} not found", step.target_model))?;
+            .get(&step.model)
+            .ok_or_else(|| anyhow::anyhow!("Model {} not found", step.model))?;
 
         let mut messages = step_history.to_vec();
         messages.push(ChatCompletionRequestMessage::User(prompt.into()));
         let req = CreateChatCompletionRequestArgs::default()
             .messages(messages)
-            .model(step.target_model.clone())
+            .model(step.model.clone())
             .build()
             .map_err(|e| {
                 anyhow::anyhow!("Error building chat completion request: {}", e.to_string())
@@ -135,7 +135,7 @@ impl PhysicalJobExecutor {
         let request_message = ChatCompletionRequestMessage::User(tool_message);
 
         let success = self
-            .tool_call_succeeded(step_history, request_message.clone(), &step.target_model)
+            .tool_call_succeeded(step_history, request_message.clone(), &step.model)
             .await?;
 
         if !success {
@@ -149,7 +149,7 @@ impl PhysicalJobExecutor {
         &self,
         step_history: &[ChatCompletionRequestMessage],
         tool_output: ChatCompletionRequestMessage,
-        target_model: &str,
+        model: &str,
     ) -> Result<bool, anyhow::Error> {
         let mut messages = step_history.to_vec();
         messages.push(tool_output);
@@ -159,8 +159,8 @@ impl PhysicalJobExecutor {
 
         let llms = &*self.llms.read().await;
         let model = llms
-            .get(target_model)
-            .ok_or_else(|| anyhow::anyhow!("Model {} not found", target_model))?;
+            .get(model)
+            .ok_or_else(|| anyhow::anyhow!("Model {} not found", model))?;
 
         let req = CreateChatCompletionRequestArgs::default()
             .messages(messages)
@@ -187,7 +187,7 @@ fn trace_execution_progress(step: &Step, output: &str) {
         Step::Prompt(prompt) => {
             log_execution_update(&format!(
                 "Task ID: {task_id}, calling model {} to complete action: {}",
-                prompt.target_model, prompt.prompt
+                prompt.model, prompt.prompt
             ));
         }
         Step::Tool(tool_step) => {

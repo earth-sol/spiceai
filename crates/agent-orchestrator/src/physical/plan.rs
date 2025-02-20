@@ -52,14 +52,14 @@ pub struct ToolStep {
     pub task_uuid: Option<Uuid>,
     pub tool: String,
     pub body: String,
-    pub target_model: String,
+    pub model: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PromptStep {
     pub task_uuid: Option<Uuid>,
     pub prompt: String,
-    pub target_model: String,
+    pub model: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -155,6 +155,12 @@ impl PhysicalPlan {
         let step: Step = match step_type {
             StepType::Tool => {
                 // TODO: validate the tool is valid and retry if not
+                let mut step = serde_json::from_str::<ToolStep>(body).map_err(|e| {
+                    OpenAIError::InvalidArgument(format!("Failed to parse tool step: {e}"))
+                })?;
+
+                step.model = "gpt-4o".to_string();
+
                 Step::Tool(serde_json::from_str::<ToolStep>(body).map_err(|e| {
                     OpenAIError::InvalidArgument(format!("Failed to parse tool step: {e}"))
                 })?)
