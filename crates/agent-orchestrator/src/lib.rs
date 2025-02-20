@@ -18,6 +18,7 @@ use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
 use research::Research;
+use serde::Serialize;
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
 
@@ -200,7 +201,7 @@ impl Chat for AgentChat {
             )));
         };
 
-        let mut pipeline = pipeline::AgentPipeline::try_new(&req)
+        let (mut pipeline, advance_mode) = pipeline::AgentPipeline::try_new(&req)
             .map_err(|e| OpenAIError::InvalidArgument(format!("Error parsing request: {e}")))?;
 
         loop {
@@ -209,12 +210,18 @@ impl Chat for AgentChat {
                     let research = self
                         .generate_research(logical_planner_model.as_ref(), prompt)
                         .await?;
+                    if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
+                        return get_output_message_from_struct(research);
+                    }
                     pipeline = pipeline::AgentPipeline::LogicalPlan(research);
                 }
                 pipeline::AgentPipeline::LogicalPlan(research) => {
                     let logical_plan = self
                         .generate_logical_plan(logical_planner_model.as_ref(), research)
                         .await?;
+                    if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
+                        return get_output_message_from_struct(logical_plan);
+                    }
                     pipeline = pipeline::AgentPipeline::PhysicalPlan(logical_plan);
                 }
                 pipeline::AgentPipeline::PhysicalPlan(logical_plan) => {
@@ -225,6 +232,9 @@ impl Chat for AgentChat {
                             physical_prompt_planner_model.as_ref(),
                         )
                         .await?;
+                    if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
+                        return get_output_message_from_struct(physical_plan);
+                    }
                     pipeline = pipeline::AgentPipeline::Execution(physical_plan);
                 }
                 pipeline::AgentPipeline::Execution(physical_plan) => {
@@ -245,6 +255,14 @@ impl Chat for AgentChat {
             }
         }
     }
+}
+
+fn get_output_message_from_struct<T: Serialize>(
+    output: T,
+) -> Result<CreateChatCompletionResponse, OpenAIError> {
+    let output_json = serde_json::to_string(&output)
+        .map_err(|e| OpenAIError::InvalidArgument(format!("Failed to serialize output: {e}")))?;
+    Ok(get_output_message(output_json))
 }
 
 #[allow(deprecated)]

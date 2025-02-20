@@ -21,8 +21,17 @@ pub enum AgentPipeline {
     Output(String),
 }
 
+pub enum AdvanceMode {
+    /// The pipeline will stop after the current stage is completed.
+    Stop,
+    /// The pipeline will continue to the next stage after the current stage is completed.
+    Continue,
+}
+
 impl AgentPipeline {
-    pub fn try_new(req: &CreateChatCompletionRequest) -> Result<Self, anyhow::Error> {
+    pub fn try_new(
+        req: &CreateChatCompletionRequest,
+    ) -> Result<(Self, AdvanceMode), anyhow::Error> {
         let mut content = String::new();
         tracing::debug!("Request: {req:?}");
         let Some(message) = req.messages.last() else {
@@ -47,9 +56,15 @@ impl AgentPipeline {
 
         tracing::debug!("Request content: {content}");
         let Some(last_line) = content.lines().last() else {
-            return Ok(Self::Research { prompt: content });
+            return Ok((Self::Research { prompt: content }, AdvanceMode::Continue));
         };
         tracing::debug!("Last line: {last_line}");
+
+        let advance_mode = if last_line.contains("--stop") {
+            AdvanceMode::Stop
+        } else {
+            AdvanceMode::Continue
+        };
 
         if last_line.starts_with(".research") {
             let research_file = last_line
@@ -62,7 +77,7 @@ impl AgentPipeline {
             tracing::info!("Research artifacts from file: {research_str}");
             let research = serde_json::from_str(&research_str)
                 .map_err(|e| anyhow::anyhow!("Error parsing research artifacts: {e}"))?;
-            return Ok(Self::LogicalPlan(research));
+            return Ok((Self::LogicalPlan(research), advance_mode));
         }
         if last_line.starts_with(".logical_plan") {
             let logical_plan_file = last_line
@@ -75,7 +90,7 @@ impl AgentPipeline {
             tracing::info!("Logical plan from file: {logical_plan_str}");
             let logical_plan = LogicalPlan::new(&logical_plan_str)
                 .map_err(|e| anyhow::anyhow!("Error parsing logical plan: {e}"))?;
-            return Ok(Self::PhysicalPlan(logical_plan));
+            return Ok((Self::PhysicalPlan(logical_plan), advance_mode));
         }
         if last_line.starts_with(".physical_plan") {
             let physical_plan_file = last_line
@@ -88,9 +103,9 @@ impl AgentPipeline {
             tracing::info!("Physical plan from file: {physical_plan_str}");
             let physical_plan = PhysicalPlan::new(&physical_plan_str)
                 .map_err(|e| anyhow::anyhow!("Error parsing physical plan: {e}"))?;
-            return Ok(Self::Execution(physical_plan));
+            return Ok((Self::Execution(physical_plan), advance_mode));
         }
 
-        Ok(Self::Research { prompt: content })
+        Ok((Self::Research { prompt: content }, AdvanceMode::Continue))
     }
 }
