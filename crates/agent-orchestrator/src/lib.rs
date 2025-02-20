@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
-use research::Research;
+use research::{model::parse_response, Artifact, Research};
 use serde::Serialize;
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
@@ -55,10 +55,27 @@ impl AgentChat {
     #[allow(clippy::unused_async)]
     async fn generate_research(
         &self,
-        _research_model: &dyn Chat,
+        research_model: &dyn Chat,
         prompt: String,
     ) -> Result<Research, OpenAIError> {
-        let artifacts = vec![];
+        let mut initial_request = CreateChatCompletionRequestArgs::default()
+            .messages(vec![ChatCompletionRequestMessage::User(
+                prompt.clone().into(),
+            )])
+            .build()?;
+
+        initial_request.tool_choice = Some(ChatCompletionToolChoiceOption::Named(
+            ChatCompletionNamedToolChoice {
+                r#type: ChatCompletionToolType::Function,
+                function: FunctionName {
+                    name: "document_similarity".to_string(),
+                },
+            },
+        ));
+
+        let response = research_model.chat_request(initial_request).await?;
+        let artifacts = parse_response(&response)?;
+
         Ok(Research { prompt, artifacts })
     }
 
@@ -182,6 +199,12 @@ impl Chat for AgentChat {
         req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
         let llm = self.llms.read().await;
+        let Some(agentic_researcher_model) = llm.get("agentic_researcher") else {
+            return Err(OpenAIError::InvalidArgument(format!(
+                "Model {} not found.",
+                self.orchestrator
+            )));
+        };
         let Some(logical_planner_model) = llm.get("agentic_logical_planner") else {
             return Err(OpenAIError::InvalidArgument(format!(
                 "Model {} not found.",
@@ -208,7 +231,7 @@ impl Chat for AgentChat {
             match pipeline {
                 pipeline::AgentPipeline::Research { prompt } => {
                     let research = self
-                        .generate_research(logical_planner_model.as_ref(), prompt)
+                        .generate_research(agentic_researcher_model.as_ref(), prompt)
                         .await?;
                     if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
                         return get_output_message_from_struct(research);

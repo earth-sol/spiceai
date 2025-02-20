@@ -50,6 +50,8 @@ pub struct App {
 
     pub physical_planner: Option<String>,
 
+    pub researcher: Option<String>,
+
     pub executor: Option<String>,
 
     pub secrets: Vec<Secret>,

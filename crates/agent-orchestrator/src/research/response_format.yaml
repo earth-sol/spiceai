@@ -1,0 +1,29 @@
+type: json_schema
+json_schema:
+  name: tool_step
+  schema:
+    type: object
+    properties:
+      steps:
+        type: array
+        items:
+          oneOf:
+            - type: object
+              properties:
+                path:
+                  type: string
+                content:
+                  type: string
+              required:
+                - path
+                - content
+              additionalProperties: false
+            - type: object
+              properties:
+                content:
+                  type: string
+              required:
+                - content
+              additionalProperties: false
+    required:
+      - steps

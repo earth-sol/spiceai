@@ -23,7 +23,8 @@ use crate::{
 use agent_orchestrator::{
     logical::planner::model as logical_planner_model,
     physical::planner::prompt_planner_model as physical_prompt_planner_model,
-    physical::planner::tool_planner_model as physical_tool_planner_model, AgentChat,
+    physical::planner::tool_planner_model as physical_tool_planner_model,
+    research::model::researcher_model, AgentChat,
 };
 use app::App;
 use model_components::model::Model;
@@ -113,6 +114,19 @@ impl Runtime {
             );
             return;
         };
+
+        // Load the base_researcher model
+        let Some(base_researcher_name) = app.base_researcher.clone() else {
+            tracing::error!("Physical planner not found");
+            return;
+        };
+        let Some(base_researcher) = app.models.iter().find(|m| m.name == base_researcher_name)
+        else {
+            tracing::error!("Base research model [{:?}] not found", base_researcher_name);
+            return;
+        };
+
+        let physical_researcher = researcher_model(base_researcher.clone());
         let physical_prompt_planner = physical_prompt_planner_model(physical.clone());
         let physical_tool_planner = physical_tool_planner_model(physical.clone());
 
@@ -158,6 +172,7 @@ impl Runtime {
         self.load_model(&logical_planner).await;
         self.load_model(&physical_prompt_planner).await;
         self.load_model(&physical_tool_planner).await;
+        self.load_model(&physical_researcher).await;
         tracing::info!("Model [{}] deployed, ready for inferencing", app.name);
         self.status
             .update_model(&app.name, status::ComponentStatus::Ready);
