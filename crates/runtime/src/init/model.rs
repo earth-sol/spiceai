@@ -165,14 +165,14 @@ impl Runtime {
         let agent_chat = AgentChat::new(objective, orchestrator, executor_name, llms_clone, tools);
         llm_map.insert(app.name.clone(), Box::new(agent_chat));
         drop(llm_map);
-        tracing::info!("Model [{}] deployed, ready for inferencing", app.name);
-        self.status
-            .update_model(&app.name, status::ComponentStatus::Ready);
 
         // This requires the lock on `llms` to be released before loading the logical/physical planners.
         self.load_model(&logical_planner).await;
         self.load_model(&physical_prompt_planner).await;
         self.load_model(&physical_tool_planner).await;
+        tracing::info!("Model [{}] deployed, ready for inferencing", app.name);
+        self.status
+            .update_model(&app.name, status::ComponentStatus::Ready);
     }
 
     // Caller must set `status::update_model(...` before calling `load_model`. This function will set error/ready statues appropriately.`
