@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - trunk
+      - feature/agent-hackathon
     tags:
       - v*
     paths-ignore:
@@ -28,17 +29,17 @@ on:
   workflow_dispatch:
     inputs:
       platform_option:
-        description: "Which option do you want to run on? (Default is ALL)"
+        description: 'Which option do you want to run on? (Default is ALL)'
         required: false
         type: choice
         options:
-          - "all"
-          - "Linux x64"
-          - "Linux aarch64"
-          - "macOS aarch64 (Apple Silicon)"
-          - "Windows x64"
-          - "macOS x64 (Intel)"
-        default: "all"
+          - 'all'
+          - 'Linux x64'
+          - 'Linux aarch64'
+          - 'macOS aarch64 (Apple Silicon)'
+          - 'Windows x64'
+          - 'macOS x64 (Intel)'
+        default: 'all'
 
 jobs:
   setup-matrix:
@@ -84,6 +85,11 @@ jobs:
                 tags: ["default", "models"],
               }
             ];
+
+            // If running on the `feature/agent-hackathon` branch, only include the Linux x64
+            if (context.eventName === 'push' && context.payload.ref === 'refs/heads/feature/agent-hackathon') {
+              return matrix.filter(m => m.name === 'Linux x64');
+            }
 
             // If running via workflow_dispatch, filter based on input
             if (context.eventName === 'workflow_dispatch') {
@@ -429,8 +435,8 @@ jobs:
         with:
           name: spiced.exe_models_${{ matrix.target_os }}_${{ matrix.target_arch }}
           path: ${{ env.ARTIFACT_DIR }}
-      
-      # macOS metal 
+
+      # macOS metal
       - name: download artifacts - spiced_models_metal_${{ matrix.target_os }}_${{ matrix.target_arch }}
         if: matrix.target_os == 'darwin'
         uses: actions/download-artifact@v4
