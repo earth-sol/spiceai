@@ -269,13 +269,13 @@ impl PhysicalJobExecutor {
 
         messages.push(ChatCompletionRequestMessage::User(
             format!("
-            Summarize the <STEPS> below that have been executed previously.
+            Summarize the steps below that have been executed previously.
              - Only include main results, list of steps completed, 
              - Incldue learnings, hints and important details that could be useful to effectively execute further tasks.
 
             Summary must be concise, clear and short.
 
-            <STEPS>
+            **Steps**
 
             {content}
             ").into(),
@@ -298,7 +298,7 @@ impl PhysicalJobExecutor {
             return Err(anyhow::anyhow!("No message content found"));
         };
 
-        let message = ChatCompletionRequestUserMessageContent::Text(summary);
+        let message = ChatCompletionRequestUserMessageContent::Text(format!("Find information about previosly executed task to help complete next steps\n\n{summary}"));
 
         Ok(vec![ChatCompletionRequestMessage::User(message.into())])
     }
