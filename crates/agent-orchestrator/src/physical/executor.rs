@@ -79,7 +79,7 @@ impl From<anyhow::Error> for ExecuteToolError {
 }
 
 impl PhysicalJobExecutor {
-    pub async fn execute(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn execute(&mut self) -> Result<String, anyhow::Error> {
         // reset physical plan execution log
         reset_execution_log();
 
@@ -106,7 +106,9 @@ impl PhysicalJobExecutor {
             step_history = self.summarize_executed_steps(&self.summarization_model, &step_history).await?;
         }
 
-        Ok(())
+        // TODO: Generate a report of the execution and return as the output
+
+        Ok("Done!".to_string())
     }
 
     async fn execute_step(

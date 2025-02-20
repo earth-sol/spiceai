@@ -235,10 +235,10 @@ impl Chat for AgentChat {
                         "agentic_physical_prompt_planner".to_string(),
 
                     );
-                    executor.execute().await.map_err(|e| {
+                    let output = executor.execute().await.map_err(|e| {
                         OpenAIError::InvalidArgument(format!("Error executing physical plan: {e}"))
                     })?;
-                    pipeline = pipeline::AgentPipeline::Output("Done!".to_string());
+                    pipeline = pipeline::AgentPipeline::Output(output);
                 }
                 pipeline::AgentPipeline::Output(output) => {
                     return Ok(get_output_message(output));
