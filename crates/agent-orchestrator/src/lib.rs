@@ -7,9 +7,10 @@ use std::{collections::HashMap, sync::Arc};
 use async_openai::{
     error::OpenAIError,
     types::{
-        ChatChoice, ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageContent,
-        ChatCompletionRequestUserMessageContent, ChatCompletionResponseMessage,
-        CreateChatCompletionRequest, CreateChatCompletionResponse, Role,
+        ChatChoice, ChatCompletionNamedToolChoice, ChatCompletionRequestMessage,
+        ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessageContent,
+        ChatCompletionResponseMessage, ChatCompletionToolChoiceOption, ChatCompletionToolType,
+        CreateChatCompletionRequest, CreateChatCompletionResponse, FunctionName, Role,
     },
 };
 use async_trait::async_trait;
@@ -23,7 +24,7 @@ pub mod logical;
 pub mod physical;
 
 pub struct AgentChat {
-    objective: String,
+    _objective: String,
     orchestrator: String,
     executor: String,
     llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
@@ -39,7 +40,7 @@ impl AgentChat {
         tools: HashMap<String, Arc<dyn SpiceModelTool>>,
     ) -> Self {
         Self {
-            objective,
+            _objective: objective,
             orchestrator,
             executor,
             llms,
@@ -115,8 +116,17 @@ impl AgentChat {
     async fn generate_logical_plan(
         &self,
         logical_planner_model: &dyn Chat,
-        initial_request: CreateChatCompletionRequest,
+        mut initial_request: CreateChatCompletionRequest,
     ) -> Result<LogicalPlan, OpenAIError> {
+        initial_request.tool_choice = Some(ChatCompletionToolChoiceOption::Named(
+            ChatCompletionNamedToolChoice {
+                r#type: ChatCompletionToolType::Function,
+                function: FunctionName {
+                    name: "document_similarity".to_string(),
+                },
+            },
+        ));
+
         let response = logical_planner_model
             .chat_request(initial_request.clone())
             .await?;
@@ -295,6 +305,7 @@ fn get_done_message() -> CreateChatCompletionResponse {
     }
 }
 
+#[allow(dead_code)]
 fn add_system_message(req: &mut CreateChatCompletionRequest, message: String) {
     req.messages
         .insert(0, ChatCompletionRequestMessage::System(message.into()));

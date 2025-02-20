@@ -10,8 +10,12 @@ json_schema:
       model:
         description: The name of the model to target for the completion
         type: string
+      success_criteria:
+        description: At the completion of this step, what should be true? What is the measure of knowing the step is complete?
+        type: string
     required:
       - prompt
       - model
+      - success_criteria
     additionalProperties: false
 strict: true

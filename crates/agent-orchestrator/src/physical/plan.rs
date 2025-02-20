@@ -51,6 +51,7 @@ pub struct ToolStep {
     pub tool: String,
     pub body: String,
     pub model: String,
+    pub success_criteria: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -58,6 +59,7 @@ pub struct PromptStep {
     pub task_uuid: Option<Uuid>,
     pub prompt: String,
     pub model: String,
+    pub success_criteria: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

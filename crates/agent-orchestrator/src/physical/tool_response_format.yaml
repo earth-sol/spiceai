@@ -13,9 +13,13 @@ json_schema:
       model:
         description: The name of the model to verify the tool response
         type: string
+      success_criteria:
+        description: At the completion of this step, what should be true? What is the measure of knowing the step is complete?
+        type: string
     required:
       - tool
       - body
       - model
+      - success_criteria
     additionalProperties: false
 strict: true

@@ -33,6 +33,7 @@ pub struct Step {
     pub tags: Option<Vec<String>>,
     pub action: Action,
     pub input: String,
+    pub success_criteria: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]

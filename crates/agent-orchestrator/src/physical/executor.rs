@@ -7,7 +7,6 @@ use async_openai::types::{
 use llms::chat::Chat;
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
-
 pub struct PhysicalJobExecutor {
     // INPUTS
     plan: PhysicalPlan,
@@ -17,6 +16,12 @@ pub struct PhysicalJobExecutor {
 
     // JOB STATE
     execution_history: Vec<Vec<ChatCompletionRequestMessage>>,
+}
+
+#[allow(dead_code)]
+enum ToolCallResult {
+    Success,
+    Failure(String),
 }
 
 impl PhysicalJobExecutor {
@@ -34,6 +39,42 @@ impl PhysicalJobExecutor {
             execution_history: vec![],
             summarization_model,
         }
+    }
+}
+
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+#[allow(dead_code)]
+enum ExecuteToolError {
+    ToolCallFailed {
+        reason: String,
+        tool_output: ChatCompletionRequestMessage,
+    },
+    Other(anyhow::Error),
+}
+
+impl std::error::Error for ExecuteToolError {}
+
+impl std::fmt::Display for ExecuteToolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ToolCallFailed {
+                reason,
+                tool_output,
+            } => {
+                write!(
+                    f,
+                    "Tool call failed: {reason}\nTool output: {tool_output:?}"
+                )
+            }
+            Self::Other(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl From<anyhow::Error> for ExecuteToolError {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Other(e)
     }
 }
 
@@ -74,7 +115,10 @@ impl PhysicalJobExecutor {
         step: &Step,
     ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
         match step {
-            Step::Tool(tool_step) => self.execute_tool(step_history, tool_step).await,
+            Step::Tool(tool_step) => self
+                .execute_tool(step_history, tool_step)
+                .await
+                .map_err(|e| anyhow::anyhow!("Error executing tool: {e}")),
             Step::Prompt(prompt_step) => self.execute_prompt(step_history, prompt_step).await,
         }
     }
@@ -118,9 +162,9 @@ impl PhysicalJobExecutor {
 
     async fn execute_tool(
         &self,
-        step_history: &[ChatCompletionRequestMessage],
+        _step_history: &[ChatCompletionRequestMessage],
         step: &ToolStep,
-    ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
+    ) -> Result<ChatCompletionRequestMessage, ExecuteToolError> {
         let tool = self
             .tools
             .get(&step.tool)
@@ -143,23 +187,28 @@ impl PhysicalJobExecutor {
             .map_err(|e| anyhow::anyhow!("Error building tool message: {}", e.to_string()))?;
         let request_message = ChatCompletionRequestMessage::User(tool_message);
 
-        let success = self
-            .tool_call_succeeded(step_history, request_message.clone(), &step.model)
-            .await?;
+        // let tool_result = self
+        //     .tool_call_succeeded(step_history, request_message.clone(), &step.model)
+        //     .await?;
 
-        if !success {
-            return Err(anyhow::anyhow!("Tool call failed"));
-        }
+        // match tool_result {
+        //     ToolCallResult::Success => Ok(request_message),
+        //     ToolCallResult::Failure(failure_reason) => Err(ExecuteToolError::ToolCallFailed {
+        //         reason: failure_reason,
+        //         tool_output: request_message,
+        //     }),
+        // }
 
         Ok(request_message)
     }
 
+    #[allow(dead_code)]
     async fn tool_call_succeeded(
         &self,
         step_history: &[ChatCompletionRequestMessage],
         tool_output: ChatCompletionRequestMessage,
         model: &str,
-    ) -> Result<bool, anyhow::Error> {
+    ) -> Result<ToolCallResult, anyhow::Error> {
         let mut messages = step_history.to_vec();
         messages.push(tool_output);
         messages.push(ChatCompletionRequestMessage::User(
@@ -193,11 +242,10 @@ impl PhysicalJobExecutor {
         let second_line = lines.next().unwrap_or_default();
 
         if first_line.trim().to_lowercase() == "true" {
-            Ok(true)
+            Ok(ToolCallResult::Success)
         } else {
-            // Until this is more reliable, return true
             tracing::error!("Tool call failed: {second_line}");
-            Ok(true)
+            Ok(ToolCallResult::Failure(second_line.to_string()))
         }
     }
 

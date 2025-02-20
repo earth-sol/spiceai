@@ -62,10 +62,9 @@ impl SpiceModelTool for McpToolWrapper {
         let tool_use_result: Result<Value, Box<dyn std::error::Error + Send + Sync>> = async {
             let client = self.client.read().await;
 
-            let response = client
-                .call_tool(self.internal_name(), serde_json::from_str(arg).unwrap())
-                .await
-                .boxed()?;
+            let arg = serde_json::from_str(arg)?;
+
+            let response = client.call_tool(self.internal_name(), arg).await.boxed()?;
 
             let v = serde_json::to_value(response.content).boxed()?;
             Ok(v)
