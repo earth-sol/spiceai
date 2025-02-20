@@ -15,7 +15,10 @@ use async_openai::{
 use async_trait::async_trait;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
-use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
+use physical::{
+    executor::{self, PhysicalJobExecutor},
+    plan::PhysicalPlan,
+};
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
 
@@ -25,6 +28,7 @@ pub mod physical;
 pub struct AgentChat {
     objective: String,
     orchestrator: String,
+    executor: String,
     llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
     tools: HashMap<String, Arc<dyn SpiceModelTool>>,
 }
@@ -33,12 +37,14 @@ impl AgentChat {
     pub fn new(
         objective: String,
         orchestrator: String,
+        executor: String,
         llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
         tools: HashMap<String, Arc<dyn SpiceModelTool>>,
     ) -> Self {
         Self {
             objective,
             orchestrator,
+            executor,
             llms,
             tools,
         }
@@ -146,7 +152,7 @@ impl AgentChat {
             plan,
             physical_tool_planner_model,
             physical_prompt_planner_model,
-            model_names,
+            self.executor.clone(),
         )
         .await?;
 

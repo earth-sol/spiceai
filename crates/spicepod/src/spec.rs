@@ -82,6 +82,11 @@ pub struct SpicepodDefinition {
     #[serde(default)]
     pub physical_planner: Option<String>,
 
+    /// The executor planner of the Spicepod
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub executor: Option<String>,
+
     /// Optional runtime configuration
     #[serde(default, skip_serializing_if = "is_default")]
     pub runtime: Runtime,

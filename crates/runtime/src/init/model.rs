@@ -125,6 +125,20 @@ impl Runtime {
                 let physical_tool_planner = physical_tool_planner_model(physical.clone());
                 model_names.insert(physical_planner_name);
 
+                // Load executor model
+                let executor_name = match app.executor.clone() {
+                    Some(p) => p,
+                    None => {
+                        tracing::error!("Executor not found");
+                        return;
+                    }
+                };
+                let Some(executor) = app.models.iter().find(|m| m.name == executor_name) else {
+                    tracing::error!("Executor model [{:?}] not found", executor_name);
+                    return;
+                };
+                model_names.insert(executor_name.clone());
+
                 let mut tools: HashMap<String, Arc<dyn SpiceModelTool>> = HashMap::new();
                 for (_, tool) in self.tools.read().await.iter() {
                     for t in tool.tools().await {
@@ -132,7 +146,8 @@ impl Runtime {
                     }
                 }
 
-                let agent_chat = AgentChat::new(objective, orchestrator, llms_clone, tools);
+                let agent_chat =
+                    AgentChat::new(objective, orchestrator, executor_name, llms_clone, tools);
                 llm_map.insert(app.name.clone(), Box::new(agent_chat));
                 drop(llm_map);
 
