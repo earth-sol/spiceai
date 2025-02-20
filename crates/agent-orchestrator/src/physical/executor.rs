@@ -220,7 +220,7 @@ fn log_execution_update(update_message: &str) {
 
     if let Err(e) = options
         .open(log_path)
-        .and_then(|mut file| writeln!(file, "{}", update_message))
+        .and_then(|mut file| writeln!(file, "{update_message}"))
     {
         tracing::error!("Failed to write execution update to log: {e}");
     }

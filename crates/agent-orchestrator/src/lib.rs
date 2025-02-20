@@ -15,10 +15,7 @@ use async_openai::{
 use async_trait::async_trait;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
-use physical::{
-    executor::{self, PhysicalJobExecutor},
-    plan::PhysicalPlan,
-};
+use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
 
@@ -152,7 +149,6 @@ impl AgentChat {
         plan: &LogicalPlan,
         physical_tool_planner_model: &dyn Chat,
         physical_prompt_planner_model: &dyn Chat,
-        model_names: Vec<String>,
     ) -> Result<PhysicalPlan, OpenAIError> {
         let physical_plan = PhysicalPlan::plan(
             plan,
@@ -215,8 +211,6 @@ impl Chat for AgentChat {
             )));
         };
 
-        let model_names = llm.keys().map(String::clone).collect::<Vec<String>>();
-
         let (mut logical_plan, mut physical_plan) = Self::parse_request(&req)
             .map_err(|e| OpenAIError::InvalidArgument(format!("Error parsing request: {e}")))?;
 
@@ -233,7 +227,6 @@ impl Chat for AgentChat {
                     &plan,
                     physical_tool_planner_model.as_ref(),
                     physical_prompt_planner_model.as_ref(),
-                    model_names,
                 )
                 .await?,
             );

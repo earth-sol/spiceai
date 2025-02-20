@@ -14,8 +14,6 @@ use crate::logical::{
     plan::{Action, LogicalPlan},
 };
 
-use super::executor;
-
 impl PhysicalPlan {
     pub fn new(body: &str) -> Result<Self, serde_json::Error> {
         let plan: PhysicalPlan = serde_json::from_str(body)?;
