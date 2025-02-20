@@ -154,7 +154,11 @@ impl PhysicalJobExecutor {
         let mut messages = step_history.to_vec();
         messages.push(tool_output);
         messages.push(ChatCompletionRequestMessage::User(
-            r#"The previous message was a tool call. Validate that the tool call was successful and return ONLY the literal word "true" if it was, otherwise return ONLY the literal word "false"."#.into(),
+            r#"
+            The previous message was a tool call.
+            Validate that the tool call was successful and return ONLY the literal word "true" if it was, otherwise return ONLY the literal word "false".
+            
+            Ensure you consider that the existance of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure."#.into(),
         ));
 
         let llms = &*self.llms.read().await;
