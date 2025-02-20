@@ -134,13 +134,13 @@ impl PhysicalJobExecutor {
             .map_err(|e| anyhow::anyhow!("Error building tool message: {}", e.to_string()))?;
         let request_message = ChatCompletionRequestMessage::User(tool_message);
 
-        // let success = self
-        //     .tool_call_succeeded(step_history, request_message.clone(), &step.model)
-        //     .await?;
+        let success = self
+            .tool_call_succeeded(step_history, request_message.clone(), &step.model)
+            .await?;
 
-        // if !success {
-        //     return Err(anyhow::anyhow!("Tool call failed"));
-        // }
+        if !success {
+            return Err(anyhow::anyhow!("Tool call failed"));
+        }
 
         Ok(request_message)
     }
