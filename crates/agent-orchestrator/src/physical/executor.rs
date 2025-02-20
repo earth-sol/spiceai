@@ -156,9 +156,10 @@ impl PhysicalJobExecutor {
         messages.push(ChatCompletionRequestMessage::User(
             r#"
             The previous message was a tool call.
-            Validate that the tool call was successful and return ONLY the literal word "true" if it was, otherwise return ONLY the literal word "false".
+            Validate that the tool call was successful and return ONLY the literal word "true" or ONLY the literal word "false" on the first line.
+            On the second line, explain why you think the tool call was successful or not.
             
-            Ensure you consider that the existance of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure."#.into(),
+            Ensure you consider that the existence of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure."#.into(),
         ));
 
         let llms = &*self.llms.read().await;
@@ -178,7 +179,16 @@ impl PhysicalJobExecutor {
             return Err(anyhow::anyhow!("No message content found"));
         };
 
-        Ok(message.trim().to_lowercase() == "true")
+        let mut lines = message.lines();
+        let first_line = lines.next().unwrap_or_default();
+        let second_line = lines.next().unwrap_or_default();
+
+        if first_line.trim().to_lowercase() == "true" {
+            Ok(true)
+        } else {
+            tracing::error!("Tool call failed: {second_line}");
+            Ok(false)
+        }
     }
 }
 
