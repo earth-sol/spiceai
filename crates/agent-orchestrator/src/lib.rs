@@ -84,10 +84,18 @@ impl Chat for AgentChat {
         let plan = LogicalPlan::from_chat_completion(&response)
             .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
 
-        println!(
-            "Logical plan: {}",
-            serde_json::to_string_pretty(&plan).expect("Failed to serialize logical plan")
-        );
+        let logical_plan_json =
+            serde_json::to_string_pretty(&plan).expect("Failed to serialize logical plan");
+        tracing::info!("Logical plan: {logical_plan_json}");
+        if let Err(e) = std::fs::write(
+            format!(
+                "data/logical/logical_plan_{}.json",
+                chrono::Local::now().format("%Y%m%d_%H%M%S")
+            ),
+            logical_plan_json,
+        ) {
+            tracing::error!("Failed to write logical plan: {e}");
+        }
 
         let physical_plan = PhysicalPlan::plan(
             &plan,
@@ -97,11 +105,18 @@ impl Chat for AgentChat {
         )
         .await?;
 
-        println!(
-            "Physical plan: {}",
-            serde_json::to_string_pretty(&physical_plan)
-                .expect("Failed to serialize physical plan")
-        );
+        let physical_plan_json = serde_json::to_string_pretty(&physical_plan)
+            .expect("Failed to serialize physical plan");
+        tracing::info!("Physical plan: {physical_plan_json}");
+        if let Err(e) = std::fs::write(
+            format!(
+                "data/physical/physical_plan_{}.json",
+                chrono::Local::now().format("%Y%m%d_%H%M%S")
+            ),
+            physical_plan_json,
+        ) {
+            tracing::error!("Failed to write physical plan: {e}");
+        }
 
         let mut executor =
             PhysicalJobExecutor::new(physical_plan, Arc::clone(&self.llms), self.tools.clone());

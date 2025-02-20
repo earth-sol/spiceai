@@ -151,7 +151,7 @@ impl PhysicalPlan {
         for task in &logical_plan.tasks {
             let mut steps: Vec<Step> = vec![];
             for step in &task.steps {
-                println!("Generating physical plan for step: {:?}", step.uuid);
+                tracing::info!("Generating physical plan for step: {:?}", step.uuid);
                 match step.action.into() {
                     StepType::Tool => {
                         let req = Self::build_request(None, steps.as_slice(), step)?;

@@ -66,6 +66,7 @@ dependencies = [
  "anyhow",
  "async-openai",
  "async-trait",
+ "chrono",
  "llms",
  "serde",
  "serde_json",
@@ -74,6 +75,7 @@ dependencies = [
  "spicepod",
  "tokio",
  "tools",
+ "tracing",
  "uuid 1.13.1",
 ]
 
