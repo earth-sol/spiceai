@@ -233,7 +233,6 @@ impl Chat for AgentChat {
                         Arc::clone(&self.llms),
                         self.tools.clone(),
                         "agentic_physical_prompt_planner".to_string(),
-
                     );
                     let output = executor.execute().await.map_err(|e| {
                         OpenAIError::InvalidArgument(format!("Error executing physical plan: {e}"))
