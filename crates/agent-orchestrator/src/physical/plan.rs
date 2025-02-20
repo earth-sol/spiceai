@@ -110,7 +110,7 @@ impl PhysicalPlan {
     pub async fn plan_request(
         req: CreateChatCompletionRequest,
         step_type: StepType,
-        model: &Box<dyn Chat>,
+        model: &dyn Chat,
     ) -> Result<Step, async_openai::error::OpenAIError> {
         let completion = model.chat_request(req).await?;
 
@@ -142,8 +142,8 @@ impl PhysicalPlan {
 
     pub async fn plan(
         logical_plan: &LogicalPlan,
-        tool_planner: &Box<dyn Chat>,
-        prompt_planner: &Box<dyn Chat>,
+        tool_planner: &dyn Chat,
+        prompt_planner: &dyn Chat,
         model_names: Vec<String>,
     ) -> Result<Self, async_openai::error::OpenAIError> {
         // for each task, convert the list of steps from the logical plan based on their StepType
