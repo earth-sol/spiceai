@@ -116,17 +116,16 @@ impl Runtime {
         };
 
         // Load the base_researcher model
-        let Some(base_researcher_name) = app.base_researcher.clone() else {
+        let Some(researcher_name) = app.researcher.clone() else {
             tracing::error!("Physical planner not found");
             return;
         };
-        let Some(base_researcher) = app.models.iter().find(|m| m.name == base_researcher_name)
-        else {
-            tracing::error!("Base research model [{:?}] not found", base_researcher_name);
+        let Some(researcher) = app.models.iter().find(|m| m.name == researcher_name) else {
+            tracing::error!("Base research model [{:?}] not found", researcher_name);
             return;
         };
 
-        let physical_researcher = researcher_model(base_researcher.clone());
+        let physical_researcher = researcher_model(researcher.clone());
         let physical_prompt_planner = physical_prompt_planner_model(physical.clone());
         let physical_tool_planner = physical_tool_planner_model(physical.clone());
 
