@@ -69,11 +69,18 @@ impl AgentChat {
             _ => return Ok((None, None)),
         }
 
-        if content.starts_with("logical_plan:") {
-            let logical_plan_file = content
-                .split(':')
+        tracing::debug!("Request content: {content}");
+        let Some(last_line) = content.lines().last() else {
+            return Ok((None, None));
+        };
+        tracing::debug!("Last line: {last_line}");
+
+        if last_line.starts_with(".logical_plan") {
+            let logical_plan_file = last_line
+                .split(' ')
                 .nth(1)
                 .expect("Logical plan file not found");
+            tracing::debug!("Logical plan file: {logical_plan_file}");
             let logical_plan_str = std::fs::read_to_string(logical_plan_file).map_err(|e| {
                 OpenAIError::InvalidArgument(format!("Error reading logical plan: {e}"))
             })?;
@@ -83,11 +90,12 @@ impl AgentChat {
             })?;
             return Ok((Some(logical_plan), None));
         }
-        if content.starts_with("physical_plan:") {
-            let physical_plan_file = content
-                .split(':')
+        if last_line.starts_with(".physical_plan") {
+            let physical_plan_file = last_line
+                .split(' ')
                 .nth(1)
                 .expect("Physical plan file not found");
+            tracing::debug!("Physical plan file: {physical_plan_file}");
             let physical_plan_str = std::fs::read_to_string(physical_plan_file).map_err(|e| {
                 OpenAIError::InvalidArgument(format!("Error reading physical plan: {e}"))
             })?;
