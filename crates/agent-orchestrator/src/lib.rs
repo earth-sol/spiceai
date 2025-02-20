@@ -7,9 +7,10 @@ use std::{collections::HashMap, sync::Arc};
 use async_openai::{
     error::OpenAIError,
     types::{
-        ChatChoice, ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageContent,
-        ChatCompletionRequestUserMessageContent, ChatCompletionResponseMessage,
-        CreateChatCompletionRequest, CreateChatCompletionResponse, Role,
+        ChatChoice, ChatCompletionNamedToolChoice, ChatCompletionRequestMessage,
+        ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessageContent,
+        ChatCompletionResponseMessage, ChatCompletionToolChoiceOption, ChatCompletionToolType,
+        CreateChatCompletionRequest, CreateChatCompletionResponse, FunctionName, Role,
     },
 };
 use async_trait::async_trait;
@@ -115,8 +116,17 @@ impl AgentChat {
     async fn generate_logical_plan(
         &self,
         logical_planner_model: &dyn Chat,
-        initial_request: CreateChatCompletionRequest,
+        mut initial_request: CreateChatCompletionRequest,
     ) -> Result<LogicalPlan, OpenAIError> {
+        initial_request.tool_choice = Some(ChatCompletionToolChoiceOption::Named(
+            ChatCompletionNamedToolChoice {
+                r#type: ChatCompletionToolType::Function,
+                function: FunctionName {
+                    name: "document_similarity".to_string(),
+                },
+            },
+        ));
+
         let response = logical_planner_model
             .chat_request(initial_request.clone())
             .await?;
