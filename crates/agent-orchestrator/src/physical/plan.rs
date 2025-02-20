@@ -7,6 +7,7 @@ use async_openai::{
 };
 use llms::chat::Chat;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::logical::{
     self,
@@ -44,28 +45,49 @@ pub struct Task {
     pub steps: Vec<Step>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ToolStep {
+    pub task_uuid: Option<Uuid>,
     pub tool: String,
     pub body: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PromptStep {
+    pub task_uuid: Option<Uuid>,
     pub prompt: String,
     pub target_model: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Step {
     Tool(ToolStep),
     Prompt(PromptStep),
+}
+
+impl Step {
+    pub fn task_id(&self) -> Option<Uuid> {
+        match self {
+            Step::Tool(tool_step) => tool_step.task_uuid,
+            Step::Prompt(prompt_step) => prompt_step.task_uuid,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum StepType {
     Tool,
     Prompt,
+}
+
+impl Step {
+    pub fn with_task_id(mut self, task_uuid: Option<Uuid>) -> Self {
+        match &mut self {
+            Step::Tool(tool_step) => tool_step.task_uuid = task_uuid,
+            Step::Prompt(prompt_step) => prompt_step.task_uuid = task_uuid,
+        }
+        self
+    }
 }
 
 impl From<Action> for StepType {
@@ -155,15 +177,22 @@ impl PhysicalPlan {
                 match step.action.into() {
                     StepType::Tool => {
                         let req = Self::build_request(None, steps.as_slice(), step)?;
-                        steps.push(Self::plan_request(req, StepType::Tool, tool_planner).await?);
+                        steps.push(
+                            Self::plan_request(req, StepType::Tool, tool_planner)
+                                .await?
+                                .with_task_id(task.uuid),
+                        );
                     }
                     StepType::Prompt => {
                         let message = vec![ChatCompletionRequestMessage::System(
                             "The following models are available for selection: o3-mini".into(), // update to the actual list of models, trimming the agentic models
                         )];
                         let req = Self::build_request(Some(message), steps.as_slice(), step)?;
-                        steps
-                            .push(Self::plan_request(req, StepType::Prompt, prompt_planner).await?);
+                        steps.push(
+                            Self::plan_request(req, StepType::Prompt, prompt_planner)
+                                .await?
+                                .with_task_id(task.uuid),
+                        );
                     }
                 }
             }
