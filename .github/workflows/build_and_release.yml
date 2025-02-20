@@ -213,7 +213,7 @@ jobs:
       - name: Build spiced (models)
         if: contains(matrix.target.tags, 'models')
         working-directory: bin/spiced
-        run: cargo build --release --features release,models --target-dir ../../target
+        run: cargo build --release --features release,models,mcp --target-dir ../../target
 
       - name: tar binary (models)
         if: matrix.target.target_os != 'windows' && contains(matrix.target.tags, 'models')
@@ -253,7 +253,7 @@ jobs:
       - name: Build spiced (models)
         if: matrix.target.target_os == 'darwin'
         working-directory: bin/spiced
-        run: cargo build --release --features release,models,metal --target-dir ../../target
+        run: cargo build --release --features release,models,metal,mcp --target-dir ../../target
 
       - name: tar binary (models,metal)
         if: matrix.target.target_os == 'darwin'
