@@ -81,98 +81,98 @@ impl Runtime {
                 self.load_model(model).await;
             }
 
-            // Agentic mode
-            if let (Some(objective), Some(orchestrator)) =
-                (app.objective.clone(), app.orchestrator.clone())
-            {
-                let llms_clone = Arc::clone(&self.llms);
-                let mut llm_map = self.llms.write().await;
+            self.load_operator(app).await;
+        }
+    }
 
-                // Load the logical planner model
-                let Some(logical_planner_name) = app.logical_planner.clone() else {
-                    tracing::error!("Logical planner not found");
-                    return;
-                };
-                let Some(logical) = app.models.iter().find(|m| m.name == logical_planner_name)
-                else {
-                    tracing::error!("Logical planner model [{}] not found", logical_planner_name);
-                    return;
-                };
-                let logical_planner = logical_planner_model(logical.clone());
-                model_names.insert(logical_planner_name);
+    async fn load_operator(&self, app: &Arc<App>) {
+        let (Some(objective), Some(orchestrator)) =
+            (app.objective.clone(), app.orchestrator.clone())
+        else {
+            return;
+        };
 
-                // Load the physical planner model
-                let Some(physical_planner_name) = app.physical_planner.clone() else {
-                    tracing::error!("Physical planner not found");
-                    return;
-                };
-                let Some(physical) = app.models.iter().find(|m| m.name == physical_planner_name)
-                else {
-                    tracing::error!(
-                        "Physical planner model [{:?}] not found",
-                        physical_planner_name
+        let llms_clone = Arc::clone(&self.llms);
+        let mut llm_map = self.llms.write().await;
+
+        // Load the logical planner model
+        let Some(logical_planner_name) = app.logical_planner.clone() else {
+            tracing::error!("Logical planner not found");
+            return;
+        };
+        let Some(logical) = app.models.iter().find(|m| m.name == logical_planner_name) else {
+            tracing::error!("Logical planner model [{}] not found", logical_planner_name);
+            return;
+        };
+        let logical_planner = logical_planner_model(logical.clone());
+        model_names.insert(logical_planner_name);
+
+        // Load the physical planner model
+        let Some(physical_planner_name) = app.physical_planner.clone() else {
+            tracing::error!("Physical planner not found");
+            return;
+        };
+        let Some(physical) = app.models.iter().find(|m| m.name == physical_planner_name) else {
+            tracing::error!(
+                "Physical planner model [{:?}] not found",
+                physical_planner_name
+            );
+            return;
+        };
+        let physical_prompt_planner = physical_prompt_planner_model(physical.clone());
+        model_names.insert(physical_planner_name.clone());
+        let physical_tool_planner = physical_tool_planner_model(physical.clone());
+        model_names.insert(physical_planner_name);
+
+        // Load executor model
+        let executor_name = match app.executor.clone() {
+            Some(p) => p,
+            None => {
+                tracing::error!("Executor not found");
+                return;
+            }
+        };
+        let Some(executor) = app.models.iter().find(|m| m.name == executor_name) else {
+            tracing::error!("Executor model [{:?}] not found", executor_name);
+            return;
+        };
+        model_names.insert(executor_name.clone());
+
+        let mut tools: HashMap<String, Arc<dyn SpiceModelTool>> = HashMap::new();
+        for (name, tool) in self.tools.read().await.iter() {
+            tracing::debug!("[agentic] Loading tool: {}", name);
+            match tool {
+                Tooling::Tool(spice_model_tool) => {
+                    tracing::debug!("[agentic] Loaded tool: {}", spice_model_tool.name());
+                    tools.insert(
+                        spice_model_tool.name().to_string(),
+                        Arc::clone(spice_model_tool),
                     );
-                    return;
-                };
-                let physical_prompt_planner = physical_prompt_planner_model(physical.clone());
-                model_names.insert(physical_planner_name.clone());
-                let physical_tool_planner = physical_tool_planner_model(physical.clone());
-                model_names.insert(physical_planner_name);
-
-                // Load executor model
-                let executor_name = match app.executor.clone() {
-                    Some(p) => p,
-                    None => {
-                        tracing::error!("Executor not found");
-                        return;
-                    }
-                };
-                let Some(executor) = app.models.iter().find(|m| m.name == executor_name) else {
-                    tracing::error!("Executor model [{:?}] not found", executor_name);
-                    return;
-                };
-                model_names.insert(executor_name.clone());
-
-                let mut tools: HashMap<String, Arc<dyn SpiceModelTool>> = HashMap::new();
-                for (name, tool) in self.tools.read().await.iter() {
-                    tracing::debug!("[agentic] Loading tool: {}", name);
-                    match tool {
-                        Tooling::Tool(spice_model_tool) => {
-                            tracing::debug!("[agentic] Loaded tool: {}", spice_model_tool.name());
-                            tools.insert(
-                                spice_model_tool.name().to_string(),
-                                Arc::clone(spice_model_tool),
-                            );
-                        }
-                        Tooling::Catalog(spice_tool_catalog) => {
-                            let catalog_name = spice_tool_catalog.name();
-                            for spice_model_tool in spice_tool_catalog.all().await {
-                                let fully_qualified_tool_name =
-                                    format!("{catalog_name}/{}", spice_model_tool.name());
-                                tracing::debug!(
-                                    "[agentic] Loaded tool: {fully_qualified_tool_name}"
-                                );
-                                tools.insert(fully_qualified_tool_name, spice_model_tool);
-                            }
-                        }
+                }
+                Tooling::Catalog(spice_tool_catalog) => {
+                    let catalog_name = spice_tool_catalog.name();
+                    for spice_model_tool in spice_tool_catalog.all().await {
+                        let fully_qualified_tool_name =
+                            format!("{catalog_name}/{}", spice_model_tool.name());
+                        tracing::debug!("[agentic] Loaded tool: {fully_qualified_tool_name}");
+                        tools.insert(fully_qualified_tool_name, spice_model_tool);
                     }
                 }
-
-                tracing::info!("Loading model [{}]...", app.name);
-                let agent_chat =
-                    AgentChat::new(objective, orchestrator, executor_name, llms_clone, tools);
-                llm_map.insert(app.name.clone(), Box::new(agent_chat));
-                drop(llm_map);
-                tracing::info!("Model [{}] deployed, ready for inferencing", app.name);
-                self.status
-                    .update_model(&app.name, status::ComponentStatus::Ready);
-
-                // This requires the lock on `llms` to be released before loading the logical/physical planners.
-                self.load_model(&logical_planner).await;
-                self.load_model(&physical_prompt_planner).await;
-                self.load_model(&physical_tool_planner).await;
             }
         }
+
+        tracing::info!("Loading model [{}]...", app.name);
+        let agent_chat = AgentChat::new(objective, orchestrator, executor_name, llms_clone, tools);
+        llm_map.insert(app.name.clone(), Box::new(agent_chat));
+        drop(llm_map);
+        tracing::info!("Model [{}] deployed, ready for inferencing", app.name);
+        self.status
+            .update_model(&app.name, status::ComponentStatus::Ready);
+
+        // This requires the lock on `llms` to be released before loading the logical/physical planners.
+        self.load_model(&logical_planner).await;
+        self.load_model(&physical_prompt_planner).await;
+        self.load_model(&physical_tool_planner).await;
     }
 
     // Caller must set `status::update_model(...` before calling `load_model`. This function will set error/ready statues appropriately.`
