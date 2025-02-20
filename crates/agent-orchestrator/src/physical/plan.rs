@@ -161,9 +161,7 @@ impl PhysicalPlan {
 
                 step.model = "gpt-4o".to_string();
 
-                Step::Tool(serde_json::from_str::<ToolStep>(body).map_err(|e| {
-                    OpenAIError::InvalidArgument(format!("Failed to parse tool step: {e}"))
-                })?)
+                Step::Tool(step)
             }
             StepType::Prompt => {
                 // TODO: validate the selected model is valid and retry if not
