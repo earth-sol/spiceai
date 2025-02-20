@@ -134,10 +134,10 @@ impl Runtime {
 
         let mut tools: HashMap<String, Arc<dyn SpiceModelTool>> = HashMap::new();
         for (name, tool) in self.tools.read().await.iter() {
-            tracing::debug!("[agentic] Loading tool: {}", name);
+            tracing::debug!("[operator] Loading tool: {}", name);
             match tool {
                 Tooling::Tool(spice_model_tool) => {
-                    tracing::debug!("[agentic] Loaded tool: {}", spice_model_tool.name());
+                    tracing::debug!("[operator] Loaded tool: {}", spice_model_tool.name());
                     tools.insert(
                         spice_model_tool.name().to_string(),
                         Arc::clone(spice_model_tool),
@@ -148,7 +148,7 @@ impl Runtime {
                     for spice_model_tool in spice_tool_catalog.all().await {
                         let fully_qualified_tool_name =
                             format!("{catalog_name}/{}", spice_model_tool.name());
-                        tracing::debug!("[agentic] Loaded tool: {fully_qualified_tool_name}");
+                        tracing::debug!("[operator] Loaded tool: {fully_qualified_tool_name}");
                         tools.insert(fully_qualified_tool_name, spice_model_tool);
                     }
                 }
