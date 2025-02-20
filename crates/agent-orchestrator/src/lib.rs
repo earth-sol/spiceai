@@ -240,8 +240,8 @@ impl Chat for AgentChat {
                     })?;
                     pipeline = pipeline::AgentPipeline::Output("Done!".to_string());
                 }
-                pipeline::AgentPipeline::Output(_) => {
-                    return Ok(get_done_message());
+                pipeline::AgentPipeline::Output(output) => {
+                    return Ok(get_output_message(output));
                 }
             }
         }
@@ -249,9 +249,9 @@ impl Chat for AgentChat {
 }
 
 #[allow(deprecated)]
-fn get_done_message() -> CreateChatCompletionResponse {
+fn get_output_message(output: String) -> CreateChatCompletionResponse {
     let message = ChatCompletionResponseMessage {
-        content: Some("Done!".into()),
+        content: Some(output),
         tool_calls: None,
         role: Role::Assistant,
         audio: None,
