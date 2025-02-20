@@ -68,6 +68,8 @@ pub struct Spicepod {
 
     pub physical_planner: Option<String>,
 
+    pub executor: Option<String>,
+
     pub extensions: HashMap<String, Extension>,
 
     pub secrets: Vec<Secret>,
@@ -250,6 +252,7 @@ fn from_definition(
         orchestrator: spicepod_definition.orchestrator,
         logical_planner: spicepod_definition.logical_planner,
         physical_planner: spicepod_definition.physical_planner,
+        executor: spicepod_definition.executor,
         version: spicepod_definition.version,
         extensions: spicepod_definition.extensions,
         secrets: spicepod_definition.secrets,

@@ -14,6 +14,8 @@ use crate::logical::{
     plan::{Action, LogicalPlan},
 };
 
+use super::executor;
+
 impl PhysicalPlan {
     pub fn new(body: &str) -> Result<Self, serde_json::Error> {
         let plan: PhysicalPlan = serde_json::from_str(body)?;
@@ -172,7 +174,7 @@ impl PhysicalPlan {
         task: &logical::plan::Task,
         tool_planner: &dyn Chat,
         prompt_planner: &dyn Chat,
-        model_names: &[String],
+        executor: String,
     ) -> Result<Task, async_openai::error::OpenAIError> {
         tracing::info!("Generating physical plan for task: {}", task.objective);
         let mut steps: Vec<Step> = vec![];
@@ -189,7 +191,8 @@ impl PhysicalPlan {
                 }
                 StepType::Prompt => {
                     let message = vec![ChatCompletionRequestMessage::System(
-                        "The following models are available for selection: gpt-4o".into(), // update to the actual list of models, trimming the agentic models
+                        format!("The following models are available for selection: {executor}")
+                            .into(),
                     )];
                     let req = Self::build_request(
                         Some(message),
@@ -216,13 +219,13 @@ impl PhysicalPlan {
         logical_plan: &LogicalPlan,
         tool_planner: &dyn Chat,
         prompt_planner: &dyn Chat,
-        model_names: Vec<String>,
+        executor: String,
     ) -> Result<Self, async_openai::error::OpenAIError> {
         // for each task, convert the list of steps from the logical plan based on their StepType
         let futs = logical_plan
             .tasks
             .iter()
-            .map(|t| Self::plan_task(t, tool_planner, prompt_planner, model_names.as_slice()));
+            .map(|t| Self::plan_task(t, tool_planner, prompt_planner, executor.clone()));
         let tasks = futures::future::try_join_all(futs).await?;
 
         Ok(Self { tasks })

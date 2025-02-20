@@ -127,6 +127,7 @@ fn spicepod_definition(datasets: Vec<Dataset>, evals: Vec<Eval>) -> SpicepodDefi
         name: "spicepod".to_string(),
         objective: None,
         orchestrator: None,
+        executor: None,
         logical_planner: None,
         physical_planner: None,
         datasets: datasets
