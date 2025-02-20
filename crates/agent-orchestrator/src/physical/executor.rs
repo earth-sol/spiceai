@@ -221,11 +221,11 @@ impl PhysicalJobExecutor {
         &self,
         step_history: &[ChatCompletionRequestMessage],
         tool_output: ChatCompletionRequestMessage,
-        model: &str,
+        model_name: &str,
         success_criteria: &str,
     ) -> Result<ToolCallResult, anyhow::Error> {
         let mut messages = step_history.to_vec();
-        messages.push(tool_output);
+        messages.push(tool_output.clone());
         messages.push(ChatCompletionRequestMessage::User(
             format!("# Goal
 
@@ -238,12 +238,10 @@ impl PhysicalJobExecutor {
             # Guidelines
 
             1. A non-zero status code does not always mean the tool call failed - ensure you inspect the relevant tool output, or call additional tools if needed, to determine if the output actually indicates a failure.
-            2. Validate that the tool call was successful, and return ONLY the literal word \"true\" or ONLY the literal word \"false\" on the first line.
-            3. If the tool call message indicates a terminal command was executed, ensure you retrieve the relevant terminal output and classify based on the retrieved terminal output.
-            4. On the second line, explain why you think the tool call was successful or not.
-            5. Ensure you consider that the existence of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure.
-            6. Use any of your available tools to verify the success criteria has been met.
-            7. If there is no evidence or confirmation from the tool output that the success criteria has been met, make tool calls to retrieve the relevant information to verify the success criteria has been met.
+            2. If the tool call message indicates a terminal command was executed, ensure you retrieve the relevant terminal output and classify based on the retrieved terminal output.
+            3. Ensure you consider that the existence of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure.
+            4. Use any of your available tools to verify the success criteria has been met.
+            5. If there is no evidence or confirmation from the tool output that the success criteria has been met, make tool calls to retrieve the relevant information to verify the success criteria has been met.
             
             # Example Successful Classification Process
 
@@ -265,8 +263,8 @@ impl PhysicalJobExecutor {
 
         let llms = &*self.llms.read().await;
         let model = llms
-            .get(model)
-            .ok_or_else(|| anyhow::anyhow!("Model {} not found", model))?;
+            .get(model_name)
+            .ok_or_else(|| anyhow::anyhow!("Model {} not found", model_name))?;
 
         let yaml_str = include_str!("executor_response_format.yaml");
         let yaml_value: ResponseFormat =
@@ -290,6 +288,7 @@ impl PhysicalJobExecutor {
         })?;
 
         if verification.status == VerificationStatus::Succeeded {
+            tracing::info!("Tool call success: {}", verification.reason);
             Ok(ToolCallResult::Success)
         } else {
             tracing::error!("Tool call failed: {}", verification.reason);
@@ -297,6 +296,7 @@ impl PhysicalJobExecutor {
             if verification.wait {
                 tracing::warn!("Model thinks waiting might be needed to verify result");
                 tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                // TODO: pin this so it can recurse
             }
 
             if verification.status == VerificationStatus::Inconclusive {
