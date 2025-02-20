@@ -162,7 +162,7 @@ pub(crate) async fn get(
                 object: "model".to_string(),
                 owned_by: "spiceai".to_string(),
                 datasets: None,
-                status: None,
+                status: statuses.get(&a.name).copied(),
             }),
             _ => None,
         },

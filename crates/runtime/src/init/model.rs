@@ -21,7 +21,7 @@ use std::{
 
 use crate::{
     get_params_with_secrets, metrics, model::ENABLE_MODEL_SUPPORT_MESSAGE, status,
-    timing::TimeMeasurement, Runtime,
+    timing::TimeMeasurement, Runtime, Tooling,
 };
 use agent_orchestrator::{
     logical::planner::model as logical_planner_model,
@@ -89,12 +89,9 @@ impl Runtime {
                 let mut llm_map = self.llms.write().await;
 
                 // Load the logical planner model
-                let logical_planner_name = match app.logical_planner.clone() {
-                    Some(p) => p,
-                    None => {
-                        tracing::error!("Logical planner not found");
-                        return;
-                    }
+                let Some(logical_planner_name) = app.logical_planner.clone() else {
+                    tracing::error!("Logical planner not found");
+                    return;
                 };
                 let Some(logical) = app.models.iter().find(|m| m.name == logical_planner_name)
                 else {
@@ -105,12 +102,9 @@ impl Runtime {
                 model_names.insert(logical_planner_name);
 
                 // Load the physical planner model
-                let physical_planner_name = match app.physical_planner.clone() {
-                    Some(p) => p,
-                    None => {
-                        tracing::error!("Physical planner not found");
-                        return;
-                    }
+                let Some(physical_planner_name) = app.physical_planner.clone() else {
+                    tracing::error!("Physical planner not found");
+                    return;
                 };
                 let Some(physical) = app.models.iter().find(|m| m.name == physical_planner_name)
                 else {
@@ -140,16 +134,38 @@ impl Runtime {
                 model_names.insert(executor_name.clone());
 
                 let mut tools: HashMap<String, Arc<dyn SpiceModelTool>> = HashMap::new();
-                for (_, tool) in self.tools.read().await.iter() {
-                    for t in tool.tools().await {
-                        tools.insert(t.name().to_string(), t);
+                for (name, tool) in self.tools.read().await.iter() {
+                    tracing::debug!("[agentic] Loading tool: {}", name);
+                    match tool {
+                        Tooling::Tool(spice_model_tool) => {
+                            tracing::debug!("[agentic] Loaded tool: {}", spice_model_tool.name());
+                            tools.insert(
+                                spice_model_tool.name().to_string(),
+                                Arc::clone(spice_model_tool),
+                            );
+                        }
+                        Tooling::Catalog(spice_tool_catalog) => {
+                            let catalog_name = spice_tool_catalog.name();
+                            for spice_model_tool in spice_tool_catalog.all().await {
+                                let fully_qualified_tool_name =
+                                    format!("{catalog_name}/{}", spice_model_tool.name());
+                                tracing::debug!(
+                                    "[agentic] Loaded tool: {fully_qualified_tool_name}"
+                                );
+                                tools.insert(fully_qualified_tool_name, spice_model_tool);
+                            }
+                        }
                     }
                 }
 
+                tracing::info!("Loading model [{}]...", app.name);
                 let agent_chat =
                     AgentChat::new(objective, orchestrator, executor_name, llms_clone, tools);
                 llm_map.insert(app.name.clone(), Box::new(agent_chat));
                 drop(llm_map);
+                tracing::info!("Model [{}] deployed, ready for inferencing", app.name);
+                self.status
+                    .update_model(&app.name, status::ComponentStatus::Ready);
 
                 // This requires the lock on `llms` to be released before loading the logical/physical planners.
                 self.load_model(&logical_planner).await;

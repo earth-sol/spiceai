@@ -24,7 +24,7 @@ use tokio::sync::RwLock;
 use tracing::Span;
 use tracing_futures::Instrument;
 
-use crate::{tools::SpiceModelTool, Runtime};
+use crate::tools::SpiceModelTool;
 
 use super::Result;
 
