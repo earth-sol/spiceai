@@ -80,5 +80,10 @@ pub fn from_app(app: App) -> SpicepodDefinition {
         kind: SpicepodKind::default(),
         metadata: HashMap::default(),
         dependencies: Vec::default(),
+        objective: None,
+        orchestrator: None,
+        logical_planner: None,
+        physical_planner: None,
+        executor: None,
     }
 }

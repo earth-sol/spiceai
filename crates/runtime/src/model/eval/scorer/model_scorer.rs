@@ -32,6 +32,7 @@ pub struct LLMScorer {
 
 #[async_trait]
 impl Scorer for LLMScorer {
+    #[allow(clippy::cast_possible_truncation)]
     async fn score(
         &self,
         input: &DatasetInput,
@@ -66,8 +67,7 @@ impl Scorer for LLMScorer {
                 let json_resp: Value =
                     serde_json::from_str(&resp.expect("Failed to parse LLM response"))
                         .expect("Failed to parse LLM response");
-                let score = json_resp["score"].as_f64().expect("Failed to get score") as f32;
-                score
+                json_resp["score"].as_f64().expect("Failed to get score") as f32
             }
             Err(e) => {
                 tracing::error!("Error running LLM model: {:?}", e);

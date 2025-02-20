@@ -14,10 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     get_params_with_secrets, metrics, model::ENABLE_MODEL_SUPPORT_MESSAGE, status,
@@ -120,15 +117,12 @@ impl Runtime {
         let physical_tool_planner = physical_tool_planner_model(physical.clone());
 
         // Load executor model
-        let executor_name = match app.executor.clone() {
-            Some(p) => p,
-            None => {
-                tracing::error!("Executor not found");
-                return;
-            }
+        let Some(executor_name) = app.executor.clone() else {
+            tracing::error!("Executor not found");
+            return;
         };
-        let Some(executor) = app.models.iter().find(|m| m.name == executor_name) else {
-            tracing::error!("Executor model [{:?}] not found", executor_name);
+        if !app.models.iter().any(|m| m.name == executor_name) {
+            tracing::error!("Executor model [{executor_name}] not found");
             return;
         };
 

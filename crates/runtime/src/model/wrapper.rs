@@ -64,6 +64,7 @@ macro_rules! set_default_w_warning {
     };
 }
 
+#[allow(dead_code)]
 pub enum SystemPromptPattern {
     /// Prepend the system prompt to the set of request messages. Existing system messages are unaffected.
     Prepend(String),
