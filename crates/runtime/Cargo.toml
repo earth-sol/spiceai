@@ -9,8 +9,8 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-agent-orchestrator = { path = "../agent-orchestrator" }
 app = { path = "../app" }
+agent-orchestrator = { path = "../agent-orchestrator" }
 arrow.workspace = true
 arrow-csv = "53.3.0"
 arrow-flight = { workspace = true, features = ["flight-sql-experimental"] }
@@ -109,7 +109,7 @@ runtime-auth = { path = "../runtime-auth" }
 rusqlite = { workspace = true, optional = true }
 rustls.workspace = true
 rustls-pemfile.workspace = true
-schemars.workspace = true
+schemars = "0.8.19"
 secrecy.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -120,6 +120,7 @@ ssh2 = { workspace = true, optional = true }
 suppaftp = { workspace = true, optional = true }
 telemetry = { path = "../telemetry" }
 tiberius = { workspace = true, optional = true }
+tools = { path = "../tools" }
 tokio.workspace = true
 tokio-rusqlite = { workspace = true, optional = true }
 tokio-rustls = "0.26.0"
@@ -127,7 +128,6 @@ tokio-stream.workspace = true
 tokio-util = { workspace = true, optional = true }
 tonic.workspace = true
 tonic-health.workspace = true
-tools = { path = "../tools" }
 tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true

@@ -119,28 +119,8 @@ impl AgentChat {
     ) -> Result<LogicalPlan, OpenAIError> {
         // add_system_message(&mut initial_request, self.objective.clone());
         let response = logical_planner_model.chat_request(initial_request).await?;
-        // Attempt to convert the chat response to a logical plan. If the JSONSchema format is not satisfied, reattempt once.
-        let plan = match LogicalPlan::from_chat_completion(&response) {
-            Ok(plan) => plan,
-            Err(logical::plan::ConversionError::JsonSchema(e)) => {
-                tracing::warn!(
-                    "Logical plan created did not satisfy JSONSchema format. Reattempting.\n   Initial Error: {e}"
-                );
-                let response = logical_planner_model.chat_request(req).await?;
-                LogicalPlan::from_chat_completion(&response)
-                    .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?
-            }
-            Err(logical::plan::ConversionError::SerdeJson(e)) => {
-                return Err(OpenAIError::InvalidArgument(format!(
-                    "Failed to convert chat response to logical plan: {e}"
-                )))
-            }
-            Err(logical::plan::ConversionError::SerdeYaml(e)) => {
-                return Err(OpenAIError::InvalidArgument(format!(
-                    "Failed to convert chat response to logical plan: {e}"
-                )))
-            }
-        };
+        let plan = LogicalPlan::from_chat_completion(&response)
+            .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
 
         let logical_plan_json =
             serde_json::to_string_pretty(&plan).expect("Failed to serialize logical plan");
