@@ -90,19 +90,11 @@ impl AgentChat {
             .map(|artifact| format!("{artifact}"))
             .collect::<Vec<String>>()
             .join("\n\n");
-        let mut initial_request = CreateChatCompletionRequestArgs::default()
+        let initial_request = CreateChatCompletionRequestArgs::default()
             .messages(vec![ChatCompletionRequestMessage::User(
                 format!("{}\n\n{}", artifacts_prompt, research.prompt).into(),
             )])
             .build()?;
-        initial_request.tool_choice = Some(ChatCompletionToolChoiceOption::Named(
-            ChatCompletionNamedToolChoice {
-                r#type: ChatCompletionToolType::Function,
-                function: FunctionName {
-                    name: "document_similarity".to_string(),
-                },
-            },
-        ));
 
         let response = logical_planner_model
             .chat_request(initial_request.clone())

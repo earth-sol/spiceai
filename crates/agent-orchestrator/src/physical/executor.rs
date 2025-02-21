@@ -203,6 +203,7 @@ impl PhysicalJobExecutor {
                 request_message.clone(),
                 &step.model,
                 &step.success_criteria,
+                None,
             )
             .await?;
 
@@ -216,14 +217,17 @@ impl PhysicalJobExecutor {
         Ok(request_message)
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::too_many_lines)]
     async fn tool_call_succeeded(
         &self,
         step_history: &[ChatCompletionRequestMessage],
         tool_output: ChatCompletionRequestMessage,
         model_name: &str,
         success_criteria: &str,
+        iteration: Option<usize>,
     ) -> Result<ToolCallResult, anyhow::Error> {
+        let iteration = iteration.unwrap_or(0);
+
         let mut messages = step_history.to_vec();
         messages.push(tool_output.clone());
         messages.push(ChatCompletionRequestMessage::User(
@@ -247,7 +251,7 @@ impl PhysicalJobExecutor {
 
             1. Inspect the tool output. The tool output talks about a terminal command that completed with status code 4, with a method to access terminal logs based on a terminal ID.
             2. Because the status code is non-zero, we need to inspect the terminal logs to determine if the command actually failed.
-            3. A tool call is made to retrieve the relevant terminal logs.
+            3. Make a tool call is made to retrieve the relevant terminal logs.
             4. The terminal logs include no error messages, and the command output is as expected.
             5. The tool call is classified as successful.
             
@@ -255,9 +259,18 @@ impl PhysicalJobExecutor {
 
             1. Inspect the tool step. The tool step talks about removing some files.
             2. Because the tool step talks about removing files, we need to inspect the filesystem to determine if the files were actually removed.
-            3. A tool call is made to retrieve the relevant filesystem information.
+            3. Make a tool call is made to retrieve the relevant filesystem information.
             4. The filesystem information includes the list of files, and the files are still present.
             5. The tool call is classified as failed.
+
+            # Example Inconclusive Classification Process
+
+            1. Inspect the tool step. The tool step talks about a terminal command that is still running.
+            2. Make a tool call is made to retrieve the relevant terminal logs.
+            3. The terminal logs include no error messages.
+            4. Because the process is still running, the tool call is classified as inconclusive.
+
+            In this situation, we should wait a few minutes and check again. After checking again, we inspect the available terminals to see if the process is still running and the terminal logs for errors to classify again.
             ",
         ).into()));
 
@@ -272,7 +285,7 @@ impl PhysicalJobExecutor {
 
         let req = CreateChatCompletionRequestArgs::default()
             .response_format(yaml_value)
-            .messages(messages)
+            .messages(messages.clone())
             .build()
             .map_err(|e| {
                 anyhow::anyhow!("Error building chat completion request: {}", e.to_string())
@@ -293,29 +306,70 @@ impl PhysicalJobExecutor {
         } else {
             tracing::error!("Tool call failed: {}", verification.reason);
 
-            if verification.wait {
-                tracing::warn!("Model thinks waiting might be needed to verify result");
-                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-                // TODO: pin this so it can recurse
-            }
-
             if verification.status == VerificationStatus::Inconclusive {
                 tracing::warn!("Model thinks the result is inconclusive");
             }
+
+            match (verification.status, verification.wait) {
+                (VerificationStatus::Failed | VerificationStatus::Inconclusive, true) => {
+                    if iteration < 3 {
+                        tracing::warn!("Model thinks waiting might be needed to verify result");
+                        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+
+                        let mut messages = step_history.to_vec();
+
+                        messages.push(ChatCompletionRequestMessage::System(
+                            format!("# Status
+                            
+                            You have already checked {} times if the previous tool call was successful or not, but you were unable to verify the result of the tool call.
+                            Last time, you thought waiting might be needed to verify the result of the previous tool call.
+
+                            On the next success criteria check, ensure you call relevant tools to verify the result of the previous tool call, like collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
+                        ));
+
+                        return Box::pin(self.tool_call_succeeded(
+                            &messages,
+                            tool_output,
+                            model_name,
+                            success_criteria,
+                            Some(iteration + 1),
+                        ))
+                        .await;
+                    }
+
+                    tracing::warn!("Model thinks waiting might be needed to verify result, but we have already waited 3 times");
+                }
+                (VerificationStatus::Inconclusive, false) => {
+                    tracing::warn!("Model thinks the result is inconclusive, but does not think waiting is needed");
+                    if iteration < 3 {
+                        tracing::warn!("Model thinks waiting might be needed to verify result");
+                        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+
+                        messages.push(ChatCompletionRequestMessage::Assistant(message.into()));
+                        messages.push(ChatCompletionRequestMessage::System(
+                            format!("# Status
+                            
+                            You have already checked {} times if the previous tool call was successful or not, but you came to an inconclusive result.
+                            On the next success criteria check, ensure you call all relevant tools to collect the additional verification you require.
+                            
+                            This could include collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
+                        ));
+
+                        return Box::pin(self.tool_call_succeeded(
+                            &messages,
+                            tool_output,
+                            model_name,
+                            success_criteria,
+                            Some(iteration + 1),
+                        ))
+                        .await;
+                    }
+                }
+                _ => {}
+            }
+
             Ok(ToolCallResult::Failure(verification.reason))
         }
-
-        // let mut lines = message.lines();
-        // let first_line = lines.next().unwrap_or_default();
-        // let second_line = lines.next().unwrap_or_default();
-
-        // if first_line.trim().to_lowercase() == "true" {
-        //     tracing::info!("Tool call success: {second_line}");
-        //     Ok(ToolCallResult::Success)
-        // } else {
-        //     tracing::error!("Tool call failed: {second_line}");
-        //     Ok(ToolCallResult::Failure(second_line.to_string()))
-        // }
     }
 
     async fn summarize_executed_steps(
