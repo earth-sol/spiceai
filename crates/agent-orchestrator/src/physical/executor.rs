@@ -1,12 +1,20 @@
-use std::{collections::HashMap, io::Write, sync::Arc};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+    io::Write,
+    sync::Arc,
+};
 
-use super::plan::{PhysicalPlan, PromptStep, Step, ToolStep};
+use super::{
+    agentic_retry::extract_content,
+    plan::{PhysicalPlan, PromptStep, Step, ToolStep},
+};
 use async_openai::{
     error::OpenAIError,
     types::{
-        ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
-        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, ResponseFormat,
-        ResponseFormatJsonSchema,
+        ChatCompletionRequestMessage, ChatCompletionRequestUserMessage,
+        ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
+        CreateChatCompletionRequestArgs, ResponseFormat, ResponseFormatJsonSchema,
     },
 };
 use llms::chat::Chat;
@@ -89,6 +97,7 @@ impl PhysicalJobExecutor {
         // reset physical plan execution log
         reset_execution_log();
 
+        let mut task_history = vec![];
         let mut step_history = vec![];
 
         for task in &self.plan.tasks {
@@ -109,14 +118,17 @@ impl PhysicalJobExecutor {
 
             self.execution_history.push(step_history.clone());
 
+            task_history.extend(step_history.clone());
             step_history = self
                 .summarize_executed_steps(&self.summarization_model, &step_history)
                 .await?;
         }
 
-        // TODO: Generate a report of the execution and return as the output
+        let summary = self
+            .final_summary(&self.summarization_model, &task_history)
+            .await?;
 
-        Ok("Done!".to_string())
+        Ok(summary)
     }
 
     async fn execute_step(
@@ -197,24 +209,20 @@ impl PhysicalJobExecutor {
             .map_err(|e| anyhow::anyhow!("Error building tool message: {}", e.to_string()))?;
         let request_message = ChatCompletionRequestMessage::User(tool_message);
 
-        let tool_result = self
+        let result = self
             .tool_call_succeeded(
                 step_history,
                 request_message.clone(),
                 &step.model,
                 &step.success_criteria,
                 None,
+                None,
             )
             .await?;
 
-        // match tool_result {
-        //     ToolCallResult::Success => (),
-        //     ToolCallResult::Failure(failure_reason) => {
-        //         tracing::error!("Tool call failed: {failure_reason}");
-        //     }
-        // }
+        let result_message = ChatCompletionRequestMessage::Assistant(result.to_string().into());
 
-        Ok(request_message)
+        Ok(result_message)
     }
 
     #[allow(dead_code, clippy::too_many_lines)]
@@ -225,7 +233,8 @@ impl PhysicalJobExecutor {
         model_name: &str,
         success_criteria: &str,
         iteration: Option<usize>,
-    ) -> Result<ToolCallResult, anyhow::Error> {
+        extra_message: Option<ChatCompletionRequestMessage>,
+    ) -> Result<VerificationResponse, anyhow::Error> {
         let iteration = iteration.unwrap_or(0);
 
         let mut messages = step_history.to_vec();
@@ -233,7 +242,7 @@ impl PhysicalJobExecutor {
         messages.push(ChatCompletionRequestMessage::User(
             format!("# Goal
 
-            The previous message was a tool call. Classify if the previous tool call was successful or not, based on the output of the tool call and the step's success criteria.
+            The previous message was a tool call. Classify if the previous tool call was successful or not, based on the output of the previous tool call and the step's success criteria.
 
             # Success Criteria
 
@@ -246,12 +255,13 @@ impl PhysicalJobExecutor {
             3. Ensure you consider that the existence of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure.
             4. Use any of your available tools to verify the success criteria has been met.
             5. If there is no evidence or confirmation from the tool output that the success criteria has been met, make tool calls to retrieve the relevant information to verify the success criteria has been met.
-            
+            6. If additional tool calls are required to classify success, make them before classifying.
+
             # Example Successful Classification Process
 
             1. Inspect the tool output. The tool output talks about a terminal command that completed with status code 4, with a method to access terminal logs based on a terminal ID.
             2. Because the status code is non-zero, we need to inspect the terminal logs to determine if the command actually failed.
-            3. Make a tool call is made to retrieve the relevant terminal logs.
+            3. Make a tool call to retrieve the relevant terminal logs.
             4. The terminal logs include no error messages, and the command output is as expected.
             5. The tool call is classified as successful.
             
@@ -259,20 +269,29 @@ impl PhysicalJobExecutor {
 
             1. Inspect the tool step. The tool step talks about removing some files.
             2. Because the tool step talks about removing files, we need to inspect the filesystem to determine if the files were actually removed.
-            3. Make a tool call is made to retrieve the relevant filesystem information.
+            3. Make a tool call to retrieve the relevant filesystem information.
             4. The filesystem information includes the list of files, and the files are still present.
             5. The tool call is classified as failed.
 
             # Example Inconclusive Classification Process
 
             1. Inspect the tool step. The tool step talks about a terminal command that is still running.
-            2. Make a tool call is made to retrieve the relevant terminal logs.
+            2. Make a tool call to retrieve the relevant terminal logs.
             3. The terminal logs include no error messages.
             4. Because the process is still running, the tool call is classified as inconclusive.
 
-            In this situation, we should wait a few minutes and check again. After checking again, we inspect the available terminals to see if the process is still running and the terminal logs for errors to classify again.
+            In this situation, we should wait a few minutes and check again.
+            On the second check:
+
+            1. Make a tool call to retrieve the terminal logs.
+            2. The terminal logs include no error messages, and the terminal is idle.
+            3. The tool call is classified as successful.
             ",
         ).into()));
+
+        if let Some(extra_message) = extra_message {
+            messages.push(extra_message);
+        }
 
         let llms = &*self.llms.read().await;
         let model = llms
@@ -302,37 +321,37 @@ impl PhysicalJobExecutor {
 
         if verification.status == VerificationStatus::Succeeded {
             tracing::info!("Tool call success: {}", verification.reason);
-            Ok(ToolCallResult::Success)
+            Ok(verification)
         } else {
             tracing::error!("Tool call failed: {}", verification.reason);
-
             if verification.status == VerificationStatus::Inconclusive {
                 tracing::warn!("Model thinks the result is inconclusive");
             }
 
-            match (verification.status, verification.wait) {
+            match (verification.status.clone(), verification.wait) {
                 (VerificationStatus::Failed | VerificationStatus::Inconclusive, true) => {
                     if iteration < 3 {
                         tracing::warn!("Model thinks waiting might be needed to verify result");
                         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 
-                        let mut messages = step_history.to_vec();
-
-                        messages.push(ChatCompletionRequestMessage::System(
-                            format!("# Status
-                            
-                            You have already checked {} times if the previous tool call was successful or not, but you were unable to verify the result of the tool call.
-                            Last time, you thought waiting might be needed to verify the result of the previous tool call.
-
-                            On the next success criteria check, ensure you call relevant tools to verify the result of the previous tool call, like collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
-                        ));
+                        messages.push(ChatCompletionRequestMessage::Assistant(message.into()));
 
                         return Box::pin(self.tool_call_succeeded(
-                            &messages,
+                            step_history,
                             tool_output,
                             model_name,
                             success_criteria,
                             Some(iteration + 1),
+                            Some(ChatCompletionRequestMessage::User(
+                                format!("# Status
+                                
+                                You have already checked {} times if the previous tool call was successful or not, but you were unable to verify the result of the tool call.
+                                Last time, you thought waiting might be needed to verify the result of the previous tool call.
+                                
+                                # Next Steps
+                            
+                                On the next success criteria check, call all neccessary tools to collect additional information as the state will have changed since the last check.", iteration+1).into()
+                            ))
                         ))
                         .await;
                     }
@@ -346,14 +365,6 @@ impl PhysicalJobExecutor {
                         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 
                         messages.push(ChatCompletionRequestMessage::Assistant(message.into()));
-                        messages.push(ChatCompletionRequestMessage::System(
-                            format!("# Status
-                            
-                            You have already checked {} times if the previous tool call was successful or not, but you came to an inconclusive result.
-                            On the next success criteria check, ensure you call all relevant tools to collect the additional verification you require.
-                            
-                            This could include collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
-                        ));
 
                         return Box::pin(self.tool_call_succeeded(
                             &messages,
@@ -361,6 +372,14 @@ impl PhysicalJobExecutor {
                             model_name,
                             success_criteria,
                             Some(iteration + 1),
+                            Some(ChatCompletionRequestMessage::System(
+                                format!("# Status
+                                
+                                You have already checked {} times if the previous tool call was successful or not, but you came to an inconclusive result.
+                                On the next success criteria check, ensure you call all relevant tools to collect the additional verification you require.
+                                
+                                This could include collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
+                            ))
                         ))
                         .await;
                     }
@@ -368,7 +387,7 @@ impl PhysicalJobExecutor {
                 _ => {}
             }
 
-            Ok(ToolCallResult::Failure(verification.reason))
+            Ok(verification)
         }
     }
 
@@ -386,7 +405,8 @@ impl PhysicalJobExecutor {
             .join("\n\n");
 
         messages.push(ChatCompletionRequestMessage::User(
-            format!("
+            format!("# Goal
+
             Summarize the steps below that have been executed previously.
              - Only include main results, list of steps completed, 
              - Incldue learnings, hints and important details that could be useful to effectively execute further tasks.
@@ -416,9 +436,56 @@ impl PhysicalJobExecutor {
             return Err(anyhow::anyhow!("No message content found"));
         };
 
-        let message = ChatCompletionRequestUserMessageContent::Text(format!("Find information about previosly executed task to help complete next steps\n\n{summary}"));
+        let message = ChatCompletionRequestUserMessageContent::Text(format!("Find information about previously executed tasks to help complete your next steps\n\n# Previous Steps\n\n{summary}"));
 
         Ok(vec![ChatCompletionRequestMessage::User(message.into())])
+    }
+
+    async fn final_summary(
+        &self,
+        model: &str,
+        step_history: &[ChatCompletionRequestMessage],
+    ) -> Result<String, anyhow::Error> {
+        let mut messages: Vec<ChatCompletionRequestMessage> = vec![]; // step_history.to_vec();
+
+        let content = step_history
+            .iter()
+            .map(|msg| format!("{msg:?}"))
+            .collect::<Vec<String>>()
+            .join("\n\n");
+
+        messages.push(ChatCompletionRequestMessage::User(
+            format!("# Goal
+
+            Create a final summary of all executed steps and tasks.
+            Include a final note, with an emoji for check or cross, for whether the task was successful or not.
+
+            Collect information from tool calls if you need additional information to complete the summary.
+            
+            # Steps
+
+            {content}
+            ").into(),
+        ));
+
+        let llms = &*self.llms.read().await;
+        let model = llms
+            .get(model)
+            .ok_or_else(|| anyhow::anyhow!("Model {} not found", model))?;
+
+        let req = CreateChatCompletionRequestArgs::default()
+            .messages(messages)
+            .build()
+            .map_err(|e| {
+                anyhow::anyhow!("Error building chat completion request: {}", e.to_string())
+            })?;
+        let response = model.chat_request(req).await?;
+
+        let Some(summary) = response.choices[0].message.content.clone() else {
+            return Err(anyhow::anyhow!("No message content found"));
+        };
+
+        Ok(summary)
     }
 }
 
@@ -466,17 +533,37 @@ fn log_execution_update(update_message: &str) {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct VerificationResponse {
     pub status: VerificationStatus,
     pub reason: String,
     pub wait: bool,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum VerificationStatus {
     Succeeded,
     Failed,
     Inconclusive,
+}
+
+impl Display for VerificationResponse {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "# Tool Call Result\n\n{}\n\n# Reasoning\n\n{}",
+            self.status, self.reason
+        )
+    }
+}
+
+impl Display for VerificationStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VerificationStatus::Succeeded => write!(f, "Succeeded"),
+            VerificationStatus::Failed => write!(f, "Failed"),
+            VerificationStatus::Inconclusive => write!(f, "Inconclusive"),
+        }
+    }
 }

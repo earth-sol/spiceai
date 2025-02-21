@@ -62,7 +62,7 @@ pub async fn tool_call_agentic_retry(
     })
 }
 
-fn extract_content(message: &ChatCompletionRequestMessage) -> Result<String, anyhow::Error> {
+pub fn extract_content(message: &ChatCompletionRequestMessage) -> Result<String, anyhow::Error> {
     match message {
         ChatCompletionRequestMessage::User(msg) => match &msg.content {
             ChatCompletionRequestUserMessageContent::Text(text) => Ok(text.clone()),
