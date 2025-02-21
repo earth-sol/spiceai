@@ -1,9 +1,5 @@
-use async_openai::{
-    error::OpenAIError,
-    types::{ChatCompletionResponseMessage, CreateChatCompletionResponse},
-};
+use async_openai::{error::OpenAIError, types::CreateChatCompletionResponse};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use spicepod::component::model::Model;
 
 use super::Artifact;

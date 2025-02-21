@@ -6,7 +6,6 @@ use async_openai::{
     types::{
         ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
         ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, ResponseFormat,
-        ResponseFormatJsonSchema,
     },
 };
 use llms::chat::Chat;
@@ -197,15 +196,14 @@ impl PhysicalJobExecutor {
             .map_err(|e| anyhow::anyhow!("Error building tool message: {}", e.to_string()))?;
         let request_message = ChatCompletionRequestMessage::User(tool_message);
 
-        let tool_result = self
-            .tool_call_succeeded(
-                step_history,
-                request_message.clone(),
-                &step.model,
-                &step.success_criteria,
-                None,
-            )
-            .await?;
+        self.tool_call_succeeded(
+            step_history,
+            request_message.clone(),
+            &step.model,
+            &step.success_criteria,
+            None,
+        )
+        .await?;
 
         // match tool_result {
         //     ToolCallResult::Success => (),
@@ -246,7 +244,7 @@ impl PhysicalJobExecutor {
             3. Ensure you consider that the existence of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure.
             4. Use any of your available tools to verify the success criteria has been met.
             5. If there is no evidence or confirmation from the tool output that the success criteria has been met, make tool calls to retrieve the relevant information to verify the success criteria has been met.
-            
+
             # Example Successful Classification Process
 
             1. Inspect the tool output. The tool output talks about a terminal command that completed with status code 4, with a method to access terminal logs based on a terminal ID.
@@ -254,7 +252,7 @@ impl PhysicalJobExecutor {
             3. Make a tool call is made to retrieve the relevant terminal logs.
             4. The terminal logs include no error messages, and the command output is as expected.
             5. The tool call is classified as successful.
-            
+
             # Example Failed Classification Process
 
             1. Inspect the tool step. The tool step talks about removing some files.
@@ -320,7 +318,7 @@ impl PhysicalJobExecutor {
 
                         messages.push(ChatCompletionRequestMessage::System(
                             format!("# Status
-                            
+
                             You have already checked {} times if the previous tool call was successful or not, but you were unable to verify the result of the tool call.
                             Last time, you thought waiting might be needed to verify the result of the previous tool call.
 
@@ -348,10 +346,10 @@ impl PhysicalJobExecutor {
                         messages.push(ChatCompletionRequestMessage::Assistant(message.into()));
                         messages.push(ChatCompletionRequestMessage::System(
                             format!("# Status
-                            
+
                             You have already checked {} times if the previous tool call was successful or not, but you came to an inconclusive result.
                             On the next success criteria check, ensure you call all relevant tools to collect the additional verification you require.
-                            
+
                             This could include collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
                         ));
 
@@ -388,7 +386,7 @@ impl PhysicalJobExecutor {
         messages.push(ChatCompletionRequestMessage::User(
             format!("
             Summarize the steps below that have been executed previously.
-             - Only include main results, list of steps completed, 
+             - Only include main results, list of steps completed,
              - Incldue learnings, hints and important details that could be useful to effectively execute further tasks.
 
             Summary must be concise, clear and short.
