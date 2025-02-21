@@ -76,6 +76,25 @@ impl AgentChat {
         let response = research_model.chat_request(initial_request).await?;
         let artifacts = parse_response(&response)?;
 
+        let artifacts_json =
+            serde_json::to_string_pretty(&artifacts).expect("Failed to serialize logical plan");
+        tracing::info!("Artifacts plan: {artifacts_json}");
+
+        // trace twice: once to dedicated log and also to the baseline
+        let trace_file_names = vec![
+            format!(
+                "data/research/artifacts_{}.json",
+                chrono::Local::now().format("%Y%m%d_%H%M%S")
+            ),
+            "data/research/artifacts.json".to_string(),
+        ];
+
+        for file_name in trace_file_names {
+            if let Err(e) = std::fs::write(file_name, &artifacts_json) {
+                tracing::error!("Failed to write research artifacts: {e}");
+            }
+        }
+
         Ok(Research { prompt, artifacts })
     }
 
