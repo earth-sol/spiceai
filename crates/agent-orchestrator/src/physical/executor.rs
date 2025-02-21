@@ -264,7 +264,7 @@ impl PhysicalJobExecutor {
             3. Make a tool call to retrieve the relevant terminal logs.
             4. The terminal logs include no error messages, and the command output is as expected.
             5. The tool call is classified as successful.
-            
+
             # Example Failed Classification Process
 
             1. Inspect the tool step. The tool step talks about removing some files.
@@ -333,8 +333,17 @@ impl PhysicalJobExecutor {
                     if iteration < 3 {
                         tracing::warn!("Model thinks waiting might be needed to verify result");
                         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                        let mut messages = step_history.to_vec();
 
                         messages.push(ChatCompletionRequestMessage::Assistant(message.into()));
+                        messages.push(ChatCompletionRequestMessage::System(
+                            format!("# Status
+
+                            You have already checked {} times if the previous tool call was successful or not, but you were unable to verify the result of the tool call.
+                            Last time, you thought waiting might be needed to verify the result of the previous tool call.
+
+                            On the next success criteria check, ensure you call relevant tools to verify the result of the previous tool call, like collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
+                        ));
 
                         return Box::pin(self.tool_call_succeeded(
                             step_history,
@@ -365,6 +374,14 @@ impl PhysicalJobExecutor {
                         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 
                         messages.push(ChatCompletionRequestMessage::Assistant(message.into()));
+                        messages.push(ChatCompletionRequestMessage::System(
+                            format!("# Status
+
+                            You have already checked {} times if the previous tool call was successful or not, but you came to an inconclusive result.
+                            On the next success criteria check, ensure you call all relevant tools to collect the additional verification you require.
+
+                            This could include collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
+                        ));
 
                         return Box::pin(self.tool_call_succeeded(
                             &messages,
@@ -408,7 +425,7 @@ impl PhysicalJobExecutor {
             format!("# Goal
 
             Summarize the steps below that have been executed previously.
-             - Only include main results, list of steps completed, 
+             - Only include main results, list of steps completed,
              - Incldue learnings, hints and important details that could be useful to effectively execute further tasks.
 
             Summary must be concise, clear and short.

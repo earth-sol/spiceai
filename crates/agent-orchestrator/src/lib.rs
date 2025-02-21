@@ -2,7 +2,7 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::doc_markdown)]
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use async_openai::{
     error::OpenAIError,
@@ -17,8 +17,9 @@ use async_trait::async_trait;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
-use research::{model::parse_response, Artifact, Research};
+use research::{model::parse_response, Research};
 use serde::Serialize;
+use snafu::ResultExt;
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
 
@@ -76,25 +77,6 @@ impl AgentChat {
         let response = research_model.chat_request(initial_request).await?;
         let artifacts = parse_response(&response)?;
 
-        let artifacts_json =
-            serde_json::to_string_pretty(&artifacts).expect("Failed to serialize logical plan");
-        tracing::info!("Artifacts plan: {artifacts_json}");
-
-        // trace twice: once to dedicated log and also to the baseline
-        let trace_file_names = vec![
-            format!(
-                "data/research/artifacts_{}.json",
-                chrono::Local::now().format("%Y%m%d_%H%M%S")
-            ),
-            "data/research/artifacts.json".to_string(),
-        ];
-
-        for file_name in trace_file_names {
-            if let Err(e) = std::fs::write(file_name, &artifacts_json) {
-                tracing::error!("Failed to write research artifacts: {e}");
-            }
-        }
-
         Ok(Research { prompt, artifacts })
     }
 
@@ -140,25 +122,6 @@ impl AgentChat {
             }
         };
 
-        let logical_plan_json =
-            serde_json::to_string_pretty(&plan).expect("Failed to serialize logical plan");
-        tracing::info!("Logical plan: {logical_plan_json}");
-
-        // trace twice: once to dedicated log and also to the baseline
-        let trace_file_names = vec![
-            format!(
-                "data/logical/logical_plan_{}.json",
-                chrono::Local::now().format("%Y%m%d_%H%M%S")
-            ),
-            "data/logical/logical_plan.json".to_string(),
-        ];
-
-        for file_name in trace_file_names {
-            if let Err(e) = std::fs::write(file_name, &logical_plan_json) {
-                tracing::error!("Failed to write logical plan: {e}");
-            }
-        }
-
         Ok(plan)
     }
 
@@ -176,27 +139,30 @@ impl AgentChat {
         )
         .await?;
 
-        let physical_plan_json = serde_json::to_string_pretty(&physical_plan)
-            .expect("Failed to serialize physical plan");
-        tracing::info!("Physical plan: {physical_plan_json}");
-
-        // trace twice: once to dedicated log and also to the baseline
-        let trace_file_names = vec![
-            format!(
-                "data/physical/physical_plan_{}.json",
-                chrono::Local::now().format("%Y%m%d_%H%M%S")
-            ),
-            "data/physical/physical_plan.json".to_string(),
-        ];
-
-        for file_name in trace_file_names {
-            if let Err(e) = std::fs::write(file_name, &physical_plan_json) {
-                tracing::error!("Failed to write physical plan: {e}");
-            }
-        }
-
         Ok(physical_plan)
     }
+}
+
+fn write_artifact<T: ?Sized + Serialize>(
+    base_name: &str,
+    id: &str,
+    artifact: &T,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let artifact_json =
+        serde_json::to_string_pretty(artifact).expect("Failed to serialize logical plan");
+
+    tracing::debug!("{base_name}: {artifact_json}");
+
+    if let Some(base_dir) = PathBuf::from(format!("data/{base_name}")).parent() {
+        if !base_dir.exists() {
+            tracing::debug!("Creating directory(s) {base_dir:?}");
+            std::fs::create_dir_all(base_dir).boxed()?;
+        }
+    }
+
+    std::fs::write(format!("data/{base_name}_{id}.json"), &artifact_json).boxed()?;
+    std::fs::write(format!("data/{base_name}_latest.json"), &artifact_json).boxed()?;
+    Ok(())
 }
 
 #[async_trait]
@@ -209,6 +175,7 @@ impl Chat for AgentChat {
         &self,
         req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
+        let id = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
         let llm = self.llms.read().await;
         let Some(agentic_researcher_model) = llm.get("agentic_researcher") else {
             return Err(OpenAIError::InvalidArgument(format!(
@@ -244,8 +211,12 @@ impl Chat for AgentChat {
                     let research = self
                         .generate_research(agentic_researcher_model.as_ref(), prompt)
                         .await?;
+
+                    write_artifact("research/research_artifacts", id.as_str(), &research)
+                        .expect("Failed to save research artifacts");
+
                     if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
-                        return get_output_message_from_struct(research);
+                        return get_output_message_from_struct(id.as_str(), research);
                     }
                     pipeline = pipeline::AgentPipeline::LogicalPlan(research);
                 }
@@ -253,8 +224,12 @@ impl Chat for AgentChat {
                     let logical_plan = self
                         .generate_logical_plan(logical_planner_model.as_ref(), research)
                         .await?;
+
+                    write_artifact("logical/logical_plan", id.as_str(), &logical_plan)
+                        .expect("Failed to save logical plan");
+
                     if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
-                        return get_output_message_from_struct(logical_plan);
+                        return get_output_message_from_struct(id.as_str(), logical_plan);
                     }
                     pipeline = pipeline::AgentPipeline::PhysicalPlan(logical_plan);
                 }
@@ -266,8 +241,11 @@ impl Chat for AgentChat {
                             physical_prompt_planner_model.as_ref(),
                         )
                         .await?;
+                    write_artifact("physical/physical_plan", id.as_str(), &physical_plan)
+                        .expect("Failed to save physical plan");
+
                     if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
-                        return get_output_message_from_struct(physical_plan);
+                        return get_output_message_from_struct(id.as_str(), physical_plan);
                     }
                     pipeline = pipeline::AgentPipeline::Execution(physical_plan);
                 }
@@ -284,7 +262,7 @@ impl Chat for AgentChat {
                     pipeline = pipeline::AgentPipeline::Output(output);
                 }
                 pipeline::AgentPipeline::Output(output) => {
-                    return Ok(get_output_message(output));
+                    return Ok(get_output_message(id.as_str(), output));
                 }
             }
         }
@@ -292,15 +270,16 @@ impl Chat for AgentChat {
 }
 
 fn get_output_message_from_struct<T: Serialize>(
+    id: &str,
     output: T,
 ) -> Result<CreateChatCompletionResponse, OpenAIError> {
     let output_json = serde_json::to_string(&output)
         .map_err(|e| OpenAIError::InvalidArgument(format!("Failed to serialize output: {e}")))?;
-    Ok(get_output_message(output_json))
+    Ok(get_output_message(id, output_json))
 }
 
 #[allow(deprecated)]
-fn get_output_message(output: String) -> CreateChatCompletionResponse {
+fn get_output_message(id: &str, output: String) -> CreateChatCompletionResponse {
     let message = ChatCompletionResponseMessage {
         content: Some(output),
         tool_calls: None,
@@ -310,7 +289,7 @@ fn get_output_message(output: String) -> CreateChatCompletionResponse {
         refusal: None,
     };
     CreateChatCompletionResponse {
-        id: String::new(),
+        id: id.to_string(),
         object: String::new(),
         created: 0,
         model: String::new(),
