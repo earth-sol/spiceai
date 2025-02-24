@@ -221,9 +221,26 @@ impl Chat for AgentChat {
                     pipeline = pipeline::AgentPipeline::LogicalPlan(research);
                 }
                 pipeline::AgentPipeline::LogicalPlan(research) => {
-                    let logical_plan = self
+                    let prompt = research.prompt.clone();
+                    let logical_plan = match self
                         .generate_logical_plan(logical_planner_model.as_ref(), research)
-                        .await?;
+                        .await
+                    {
+                        Ok(p) => p,
+                        Err(e) => {
+                            match e {
+                                OpenAIError::ApiError(_) => {
+                                    tracing::warn!(
+                                        "Logical plan generation failed with error {e}. Regenerating research plan."
+                                    );
+                                    // Regenerate research plan on logical plan generation failure
+                                    pipeline = pipeline::AgentPipeline::Research { prompt: prompt };
+                                    continue;
+                                }
+                                _ => return Err(e),
+                            }
+                        }
+                    };
 
                     write_artifact("logical/logical_plan", id.as_str(), &logical_plan)
                         .expect("Failed to save logical plan");
