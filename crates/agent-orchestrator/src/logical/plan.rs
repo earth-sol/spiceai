@@ -9,12 +9,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LogicalPlan {
     pub tasks: Vec<Task>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Task {
     #[serde(default)]
     pub uuid: Option<Uuid>,
@@ -24,7 +24,7 @@ pub struct Task {
     pub steps: Vec<Step>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Step {
     #[serde(default)]
     pub uuid: Option<Uuid>,

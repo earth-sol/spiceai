@@ -2,25 +2,29 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::doc_markdown)]
 
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
-
 use async_openai::{
     error::OpenAIError,
     types::{
-        ChatChoice, ChatCompletionNamedToolChoice, ChatCompletionRequestMessage,
-        ChatCompletionResponseMessage, ChatCompletionToolChoiceOption, ChatCompletionToolType,
+        ChatChoice, ChatChoiceStream, ChatCompletionMessageToolCall, ChatCompletionNamedToolChoice,
+        ChatCompletionRequestMessage, ChatCompletionResponseMessage, ChatCompletionResponseStream,
+        ChatCompletionStreamResponseDelta, ChatCompletionToolChoiceOption, ChatCompletionToolType,
         CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
-        FunctionName, Role,
+        CreateChatCompletionStreamResponse, FunctionCall, FunctionName,
     },
 };
+
 use async_trait::async_trait;
+use futures_util::TryStreamExt;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::plan::LogicalPlan;
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
+use pipeline::pipeline_into_stream;
 use research::{model::parse_response, Research};
 use serde::Serialize;
 use snafu::ResultExt;
-use tokio::sync::RwLock;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use tokio::sync::{mpsc, RwLock};
+use tokio_stream::wrappers::ReceiverStream;
 use tools::SpiceModelTool;
 
 pub mod logical;
@@ -28,6 +32,7 @@ pub mod physical;
 pub mod pipeline;
 pub mod research;
 
+#[derive(Clone)]
 pub struct AgentChat {
     _objective: String,
     orchestrator: String,
@@ -141,6 +146,157 @@ impl AgentChat {
 
         Ok(physical_plan)
     }
+
+    fn run_pipeline_stream(
+        self: Arc<Self>,
+        mut pipeline: pipeline::AgentPipeline,
+        advance_mode: pipeline::AdvanceMode,
+    ) -> ChatCompletionResponseStream {
+        let (tx, rx) =
+            mpsc::channel::<Result<CreateChatCompletionStreamResponse, OpenAIError>>(100);
+        let id = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+
+        let models = self.llms.clone();
+
+        tokio::spawn(async move {
+            let models = models.read().await;
+            let Some(researcher_model) = models.get("agentic_researcher") else {
+                let _ = tx
+                    .send(Err(OpenAIError::InvalidArgument(format!(
+                        "Model {} not found.",
+                        self.orchestrator
+                    ))))
+                    .await;
+                return;
+            };
+            let Some(logical_planner_model) = models.get("agentic_logical_planner") else {
+                let _ = tx
+                    .send(Err(OpenAIError::InvalidArgument(format!(
+                        "Model {} not found.",
+                        self.orchestrator
+                    ))))
+                    .await;
+                return;
+            };
+            let Some(physical_tool_planner_model) = models.get("agentic_physical_tool_planner")
+            else {
+                let _ = tx
+                    .send(Err(OpenAIError::InvalidArgument(format!(
+                        "Model {} not found.",
+                        self.orchestrator
+                    ))))
+                    .await;
+                return;
+            };
+            let Some(physical_prompt_planner_model) = models.get("agentic_physical_prompt_planner")
+            else {
+                let _ = tx
+                    .send(Err(OpenAIError::InvalidArgument(format!(
+                        "Model {} not found.",
+                        self.orchestrator
+                    ))))
+                    .await;
+                return;
+            };
+
+            let service = self.clone();
+            let id = id.clone();
+
+            let _ = tx.send(pipeline_into_stream(pipeline.clone())).await;
+            loop {
+                match pipeline {
+                    pipeline::AgentPipeline::Research { prompt } => {
+                        let research = match service
+                            .generate_research(researcher_model.as_ref(), prompt)
+                            .await
+                        {
+                            Ok(l) => l,
+                            Err(e) => {
+                                let _ = tx.send(Err(e)).await;
+                                break;
+                            }
+                        };
+                        write_artifact("research/research_artifacts", &id, &research)
+                            .expect("Failed to save research artifacts");
+
+                        if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
+                            break;
+                        }
+                        pipeline = pipeline::AgentPipeline::LogicalPlan(research);
+                    }
+                    pipeline::AgentPipeline::LogicalPlan(research) => {
+                        let logical_plan = match service
+                            .generate_logical_plan(logical_planner_model.as_ref(), research)
+                            .await
+                        {
+                            Ok(l) => l,
+                            Err(e) => {
+                                let _ = tx.send(Err(e)).await;
+                                break;
+                            }
+                        };
+                        write_artifact("logical/logical_plan", &id, &logical_plan)
+                            .expect("Failed to save logical plan");
+
+                        if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
+                            break;
+                        }
+                        pipeline = pipeline::AgentPipeline::PhysicalPlan(logical_plan);
+                    }
+                    pipeline::AgentPipeline::PhysicalPlan(logical_plan) => {
+                        let physical_plan = match service
+                            .generate_physical_plan(
+                                &logical_plan,
+                                physical_tool_planner_model.as_ref(),
+                                physical_prompt_planner_model.as_ref(),
+                            )
+                            .await
+                        {
+                            Ok(l) => l,
+                            Err(e) => {
+                                let _ = tx.send(Err(e)).await;
+                                break;
+                            }
+                        };
+                        write_artifact("physical/physical_plan", &id, &physical_plan)
+                            .expect("Failed to save physical plan");
+
+                        if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
+                            break;
+                        }
+                        pipeline = pipeline::AgentPipeline::Execution(physical_plan);
+                    }
+                    pipeline::AgentPipeline::Execution(physical_plan) => {
+                        let mut executor = PhysicalJobExecutor::new(
+                            physical_plan,
+                            Arc::clone(&service.llms),
+                            service.tools.clone(),
+                            "verifier-gpt-4o".to_string(),
+                        );
+                        let output = match executor.execute().await.map_err(|e| {
+                            OpenAIError::InvalidArgument(format!(
+                                "Error executing physical plan: {e}"
+                            ))
+                        }) {
+                            Ok(l) => l,
+                            Err(e) => {
+                                let _ = tx.send(Err(e)).await;
+                                break;
+                            }
+                        };
+                        pipeline = pipeline::AgentPipeline::Output(output);
+                    }
+                    pipeline::AgentPipeline::Output(_) => {
+                        let _ = tx.send(pipeline_into_stream(pipeline.clone())).await;
+                        break;
+                    }
+                }
+                let _ = tx.send(pipeline_into_stream(pipeline.clone())).await;
+            }
+        });
+
+        Box::pin(ReceiverStream::new(rx))
+    }
 }
 
 fn write_artifact<T: ?Sized + Serialize>(
@@ -171,130 +327,100 @@ impl Chat for AgentChat {
         todo!()
     }
 
+    async fn chat_stream(
+        &self,
+        req: CreateChatCompletionRequest,
+    ) -> Result<ChatCompletionResponseStream, OpenAIError> {
+        let (pipeline, advance_mode) = pipeline::AgentPipeline::try_new(&req)
+            .map_err(|e| OpenAIError::InvalidArgument(format!("Error parsing request: {e}")))?;
+
+        Ok(Arc::new(self.clone()).run_pipeline_stream(pipeline, advance_mode))
+    }
+
+    // The non-streaming endpoint consumes the stream and returns the final result.
     async fn chat_request(
         &self,
         req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
-        let id = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-        let llm = self.llms.read().await;
-        let Some(agentic_researcher_model) = llm.get("agentic_researcher") else {
-            return Err(OpenAIError::InvalidArgument(format!(
-                "Model {} not found.",
-                self.orchestrator
-            )));
-        };
-        let Some(logical_planner_model) = llm.get("agentic_logical_planner") else {
-            return Err(OpenAIError::InvalidArgument(format!(
-                "Model {} not found.",
-                self.orchestrator
-            )));
-        };
-        let Some(physical_tool_planner_model) = llm.get("agentic_physical_tool_planner") else {
-            return Err(OpenAIError::InvalidArgument(format!(
-                "Model {} not found.",
-                self.orchestrator
-            )));
-        };
-        let Some(physical_prompt_planner_model) = llm.get("agentic_physical_prompt_planner") else {
-            return Err(OpenAIError::InvalidArgument(format!(
-                "Model {} not found.",
-                self.orchestrator
-            )));
-        };
+        let stream = self.chat_stream(req).await?;
 
-        let (mut pipeline, advance_mode) = pipeline::AgentPipeline::try_new(&req)
-            .map_err(|e| OpenAIError::InvalidArgument(format!("Error parsing request: {e}")))?;
+        // For chat request, the last item is to be used in the response.
+        let final_stream_item = stream
+            .try_fold(None, |_, item| async { Ok(Some(item)) })
+            .await?
+            .ok_or_else(|| OpenAIError::InvalidArgument("No output was produced".to_string()))?;
 
-        loop {
-            match pipeline {
-                pipeline::AgentPipeline::Research { prompt } => {
-                    let research = self
-                        .generate_research(agentic_researcher_model.as_ref(), prompt)
-                        .await?;
-
-                    write_artifact("research/research_artifacts", id.as_str(), &research)
-                        .expect("Failed to save research artifacts");
-
-                    if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
-                        return get_output_message_from_struct(id.as_str(), research);
-                    }
-                    pipeline = pipeline::AgentPipeline::LogicalPlan(research);
-                }
-                pipeline::AgentPipeline::LogicalPlan(research) => {
-                    let logical_plan = self
-                        .generate_logical_plan(logical_planner_model.as_ref(), research)
-                        .await?;
-
-                    write_artifact("logical/logical_plan", id.as_str(), &logical_plan)
-                        .expect("Failed to save logical plan");
-
-                    if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
-                        return get_output_message_from_struct(id.as_str(), logical_plan);
-                    }
-                    pipeline = pipeline::AgentPipeline::PhysicalPlan(logical_plan);
-                }
-                pipeline::AgentPipeline::PhysicalPlan(logical_plan) => {
-                    let physical_plan = self
-                        .generate_physical_plan(
-                            &logical_plan,
-                            physical_tool_planner_model.as_ref(),
-                            physical_prompt_planner_model.as_ref(),
-                        )
-                        .await?;
-                    write_artifact("physical/physical_plan", id.as_str(), &physical_plan)
-                        .expect("Failed to save physical plan");
-
-                    if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
-                        return get_output_message_from_struct(id.as_str(), physical_plan);
-                    }
-                    pipeline = pipeline::AgentPipeline::Execution(physical_plan);
-                }
-                pipeline::AgentPipeline::Execution(physical_plan) => {
-                    let mut executor = PhysicalJobExecutor::new(
-                        physical_plan,
-                        Arc::clone(&self.llms),
-                        self.tools.clone(),
-                        "verifier-gpt-4o".to_string(),
-                    );
-                    let output = executor.execute().await.map_err(|e| {
-                        OpenAIError::InvalidArgument(format!("Error executing physical plan: {e}"))
-                    })?;
-                    pipeline = pipeline::AgentPipeline::Output(output);
-                }
-                pipeline::AgentPipeline::Output(output) => {
-                    return Ok(get_output_message(id.as_str(), output));
-                }
-            }
-        }
+        stream_to_request_payload(final_stream_item)
     }
 }
 
-fn get_output_message_from_struct<T: Serialize>(
-    id: &str,
-    output: T,
+/// `stream` should be a full message.
+#[allow(deprecated)]
+fn stream_to_request_payload(
+    stream: CreateChatCompletionStreamResponse,
 ) -> Result<CreateChatCompletionResponse, OpenAIError> {
-    let output_json = serde_json::to_string(&output)
-        .map_err(|e| OpenAIError::InvalidArgument(format!("Failed to serialize output: {e}")))?;
-    Ok(get_output_message(id, output_json))
+    Ok(CreateChatCompletionResponse {
+        id: stream.id,
+        object: stream.object,
+        created: stream.created,
+        model: stream.model,
+        choices: stream
+            .choices
+            .into_iter()
+            .map(|c| ChatChoice {
+                index: c.index,
+                message: ChatCompletionResponseMessage {
+                    content: c.delta.content,
+                    refusal: c.delta.refusal,
+                    tool_calls: c.delta.tool_calls.map(|calls| {
+                        calls
+                            .into_iter()
+                            .map(|call| ChatCompletionMessageToolCall {
+                                id: call.id.unwrap_or_default(),
+                                r#type: ChatCompletionToolType::Function,
+                                function: FunctionCall {
+                                    name: call
+                                        .function
+                                        .clone()
+                                        .and_then(|f| f.name)
+                                        .unwrap_or_default(),
+                                    arguments: call
+                                        .function
+                                        .and_then(|f| f.arguments)
+                                        .unwrap_or_default(),
+                                },
+                            })
+                            .collect()
+                    }),
+                    role: c.delta.role.unwrap_or_default(),
+                    function_call: None,
+                    audio: None,
+                },
+                finish_reason: c.finish_reason,
+                logprobs: c.logprobs,
+            })
+            .collect(),
+        service_tier: stream.service_tier,
+        system_fingerprint: stream.system_fingerprint,
+        usage: stream.usage,
+    })
 }
 
 #[allow(deprecated)]
-fn get_output_message(id: &str, output: String) -> CreateChatCompletionResponse {
-    let message = ChatCompletionResponseMessage {
-        content: Some(output),
-        tool_calls: None,
-        role: Role::Assistant,
-        audio: None,
-        function_call: None,
-        refusal: None,
-    };
-    CreateChatCompletionResponse {
+fn get_output_message(id: &str, output: String) -> CreateChatCompletionStreamResponse {
+    CreateChatCompletionStreamResponse {
         id: id.to_string(),
         object: String::new(),
         created: 0,
         model: String::new(),
-        choices: vec![ChatChoice {
-            message,
+        choices: vec![ChatChoiceStream {
+            delta: ChatCompletionStreamResponseDelta {
+                content: Some(output),
+                function_call: None,
+                tool_calls: None,
+                role: None,
+                refusal: None,
+            },
             index: 0,
             finish_reason: None,
             logprobs: None,

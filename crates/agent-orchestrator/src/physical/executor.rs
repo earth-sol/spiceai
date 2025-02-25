@@ -5,16 +5,12 @@ use std::{
     sync::Arc,
 };
 
-use super::{
-    agentic_retry::extract_content,
-    plan::{PhysicalPlan, PromptStep, Step, ToolStep},
-};
+use super::plan::{PhysicalPlan, PromptStep, Step, ToolStep};
 use async_openai::{
     error::OpenAIError,
     types::{
-        ChatCompletionRequestMessage, ChatCompletionRequestUserMessage,
-        ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
-        CreateChatCompletionRequestArgs, ResponseFormat, ResponseFormatJsonSchema,
+        ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
+        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, ResponseFormat,
     },
 };
 use llms::chat::Chat;
@@ -353,12 +349,12 @@ impl PhysicalJobExecutor {
                             Some(iteration + 1),
                             Some(ChatCompletionRequestMessage::User(
                                 format!("# Status
-                                
+
                                 You have already checked {} times if the previous tool call was successful or not, but you were unable to verify the result of the tool call.
                                 Last time, you thought waiting might be needed to verify the result of the previous tool call.
-                                
+
                                 # Next Steps
-                            
+
                                 On the next success criteria check, call all neccessary tools to collect additional information as the state will have changed since the last check.", iteration+1).into()
                             ))
                         ))
@@ -391,10 +387,10 @@ impl PhysicalJobExecutor {
                             Some(iteration + 1),
                             Some(ChatCompletionRequestMessage::System(
                                 format!("# Status
-                                
+
                                 You have already checked {} times if the previous tool call was successful or not, but you came to an inconclusive result.
                                 On the next success criteria check, ensure you call all relevant tools to collect the additional verification you require.
-                                
+
                                 This could include collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
                             ))
                         ))
@@ -478,7 +474,7 @@ impl PhysicalJobExecutor {
             Include a final note, with an emoji for check or cross, for whether the task was successful or not.
 
             Collect information from tool calls if you need additional information to complete the summary.
-            
+
             # Steps
 
             {content}

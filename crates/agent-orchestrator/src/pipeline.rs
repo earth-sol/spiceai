@@ -1,13 +1,22 @@
-use async_openai::types::ChatCompletionRequestMessage;
-use async_openai::types::ChatCompletionRequestSystemMessageContent;
-use async_openai::types::ChatCompletionRequestUserMessageContent;
-use async_openai::types::CreateChatCompletionRequest;
+use std::time::SystemTime;
 
+use async_openai::{
+    error::OpenAIError,
+    types::{
+        ChatChoiceStream, ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageContent,
+        ChatCompletionRequestUserMessageContent, ChatCompletionStreamResponseDelta,
+        CreateChatCompletionRequest, CreateChatCompletionStreamResponse, Role,
+    },
+};
+
+use crate::get_output_message;
+use crate::research::Artifact;
 use crate::research::Research;
 use crate::LogicalPlan;
 use crate::PhysicalPlan;
 
 /// Defines the pipeline stages that an agent request goes through. The values for each stage are the inputs for that stage.
+#[derive(Clone, Debug)]
 pub enum AgentPipeline {
     /// The research stage is used to gather artifacts that will be used to create the logical plan.
     Research { prompt: String },
@@ -108,4 +117,81 @@ impl AgentPipeline {
 
         Ok((Self::Research { prompt: content }, AdvanceMode::Continue))
     }
+}
+
+pub(crate) fn pipeline_into_stream(
+    pipeline: AgentPipeline,
+) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
+    match pipeline {
+        AgentPipeline::Research { .. } => {
+            create_working_stream_payload("research", "Starting to research".to_string())
+        }
+        AgentPipeline::LogicalPlan(Research { artifacts, .. }) => {
+            let artifact_paths = artifacts
+                .iter()
+                .filter_map(|a| match a {
+                    Artifact::Document { path, .. } => Some(path.clone()),
+                    Artifact::TextSnippet(_) => None,
+                })
+                .collect::<Vec<_>>();
+            let num_snippets = artifacts
+                .iter()
+                .filter(|a| matches!(a, Artifact::TextSnippet(_)))
+                .count();
+            create_working_stream_payload(
+                    "logical plan",
+                    format!(
+                        "Finished Research.\nFound {num_snippets} text snippets. Found the following documents: {}. Creating logical plan",
+                        artifact_paths.join(", ")
+                    ),
+                )
+        }
+        AgentPipeline::PhysicalPlan(LogicalPlan { tasks }) => {
+            let objectives = tasks
+                .iter()
+                .map(|t| format!("- {}\n", t.objective.clone()))
+                .collect::<Vec<_>>();
+            create_working_stream_payload(
+                    "physical plan",
+                    format!("Finished Logical Plan. {} tasks identified, with the following objectives:\n{}\nCreating physical plan", objectives.len(), objectives.join("")),
+                )
+        }
+        AgentPipeline::Execution(_physical_plan) => create_working_stream_payload(
+            "execution",
+            "Finished Physical Plan. Executing physical plan".to_string(),
+        ),
+        AgentPipeline::Output(output) => Ok(get_output_message("id", output)),
+    }
+}
+
+fn create_working_stream_payload(
+    title: &str,
+    body: String,
+) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
+    let created = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?
+        .as_secs() as u32;
+
+    Ok(CreateChatCompletionStreamResponse {
+        created,
+        service_tier: None,
+        system_fingerprint: None,
+        object: "chat.completion.chunk".to_string(),
+        usage: None,
+        model: String::new(),
+        id: String::new(),
+        choices: vec![ChatChoiceStream {
+            index: 0,
+            finish_reason: None,
+            logprobs: None,
+            delta: ChatCompletionStreamResponseDelta {
+                content: Some(format!("<Working title=\"{title}\">{body}</Working>\n")),
+                function_call: None,
+                tool_calls: None,
+                role: Some(Role::Assistant),
+                refusal: None,
+            },
+        }],
+    })
 }

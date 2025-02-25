@@ -34,12 +34,12 @@ impl PhysicalPlan {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PhysicalPlan {
     pub tasks: Vec<Task>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Task {
     pub objective: String,
     pub steps: Vec<Step>,
@@ -132,7 +132,7 @@ impl PhysicalPlan {
         messages.push(ChatCompletionRequestMessage::User(
             format!(
                 "# Goal
-            
+
             Create a physical plan step to achieve the logical plan step.
             Keep in mind the overall task objective while creating the physical plan step.
 
