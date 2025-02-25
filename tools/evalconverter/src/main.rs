@@ -130,6 +130,7 @@ fn spicepod_definition(datasets: Vec<Dataset>, evals: Vec<Eval>) -> SpicepodDefi
         executor: None,
         logical_planner: None,
         physical_planner: None,
+        researcher: None,
         datasets: datasets
             .into_iter()
             .map(ComponentOrReference::Component)

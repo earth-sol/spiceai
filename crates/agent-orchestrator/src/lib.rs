@@ -20,7 +20,7 @@ use logical::plan::LogicalPlan;
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
 use pipeline::pipeline_into_stream;
 use research::{model::parse_response, Research};
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use snafu::ResultExt;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
@@ -31,6 +31,23 @@ pub mod logical;
 pub mod physical;
 pub mod pipeline;
 pub mod research;
+
+#[derive(Debug)]
+pub enum ConversionError {
+    SerdeJson(serde_json::Error),
+    SerdeYaml(serde_yaml::Error),
+    JsonSchema(jsonschema::ValidationError<'static>),
+}
+
+impl std::fmt::Display for ConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConversionError::SerdeJson(e) => write!(f, "{e}"),
+            ConversionError::JsonSchema(e) => write!(f, "{e}"),
+            ConversionError::SerdeYaml(e) => write!(f, "{e}"),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct AgentChat {
@@ -107,7 +124,7 @@ impl AgentChat {
             .await?;
         let plan = match LogicalPlan::from_chat_completion(&response) {
             Ok(plan) => plan,
-            Err(logical::plan::ConversionError::JsonSchema(e)) => {
+            Err(ConversionError::JsonSchema(e)) => {
                 tracing::warn!(
                     "Logical plan created did not satisfy JSONSchema format. Reattempting.\n   Initial Error: {e}"
                 );
@@ -115,12 +132,12 @@ impl AgentChat {
                 LogicalPlan::from_chat_completion(&response)
                     .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?
             }
-            Err(logical::plan::ConversionError::SerdeJson(e)) => {
+            Err(ConversionError::SerdeJson(e)) => {
                 return Err(OpenAIError::InvalidArgument(format!(
                     "Failed to convert chat response to logical plan: {e}"
                 )))
             }
-            Err(logical::plan::ConversionError::SerdeYaml(e)) => {
+            Err(ConversionError::SerdeYaml(e)) => {
                 return Err(OpenAIError::InvalidArgument(format!(
                     "Failed to convert chat response to logical plan: {e}"
                 )))
@@ -147,6 +164,7 @@ impl AgentChat {
         Ok(physical_plan)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn run_pipeline_stream(
         self: Arc<Self>,
         mut pipeline: pipeline::AgentPipeline,
@@ -156,7 +174,7 @@ impl AgentChat {
             mpsc::channel::<Result<CreateChatCompletionStreamResponse, OpenAIError>>(100);
         let id = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
 
-        let models = self.llms.clone();
+        let models = Arc::clone(&self.llms);
 
         tokio::spawn(async move {
             let models = models.read().await;
@@ -199,7 +217,7 @@ impl AgentChat {
                 return;
             };
 
-            let service = self.clone();
+            let service = Arc::clone(&self);
             let id = id.clone();
 
             let _ = tx.send(pipeline_into_stream(pipeline.clone())).await;
@@ -350,7 +368,7 @@ impl Chat for AgentChat {
             .await?
             .ok_or_else(|| OpenAIError::InvalidArgument("No output was produced".to_string()))?;
 
-        stream_to_request_payload(final_stream_item)
+        Ok(stream_to_request_payload(final_stream_item))
     }
 }
 
@@ -358,8 +376,8 @@ impl Chat for AgentChat {
 #[allow(deprecated)]
 fn stream_to_request_payload(
     stream: CreateChatCompletionStreamResponse,
-) -> Result<CreateChatCompletionResponse, OpenAIError> {
-    Ok(CreateChatCompletionResponse {
+) -> CreateChatCompletionResponse {
+    CreateChatCompletionResponse {
         id: stream.id,
         object: stream.object,
         created: stream.created,
@@ -403,7 +421,7 @@ fn stream_to_request_payload(
         service_tier: stream.service_tier,
         system_fingerprint: stream.system_fingerprint,
         usage: stream.usage,
-    })
+    }
 }
 
 #[allow(deprecated)]
@@ -437,36 +455,29 @@ fn add_system_message(req: &mut CreateChatCompletionRequest, message: String) {
         .insert(0, ChatCompletionRequestMessage::System(message.into()));
 }
 
-// fn build_user_request(prompt: String) -> Result<CreateChatCompletionRequest, OpenAIError> {
-//     CreateChatCompletionRequestArgs::default()
-//         .messages(vec![ChatCompletionRequestMessage::User(prompt.into())])
-//         .build()
-// }
+pub fn validate_structured_output<T>(
+    yaml_str: &str,
+    completion: &CreateChatCompletionResponse,
+) -> Result<T, ConversionError>
+where
+    T: DeserializeOwned,
+{
+    let body = completion
+        .choices
+        .first()
+        .and_then(|choice| choice.message.content.clone())
+        .unwrap_or_default();
 
-// fn extract_request_content(req: &CreateChatCompletionRequest) -> Result<String, anyhow::Error> {
-//     let mut content = String::new();
+    let as_value = serde_json::from_str(body.as_str()).map_err(ConversionError::SerdeJson)?;
 
-//     for message in &req.messages {
-//         match message {
-//             ChatCompletionRequestMessage::User(user_message) => match &user_message.content {
-//                 ChatCompletionRequestUserMessageContent::Text(user_message) => {
-//                     content.push_str(user_message);
-//                 }
-//                 ChatCompletionRequestUserMessageContent::Array(_) => {
-//                     return Err(anyhow::anyhow!("Invalid message content type"));
-//                 }
-//             },
-//             ChatCompletionRequestMessage::System(system_message) => match &system_message.content {
-//                 ChatCompletionRequestSystemMessageContent::Text(system_message) => {
-//                     content.push_str(system_message);
-//                 }
-//                 ChatCompletionRequestSystemMessageContent::Array(_) => {
-//                     return Err(anyhow::anyhow!("Invalid message content type"));
-//                 }
-//             },
-//             _ => return Err(anyhow::anyhow!("Invalid message type")),
-//         }
-//     }
+    // First we validate against JSONSchema so the error message is more precise and informative.
+    let yaml_value: serde_json::Value =
+        serde_yaml::from_str(yaml_str).map_err(ConversionError::SerdeYaml)?;
 
-//     Ok(content)
-// }
+    let v = jsonschema::validator_for(&yaml_value["json_schema"]["schema"])
+        .map_err(|e| ConversionError::JsonSchema(e.to_owned()))?;
+    v.validate(&as_value)
+        .map_err(|e| ConversionError::JsonSchema(e.to_owned()))?;
+
+    serde_json::from_value(as_value).map_err(ConversionError::SerdeJson)
+}

@@ -6,8 +6,9 @@ use async_openai::{
     },
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use uuid::Uuid;
+
+use crate::{validate_structured_output, ConversionError};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LogicalPlan {
@@ -59,12 +60,6 @@ impl LogicalPlan {
         Ok(plan)
     }
 
-    pub fn from_value(body: Value) -> Result<Self, serde_json::Error> {
-        let mut plan: LogicalPlan = serde_json::from_value(body)?;
-        plan.add_uuids();
-        Ok(plan)
-    }
-
     fn add_uuids(&mut self) {
         self.tasks.iter_mut().for_each(|task| {
             task.steps.iter_mut().for_each(|step| {
@@ -82,25 +77,10 @@ impl LogicalPlan {
     pub fn from_chat_completion(
         completion: &CreateChatCompletionResponse,
     ) -> Result<Self, ConversionError> {
-        let body = completion
-            .choices
-            .first()
-            .and_then(|choice| choice.message.content.clone())
-            .unwrap_or_default();
-
-        let as_value = serde_json::from_str(body.as_str()).map_err(ConversionError::SerdeJson)?;
-
-        // First we validate against JSONSchema so the error message is more precise and informative.
-        let yaml_value: serde_json::Value =
-            serde_yaml::from_str(include_str!("openai_response_format.yaml"))
-                .map_err(ConversionError::SerdeYaml)?;
-
-        let v = jsonschema::validator_for(&yaml_value["json_schema"]["schema"])
-            .map_err(|e| ConversionError::JsonSchema(e.to_owned()))?;
-        v.validate(&as_value)
-            .map_err(|e| ConversionError::JsonSchema(e.to_owned()))?;
-
-        Self::from_value(as_value).map_err(ConversionError::SerdeJson)
+        let mut plan: Self =
+            validate_structured_output(include_str!("openai_response_format.yaml"), completion)?;
+        plan.add_uuids();
+        Ok(plan)
     }
 
     pub fn to_chat_request(&self) -> Result<CreateChatCompletionRequest, OpenAIError> {
@@ -109,23 +89,6 @@ impl LogicalPlan {
             .messages(vec![ChatCompletionRequestMessage::User(body.into())])
             .build()?;
         Ok(req)
-    }
-}
-
-#[derive(Debug)]
-pub enum ConversionError {
-    SerdeJson(serde_json::Error),
-    SerdeYaml(serde_yaml::Error),
-    JsonSchema(jsonschema::ValidationError<'static>),
-}
-
-impl std::fmt::Display for ConversionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConversionError::SerdeJson(e) => write!(f, "{e}"),
-            ConversionError::JsonSchema(e) => write!(f, "{e}"),
-            ConversionError::SerdeYaml(e) => write!(f, "{e}"),
-        }
     }
 }
 

@@ -18,12 +18,6 @@ json_schema:
                 - path
                 - content
               additionalProperties: false
-            - type: object
-              properties:
-                content:
-                  type: string
-              required:
-                - content
-              additionalProperties: false
+            - type: string
     required:
       - steps

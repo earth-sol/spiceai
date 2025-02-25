@@ -5,13 +5,13 @@ use std::{
     sync::Arc,
 };
 
+use crate::{validate_structured_output, ConversionError};
+
 use super::plan::{PhysicalPlan, PromptStep, Step, ToolStep};
-use async_openai::{
-    error::OpenAIError,
-    types::{
-        ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
-        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, ResponseFormat,
-    },
+use async_openai::types::{
+    ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
+    ChatCompletionRequestUserMessageContent, CreateChatCompletionRequest,
+    CreateChatCompletionRequestArgs, ResponseFormat,
 };
 use llms::chat::Chat;
 use serde::Deserialize;
@@ -221,6 +221,47 @@ impl PhysicalJobExecutor {
         Ok(result_message)
     }
 
+    async fn loop_success_validator(
+        &self,
+        req: CreateChatCompletionRequest,
+        model: &dyn Chat,
+    ) -> Result<(VerificationResponse, String), anyhow::Error> {
+        let mut iteration = 0;
+        loop {
+            let response = model.chat_request(req.clone()).await?;
+            let verification: Result<VerificationResponse, ConversionError> =
+                validate_structured_output(
+                    include_str!("executor_response_format.yaml"),
+                    &response,
+                );
+
+            let Some(message) = response.choices[0].message.content.clone() else {
+                return Err(anyhow::anyhow!("No message content found"));
+            };
+
+            match verification {
+                Ok(v) => return Ok((v, message)),
+                Err(ConversionError::SerdeJson(e)) => {
+                    return Err(anyhow::anyhow!("Failed to parse tool step: {e}"));
+                }
+                Err(ConversionError::SerdeYaml(e)) => {
+                    return Err(anyhow::anyhow!("Failed to parse tool step: {e}"));
+                }
+                Err(ConversionError::JsonSchema(e)) => {
+                    if iteration > 3 {
+                        return Err(anyhow::anyhow!("Failed to validate tool step: {e}"));
+                    }
+
+                    tracing::warn!(
+                        "Structured output for success validation was invalid. Retrying..."
+                    );
+                    iteration += 1;
+                    continue;
+                }
+            }
+        }
+    }
+
     #[allow(dead_code, clippy::too_many_lines)]
     async fn tool_call_succeeded(
         &self,
@@ -305,15 +346,7 @@ impl PhysicalJobExecutor {
             .map_err(|e| {
                 anyhow::anyhow!("Error building chat completion request: {}", e.to_string())
             })?;
-        let response = model.chat_request(req).await?;
-
-        let Some(message) = response.choices[0].message.content.clone() else {
-            return Err(anyhow::anyhow!("No message content found"));
-        };
-
-        let verification = serde_json::from_str::<VerificationResponse>(&message).map_err(|e| {
-            OpenAIError::InvalidArgument(format!("Failed to parse verification response: {e}"))
-        })?;
+        let (verification, message) = self.loop_success_validator(req, model.as_ref()).await?;
 
         if verification.status == VerificationStatus::Succeeded {
             tracing::info!("Tool call success: {}", verification.reason);
@@ -332,14 +365,6 @@ impl PhysicalJobExecutor {
                         let mut messages = step_history.to_vec();
 
                         messages.push(ChatCompletionRequestMessage::Assistant(message.into()));
-                        messages.push(ChatCompletionRequestMessage::System(
-                            format!("# Status
-
-                            You have already checked {} times if the previous tool call was successful or not, but you were unable to verify the result of the tool call.
-                            Last time, you thought waiting might be needed to verify the result of the previous tool call.
-
-                            On the next success criteria check, ensure you call relevant tools to verify the result of the previous tool call, like collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
-                        ));
 
                         return Box::pin(self.tool_call_succeeded(
                             step_history,
@@ -370,14 +395,6 @@ impl PhysicalJobExecutor {
                         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 
                         messages.push(ChatCompletionRequestMessage::Assistant(message.into()));
-                        messages.push(ChatCompletionRequestMessage::System(
-                            format!("# Status
-
-                            You have already checked {} times if the previous tool call was successful or not, but you came to an inconclusive result.
-                            On the next success criteria check, ensure you call all relevant tools to collect the additional verification you require.
-
-                            This could include collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
-                        ));
 
                         return Box::pin(self.tool_call_succeeded(
                             &messages,

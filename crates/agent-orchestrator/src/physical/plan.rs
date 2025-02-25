@@ -9,9 +9,12 @@ use llms::chat::Chat;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::logical::{
-    self,
-    plan::{Action, LogicalPlan},
+use crate::{
+    logical::{
+        self,
+        plan::{Action, LogicalPlan},
+    },
+    validate_structured_output, ConversionError,
 };
 
 impl PhysicalPlan {
@@ -153,81 +156,92 @@ impl PhysicalPlan {
         Ok(req)
     }
 
-    // pub fn build_verification_request(
-    //     messages: Option<Vec<ChatCompletionRequestMessage>>,
-    //     previous_steps: &[Step],
-    //     step: &logical::plan::Step,
-    // ) -> Result<CreateChatCompletionRequest, OpenAIError> {
-    //     let mut messages = messages.unwrap_or_default();
-
-    //     let previous_steps_body = serde_json::to_string(previous_steps)?;
-    //     let previous_steps_message = ChatCompletionRequestMessage::System(
-    //         format!("The following steps have been planned already: {previous_steps_body}.").into(),
-    //     );
-    //     messages.push(previous_steps_message);
-
-    //     let body = serde_json::to_string(step)?;
-    //     messages.push(ChatCompletionRequestMessage::User(
-    //         format!("# Goal
-
-    //         Create a physical plan step to verify the logical plan step was successful, based on the success criteria.
-
-    //         # Logical Plan Step
-
-    //         {body}
-
-    //         # Success Criteria
-
-    //         {}
-    //         ", step.success_criteria).into(),
-    //     ));
-    //     let req = CreateChatCompletionRequestArgs::default()
-    //         .messages(messages)
-    //         .build()?;
-
-    //     Ok(req)
-    // }
-
     pub async fn plan_request(
         req: CreateChatCompletionRequest,
         step_type: StepType,
         model: &dyn Chat,
     ) -> Result<Step, async_openai::error::OpenAIError> {
-        let completion = model.chat_request(req).await?;
+        let mut iteration = 0;
+        loop {
+            let completion = model.chat_request(req.clone()).await?;
 
-        let body = completion
-            .choices
-            .first()
-            .and_then(|choice| choice.message.content.as_ref())
-            .ok_or_else(|| {
-                OpenAIError::InvalidArgument("Could not find choice response".to_string())
-            })?;
+            let step: Step = match step_type {
+                StepType::Tool => {
+                    // TODO: validate the tool is valid and retry if not
+                    let step: Result<ToolStep, ConversionError> = validate_structured_output(
+                        include_str!("tool_response_format.yaml"),
+                        &completion,
+                    );
+                    match step {
+                        Ok(mut step) => {
+                            step.model = "orchestrator-o3-mini".to_string();
+                            Step::Tool(step)
+                        }
+                        Err(ConversionError::SerdeYaml(e)) => {
+                            return Err(OpenAIError::InvalidArgument(format!(
+                                "Failed to parse tool step: {e}"
+                            )));
+                        }
+                        Err(ConversionError::SerdeJson(e)) => {
+                            return Err(OpenAIError::InvalidArgument(format!(
+                                "Failed to parse tool step: {e}"
+                            )));
+                        }
+                        Err(ConversionError::JsonSchema(e)) => {
+                            if iteration > 3 {
+                                return Err(OpenAIError::InvalidArgument(format!(
+                                    "Failed to validate tool step: {e}"
+                                )));
+                            }
 
-        let step: Step = match step_type {
-            StepType::Tool => {
-                // TODO: validate the tool is valid and retry if not
-                let mut step = serde_json::from_str::<ToolStep>(body).map_err(|e| {
-                    OpenAIError::InvalidArgument(format!("Failed to parse tool step: {e}"))
-                })?;
+                            tracing::warn!(
+                                "Structured output for physical planning was invalid. Retrying..."
+                            );
+                            iteration += 1;
+                            continue;
+                        }
+                    }
+                }
+                StepType::Prompt => {
+                    // TODO: validate the selected model is valid and retry if not
+                    let step: Result<PromptStep, ConversionError> = validate_structured_output(
+                        include_str!("prompt_response_format.yaml"),
+                        &completion,
+                    );
+                    match step {
+                        Ok(mut step) => {
+                            step.model = "orchestrator-o3-mini".to_string();
+                            Step::Prompt(step)
+                        }
+                        Err(ConversionError::SerdeYaml(e)) => {
+                            return Err(OpenAIError::InvalidArgument(format!(
+                                "Failed to parse prompt step: {e}"
+                            )));
+                        }
+                        Err(ConversionError::SerdeJson(e)) => {
+                            return Err(OpenAIError::InvalidArgument(format!(
+                                "Failed to parse prompt step: {e}"
+                            )));
+                        }
+                        Err(ConversionError::JsonSchema(e)) => {
+                            if iteration > 3 {
+                                return Err(OpenAIError::InvalidArgument(format!(
+                                    "Failed to validate prompt step: {e}"
+                                )));
+                            }
 
-                step.model = "orchestrator-o3-mini".to_string();
+                            tracing::warn!(
+                                "Structured output for physical planning was invalid. Retrying..."
+                            );
+                            iteration += 1;
+                            continue;
+                        }
+                    }
+                }
+            };
 
-                Step::Tool(step)
-            }
-            StepType::Prompt => {
-                // TODO: validate the selected model is valid and retry if not
-                let mut step = serde_json::from_str::<PromptStep>(body).map_err(|e| {
-                    println!("{body}");
-                    OpenAIError::InvalidArgument(format!("Failed to parse prompt step: {e}"))
-                })?;
-
-                step.model = "orchestrator-o3-mini".to_string();
-
-                Step::Prompt(step)
-            }
-        };
-
-        Ok(step)
+            return Ok(step);
+        }
     }
 
     pub async fn plan_task(

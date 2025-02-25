@@ -18,7 +18,7 @@ json_schema:
         description: If the status is a failure or inconclusive, whether to wait and re-check the success criteria after a time-delay (if you believe it may be met in the future)
         type: boolean
     required:
-      - success
+      - status
       - reason
       - wait
     additionalProperties: false

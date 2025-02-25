@@ -124,7 +124,7 @@ pub(crate) fn pipeline_into_stream(
 ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
     match pipeline {
         AgentPipeline::Research { .. } => {
-            create_working_stream_payload("research", "Starting to research".to_string())
+            create_working_stream_payload("research", "Starting to research")
         }
         AgentPipeline::LogicalPlan(Research { artifacts, .. }) => {
             let artifact_paths = artifacts
@@ -140,7 +140,7 @@ pub(crate) fn pipeline_into_stream(
                 .count();
             create_working_stream_payload(
                     "logical plan",
-                    format!(
+                    &format!(
                         "Finished Research.\nFound {num_snippets} text snippets. Found the following documents: {}. Creating logical plan",
                         artifact_paths.join(", ")
                     ),
@@ -153,12 +153,12 @@ pub(crate) fn pipeline_into_stream(
                 .collect::<Vec<_>>();
             create_working_stream_payload(
                     "physical plan",
-                    format!("Finished Logical Plan. {} tasks identified, with the following objectives:\n{}\nCreating physical plan", objectives.len(), objectives.join("")),
+                    &format!("Finished Logical Plan. {} tasks identified, with the following objectives:\n{}\nCreating physical plan", objectives.len(), objectives.join("")),
                 )
         }
         AgentPipeline::Execution(_physical_plan) => create_working_stream_payload(
             "execution",
-            "Finished Physical Plan. Executing physical plan".to_string(),
+            "Finished Physical Plan. Executing physical plan",
         ),
         AgentPipeline::Output(output) => Ok(get_output_message("id", output)),
     }
@@ -166,12 +166,15 @@ pub(crate) fn pipeline_into_stream(
 
 fn create_working_stream_payload(
     title: &str,
-    body: String,
+    body: &str,
 ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-    let created = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?
-        .as_secs() as u32;
+    let created = u32::try_from(
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?
+            .as_secs(),
+    )
+    .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
 
     Ok(CreateChatCompletionStreamResponse {
         created,
@@ -187,6 +190,7 @@ fn create_working_stream_payload(
             logprobs: None,
             delta: ChatCompletionStreamResponseDelta {
                 content: Some(format!("<Working title=\"{title}\">{body}</Working>\n")),
+                #[allow(deprecated)]
                 function_call: None,
                 tool_calls: None,
                 role: Some(Role::Assistant),
