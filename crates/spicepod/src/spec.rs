@@ -80,7 +80,12 @@ pub struct SpicepodDefinition {
     /// The physical planner of the Spicepod
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub physical_planner: Option<String>,
+    pub physical_tool_planner: Option<String>,
+
+    /// The physical planner of the Spicepod
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub physical_prompt_planner: Option<String>,
 
     /// The executor planner of the Spicepod
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -91,6 +96,11 @@ pub struct SpicepodDefinition {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub researcher: Option<String>,
+
+    /// The verifier model of the Spicepod
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub verifier: Option<String>,
 
     /// Optional runtime configuration
     #[serde(default, skip_serializing_if = "is_default")]

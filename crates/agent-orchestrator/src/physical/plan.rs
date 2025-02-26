@@ -125,9 +125,10 @@ impl PhysicalPlan {
     ) -> Result<CreateChatCompletionRequest, OpenAIError> {
         let mut messages = messages.unwrap_or_default();
 
+        let tool_str = include_str!("tools.json");
         let previous_steps_body = serde_json::to_string(previous_steps)?;
         let previous_steps_message = ChatCompletionRequestMessage::System(
-            format!("The following steps have been planned already: {previous_steps_body}.").into(),
+            format!("# Previous Steps\n\nThe following steps have been planned already: {previous_steps_body}.").into(),
         );
         messages.push(previous_steps_message);
 
@@ -145,7 +146,11 @@ impl PhysicalPlan {
 
             # Logical Plan Step
 
-            {body}"
+            {body}
+            
+            # Available Tools
+            
+            The following tools are available for selection: {tool_str}"
             )
             .into(),
         ));

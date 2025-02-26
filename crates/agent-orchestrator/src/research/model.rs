@@ -1,6 +1,5 @@
 use async_openai::{error::OpenAIError, types::CreateChatCompletionResponse};
 use serde::{Deserialize, Serialize};
-use spicepod::component::model::Model;
 
 use super::Artifact;
 
@@ -22,24 +21,4 @@ pub(crate) fn parse_response(
         .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
 
     Ok(artifacts.steps)
-}
-
-#[must_use]
-pub fn researcher_model(underlying_model: Model) -> Model {
-    tracing::info!("Initializing researcher model [{}]", underlying_model.name);
-
-    let mut model = Model::new(underlying_model.from, "agentic_researcher");
-
-    for param in underlying_model.params {
-        model.params.insert(param.0, param.1);
-    }
-
-    let yaml_str = include_str!("response_format.yaml");
-    let yaml_value: serde_json::Value =
-        serde_yaml::from_str(yaml_str).expect("Failed to parse YAML");
-
-    model
-        .params
-        .insert("openai_response_format".to_string(), yaml_value);
-    model
 }

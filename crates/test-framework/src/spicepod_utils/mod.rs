@@ -83,8 +83,10 @@ pub fn from_app(app: App) -> SpicepodDefinition {
         objective: None,
         orchestrator: None,
         logical_planner: None,
-        physical_planner: None,
+        physical_tool_planner: None,
+        physical_prompt_planner: None,
         executor: None,
         researcher: None,
+        verifier: None,
     }
 }

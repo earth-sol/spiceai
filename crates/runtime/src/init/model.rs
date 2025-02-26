@@ -20,12 +20,7 @@ use crate::{
     get_params_with_secrets, metrics, model::ENABLE_MODEL_SUPPORT_MESSAGE, status,
     timing::TimeMeasurement, Runtime, Tooling,
 };
-use agent_orchestrator::{
-    logical::planner::model as logical_planner_model,
-    physical::planner::prompt_planner_model as physical_prompt_planner_model,
-    physical::planner::tool_planner_model as physical_tool_planner_model,
-    research::model::researcher_model, AgentChat,
-};
+use agent_orchestrator::{AgentChat, AgentModels};
 use app::App;
 use model_components::model::Model;
 use opentelemetry::KeyValue;
@@ -96,22 +91,14 @@ impl Runtime {
             tracing::error!("Logical planner not found");
             return;
         };
-        let Some(logical) = app.models.iter().find(|m| m.name == logical_planner_name) else {
-            tracing::error!("Logical planner model [{}] not found", logical_planner_name);
-            return;
-        };
-        let logical_planner = logical_planner_model(logical.clone());
 
         // Load the physical planner model
-        let Some(physical_planner_name) = app.physical_planner.clone() else {
+        let Some(physical_tool_planner_name) = app.physical_tool_planner.clone() else {
             tracing::error!("Physical planner not found");
             return;
         };
-        let Some(physical) = app.models.iter().find(|m| m.name == physical_planner_name) else {
-            tracing::error!(
-                "Physical planner model [{:?}] not found",
-                physical_planner_name
-            );
+        let Some(physical_prompt_planner_name) = app.physical_prompt_planner.clone() else {
+            tracing::error!("Physical planner not found");
             return;
         };
 
@@ -120,22 +107,15 @@ impl Runtime {
             tracing::error!("Physical planner not found");
             return;
         };
-        let Some(researcher) = app.models.iter().find(|m| m.name == researcher_name) else {
-            tracing::error!("Base research model [{:?}] not found", researcher_name);
-            return;
-        };
-
-        let physical_researcher = researcher_model(researcher.clone());
-        let physical_prompt_planner = physical_prompt_planner_model(physical.clone());
-        let physical_tool_planner = physical_tool_planner_model(physical.clone());
 
         // Load executor model
         let Some(executor_name) = app.executor.clone() else {
             tracing::error!("Executor not found");
             return;
         };
-        if !app.models.iter().any(|m| m.name == executor_name) {
-            tracing::error!("Executor model [{executor_name}] not found");
+
+        let Some(verifier_name) = app.verifier.clone() else {
+            tracing::error!("Verifier not found");
             return;
         };
 
@@ -163,15 +143,20 @@ impl Runtime {
         }
 
         tracing::info!("Loading model [{}]...", app.name);
-        let agent_chat = AgentChat::new(objective, orchestrator, executor_name, llms_clone, tools);
+        let agent_models = AgentModels::new(
+            orchestrator,
+            executor_name,
+            logical_planner_name,
+            physical_tool_planner_name,
+            physical_prompt_planner_name,
+            researcher_name,
+            verifier_name,
+        );
+
+        let agent_chat = AgentChat::new(objective, agent_models, llms_clone, tools);
         llm_map.insert(app.name.clone(), Box::new(agent_chat));
         drop(llm_map);
 
-        // This requires the lock on `llms` to be released before loading the logical/physical planners.
-        self.load_model(&logical_planner).await;
-        self.load_model(&physical_prompt_planner).await;
-        self.load_model(&physical_tool_planner).await;
-        self.load_model(&physical_researcher).await;
         tracing::info!("Model [{}] deployed, ready for inferencing", app.name);
         self.status
             .update_model(&app.name, status::ComponentStatus::Ready);

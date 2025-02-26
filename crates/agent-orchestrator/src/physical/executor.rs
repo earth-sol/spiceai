@@ -22,7 +22,7 @@ pub struct PhysicalJobExecutor {
     plan: PhysicalPlan,
     llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
     tools: HashMap<String, Arc<dyn SpiceModelTool>>,
-    summarization_model: String,
+    verifier_model: String,
 
     // JOB STATE
     execution_history: Vec<Vec<ChatCompletionRequestMessage>>,
@@ -40,14 +40,14 @@ impl PhysicalJobExecutor {
         plan: PhysicalPlan,
         llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
         tools: HashMap<String, Arc<dyn SpiceModelTool>>,
-        summarization_model: String,
+        verifier_model: String,
     ) -> Self {
         Self {
             plan,
             llms,
             tools,
             execution_history: vec![],
-            summarization_model,
+            verifier_model,
         }
     }
 }
@@ -116,12 +116,12 @@ impl PhysicalJobExecutor {
 
             task_history.extend(step_history.clone());
             step_history = self
-                .summarize_executed_steps(&self.summarization_model, &step_history)
+                .summarize_executed_steps(&self.verifier_model, &step_history)
                 .await?;
         }
 
         let summary = self
-            .final_summary(&self.summarization_model, &task_history)
+            .final_summary(&self.verifier_model, &task_history)
             .await?;
 
         Ok(summary)
@@ -209,7 +209,7 @@ impl PhysicalJobExecutor {
             .tool_call_succeeded(
                 step_history,
                 request_message.clone(),
-                &step.model,
+                &self.verifier_model,
                 &step.success_criteria,
                 None,
                 None,
@@ -280,6 +280,8 @@ impl PhysicalJobExecutor {
             format!("# Goal
 
             The previous message was a tool call. Classify if the previous tool call was successful or not, based on the output of the previous tool call and the step's success criteria.
+
+            Plan the steps you need to take to verify the success criteria, and execute the steps to verify the success criteria.
 
             # Success Criteria
 

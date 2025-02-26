@@ -66,7 +66,11 @@ pub struct Spicepod {
 
     pub logical_planner: Option<String>,
 
-    pub physical_planner: Option<String>,
+    pub physical_tool_planner: Option<String>,
+
+    pub physical_prompt_planner: Option<String>,
+
+    pub verifier: Option<String>,
 
     pub executor: Option<String>,
 
@@ -253,8 +257,10 @@ fn from_definition(
         objective: spicepod_definition.objective,
         orchestrator: spicepod_definition.orchestrator,
         logical_planner: spicepod_definition.logical_planner,
-        physical_planner: spicepod_definition.physical_planner,
+        physical_tool_planner: spicepod_definition.physical_tool_planner,
+        physical_prompt_planner: spicepod_definition.physical_prompt_planner,
         researcher: spicepod_definition.researcher,
+        verifier: spicepod_definition.verifier,
         executor: spicepod_definition.executor,
         version: spicepod_definition.version,
         extensions: spicepod_definition.extensions,

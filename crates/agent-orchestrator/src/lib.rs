@@ -32,6 +32,40 @@ pub mod physical;
 pub mod pipeline;
 pub mod research;
 
+#[derive(Clone)]
+pub struct AgentModels {
+    _orchestrator: String,
+    executor: String,
+    logical_planner: String,
+    physical_tool_planner: String,
+    physical_prompt_planner: String,
+    researcher: String,
+    verifier: String,
+}
+
+impl AgentModels {
+    #[must_use]
+    pub fn new(
+        orchestrator: String,
+        executor: String,
+        logical_planner: String,
+        physical_tool_planner: String,
+        physical_prompt_planner: String,
+        researcher: String,
+        verifier: String,
+    ) -> Self {
+        Self {
+            _orchestrator: orchestrator,
+            executor,
+            logical_planner,
+            physical_tool_planner,
+            physical_prompt_planner,
+            researcher,
+            verifier,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ConversionError {
     SerdeJson(serde_json::Error),
@@ -52,8 +86,7 @@ impl std::fmt::Display for ConversionError {
 #[derive(Clone)]
 pub struct AgentChat {
     _objective: String,
-    orchestrator: String,
-    executor: String,
+    models: AgentModels,
     llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
     tools: HashMap<String, Arc<dyn SpiceModelTool>>,
 }
@@ -61,15 +94,13 @@ pub struct AgentChat {
 impl AgentChat {
     pub fn new(
         objective: String,
-        orchestrator: String,
-        executor: String,
+        models: AgentModels,
         llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
         tools: HashMap<String, Arc<dyn SpiceModelTool>>,
     ) -> Self {
         Self {
             _objective: objective,
-            orchestrator,
-            executor,
+            models,
             llms,
             tools,
         }
@@ -157,7 +188,7 @@ impl AgentChat {
             plan,
             physical_tool_planner_model,
             physical_prompt_planner_model,
-            self.executor.clone(),
+            self.models.executor.clone(),
         )
         .await?;
 
@@ -178,40 +209,41 @@ impl AgentChat {
 
         tokio::spawn(async move {
             let models = models.read().await;
-            let Some(researcher_model) = models.get("agentic_researcher") else {
+            let Some(researcher_model) = models.get(&self.models.researcher) else {
                 let _ = tx
                     .send(Err(OpenAIError::InvalidArgument(format!(
                         "Model {} not found.",
-                        self.orchestrator
+                        self.models.researcher
                     ))))
                     .await;
                 return;
             };
-            let Some(logical_planner_model) = models.get("agentic_logical_planner") else {
+            let Some(logical_planner_model) = models.get(&self.models.logical_planner) else {
                 let _ = tx
                     .send(Err(OpenAIError::InvalidArgument(format!(
                         "Model {} not found.",
-                        self.orchestrator
+                        self.models.logical_planner
                     ))))
                     .await;
                 return;
             };
-            let Some(physical_tool_planner_model) = models.get("agentic_physical_tool_planner")
+            let Some(physical_tool_planner_model) = models.get(&self.models.physical_tool_planner)
             else {
                 let _ = tx
                     .send(Err(OpenAIError::InvalidArgument(format!(
                         "Model {} not found.",
-                        self.orchestrator
+                        self.models.physical_tool_planner
                     ))))
                     .await;
                 return;
             };
-            let Some(physical_prompt_planner_model) = models.get("agentic_physical_prompt_planner")
+            let Some(physical_prompt_planner_model) =
+                models.get(&self.models.physical_prompt_planner)
             else {
                 let _ = tx
                     .send(Err(OpenAIError::InvalidArgument(format!(
                         "Model {} not found.",
-                        self.orchestrator
+                        self.models.physical_prompt_planner
                     ))))
                     .await;
                 return;
@@ -289,7 +321,7 @@ impl AgentChat {
                             physical_plan,
                             Arc::clone(&service.llms),
                             service.tools.clone(),
-                            "verifier-gpt-4o".to_string(),
+                            self.models.verifier.clone(),
                         );
                         let output = match executor.execute().await.map_err(|e| {
                             OpenAIError::InvalidArgument(format!(

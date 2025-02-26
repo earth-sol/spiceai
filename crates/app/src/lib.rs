@@ -48,9 +48,13 @@ pub struct App {
 
     pub logical_planner: Option<String>,
 
-    pub physical_planner: Option<String>,
+    pub physical_tool_planner: Option<String>,
+
+    pub physical_prompt_planner: Option<String>,
 
     pub researcher: Option<String>,
+
+    pub verifier: Option<String>,
 
     pub executor: Option<String>,
 
@@ -105,8 +109,10 @@ pub struct AppBuilder {
     objective: Option<String>,
     orchestrator: Option<String>,
     logical_planner: Option<String>,
-    physical_planner: Option<String>,
+    physical_tool_planner: Option<String>,
+    physical_prompt_planner: Option<String>,
     researcher: Option<String>,
+    verifier: Option<String>,
     executor: Option<String>,
     secrets: Vec<Secret>,
     extensions: HashMap<String, Extension>,
@@ -128,8 +134,10 @@ impl AppBuilder {
             objective: None,
             orchestrator: None,
             logical_planner: None,
-            physical_planner: None,
+            physical_tool_planner: None,
+            physical_prompt_planner: None,
             researcher: None,
+            verifier: None,
             executor: None,
             secrets: vec![],
             extensions: HashMap::new(),
@@ -251,8 +259,10 @@ impl AppBuilder {
             objective: self.objective,
             orchestrator: self.orchestrator,
             logical_planner: self.logical_planner,
-            physical_planner: self.physical_planner,
+            physical_tool_planner: self.physical_tool_planner,
+            physical_prompt_planner: self.physical_prompt_planner,
             researcher: self.researcher,
+            verifier: self.verifier,
             executor: self.executor,
             secrets: self.secrets,
             extensions: self.extensions,
@@ -349,9 +359,11 @@ impl AppBuilder {
         let objective = spicepod_root.objective.clone();
         let orchestrator = spicepod_root.orchestrator.clone();
         let logical_planner = spicepod_root.logical_planner.clone();
-        let physical_planner = spicepod_root.physical_planner.clone();
+        let physical_tool_planner = spicepod_root.physical_tool_planner.clone();
+        let physical_prompt_planner = spicepod_root.physical_prompt_planner.clone();
         let executor = spicepod_root.executor.clone();
         let researcher = spicepod_root.researcher.clone();
+        let verifier = spicepod_root.verifier.clone();
 
         spicepods.push(spicepod_root);
 
@@ -360,8 +372,10 @@ impl AppBuilder {
             objective,
             orchestrator,
             logical_planner,
-            physical_planner,
+            physical_tool_planner,
+            physical_prompt_planner,
             researcher,
+            verifier,
             executor,
             secrets,
             extensions,
