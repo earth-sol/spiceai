@@ -162,7 +162,7 @@ impl Runtime {
             None,
             vec![],
         );
-        // let agent_chat = AgentChat::new(objective, agent_models, llms_clone, tools);
+
         llm_map.insert(app.name.clone(), Box::new(agent_chat));
         drop(llm_map);
 
