@@ -91,7 +91,7 @@ impl From<anyhow::Error> for ExecuteToolError {
 
 impl PhysicalJobExecutor {
     pub async fn execute(&mut self) -> Result<String, anyhow::Error> {
-        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan", input = %serde_json::to_string(&self.plan).unwrap_or_default());
+        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_execution", input = %serde_json::to_string(&self.plan).unwrap_or_default());
 
         let result: Result<String, anyhow::Error> = async {
             // reset physical plan execution log

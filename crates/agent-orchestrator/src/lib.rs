@@ -18,7 +18,7 @@ use futures_util::TryStreamExt;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::{logical_plan_complete_summary, plan::LogicalPlan};
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
-use pipeline::{with_ending, with_starting};
+use pipeline::{create_working_stream_payload, with_ending, with_starting};
 use research::{
     model::{parse_response, research_complete_msg},
     Research,
@@ -29,7 +29,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tools::SpiceModelTool;
-use tracing::Instrument;
+use tracing::{Instrument, Span};
 
 pub mod logical;
 pub mod physical;
@@ -170,7 +170,7 @@ impl AgentChat {
         logical_planner_model: &dyn Chat,
         research: Research,
     ) -> Result<LogicalPlan, OpenAIError> {
-        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan", input = %serde_json::to_string(&research).unwrap_or_default());
+        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::logical_plan", input = %serde_json::to_string(&research).unwrap_or_default());
 
         let result: Result<LogicalPlan, OpenAIError> = async {
             let artifacts_prompt = research
@@ -271,131 +271,137 @@ impl AgentChat {
 
         let models = Arc::clone(&self.llms);
 
-        tokio::spawn(async move {
-            let models = models.read().await;
-            let Some(researcher_model) = models.get(&self.models.researcher) else {
-                let _ = tx
-                    .send(Err(OpenAIError::InvalidArgument(format!(
-                        "Model {} not found.",
-                        self.models.researcher
-                    ))))
-                    .await;
-                return;
-            };
-            let Some(logical_planner_model) = models.get(&self.models.logical_planner) else {
-                let _ = tx
-                    .send(Err(OpenAIError::InvalidArgument(format!(
-                        "Model {} not found.",
-                        self.models.logical_planner
-                    ))))
-                    .await;
-                return;
-            };
-            let Some(physical_tool_planner_model) = models.get(&self.models.physical_tool_planner)
-            else {
-                let _ = tx
-                    .send(Err(OpenAIError::InvalidArgument(format!(
-                        "Model {} not found.",
-                        self.models.physical_tool_planner
-                    ))))
-                    .await;
-                return;
-            };
-            let Some(physical_prompt_planner_model) =
-                models.get(&self.models.physical_prompt_planner)
-            else {
-                let _ = tx
-                    .send(Err(OpenAIError::InvalidArgument(format!(
-                        "Model {} not found.",
-                        self.models.physical_prompt_planner
-                    ))))
-                    .await;
-                return;
-            };
+        tokio::spawn(
+            async move {
+                let models = models.read().await;
+                let Some(researcher_model) = models.get(&self.models.researcher) else {
+                    let _ = tx
+                        .send(Err(OpenAIError::InvalidArgument(format!(
+                            "Model {} not found.",
+                            self.models.researcher
+                        ))))
+                        .await;
+                    return;
+                };
+                let Some(logical_planner_model) = models.get(&self.models.logical_planner) else {
+                    let _ = tx
+                        .send(Err(OpenAIError::InvalidArgument(format!(
+                            "Model {} not found.",
+                            self.models.logical_planner
+                        ))))
+                        .await;
+                    return;
+                };
+                let Some(physical_tool_planner_model) =
+                    models.get(&self.models.physical_tool_planner)
+                else {
+                    let _ = tx
+                        .send(Err(OpenAIError::InvalidArgument(format!(
+                            "Model {} not found.",
+                            self.models.physical_tool_planner
+                        ))))
+                        .await;
+                    return;
+                };
+                let Some(physical_prompt_planner_model) =
+                    models.get(&self.models.physical_prompt_planner)
+                else {
+                    let _ = tx
+                        .send(Err(OpenAIError::InvalidArgument(format!(
+                            "Model {} not found.",
+                            self.models.physical_prompt_planner
+                        ))))
+                        .await;
+                    return;
+                };
 
-            let service = Arc::clone(&self);
-            let id = id.clone();
-            loop {
-                let _ = tx
-                    .send(with_starting(
-                        &pipeline.title(),
-                        &pipeline.starting_message(),
-                    ))
-                    .await;
-                match pipeline {
-                    pipeline::AgentPipeline::Research { prompt } => {
-                        let research = try_send!(
-                            service
-                                .generate_research(researcher_model.as_ref(), prompt)
-                                .await,
-                            tx
-                        );
-                        write_artifact("research/research_artifacts", &id, &research)
-                            .expect("Failed to save research artifacts");
-                        pipeline = pipeline::AgentPipeline::LogicalPlan(research);
-                    }
-                    pipeline::AgentPipeline::LogicalPlan(research) => {
-                        let logical_plan = try_send!(
-                            service
-                                .generate_logical_plan(logical_planner_model.as_ref(), research)
-                                .await,
-                            tx
-                        );
-                        write_artifact("logical/logical_plan", &id, &logical_plan)
-                            .expect("Failed to save logical plan");
-                        pipeline = pipeline::AgentPipeline::PhysicalPlan(logical_plan);
-                    }
-                    pipeline::AgentPipeline::PhysicalPlan(logical_plan) => {
-                        let physical_plan = try_send!(
-                            service
-                                .generate_physical_plan(
-                                    &logical_plan,
-                                    physical_tool_planner_model.as_ref(),
-                                    physical_prompt_planner_model.as_ref(),
-                                )
-                                .await,
-                            tx
-                        );
+                let service = Arc::clone(&self);
+                let id = id.clone();
+                loop {
+                    let _ = tx
+                        .send(with_starting(
+                            &pipeline.title(),
+                            &pipeline.starting_message(),
+                        ))
+                        .await;
+                    match pipeline {
+                        pipeline::AgentPipeline::Research { prompt } => {
+                            let research = try_send!(
+                                service
+                                    .generate_research(researcher_model.as_ref(), prompt)
+                                    .await,
+                                tx
+                            );
+                            write_artifact("research/research_artifacts", &id, &research)
+                                .expect("Failed to save research artifacts");
+                            pipeline = pipeline::AgentPipeline::LogicalPlan(research);
+                        }
+                        pipeline::AgentPipeline::LogicalPlan(research) => {
+                            let logical_plan = try_send!(
+                                service
+                                    .generate_logical_plan(logical_planner_model.as_ref(), research)
+                                    .await,
+                                tx
+                            );
+                            write_artifact("logical/logical_plan", &id, &logical_plan)
+                                .expect("Failed to save logical plan");
+                            pipeline = pipeline::AgentPipeline::PhysicalPlan(logical_plan);
+                        }
+                        pipeline::AgentPipeline::PhysicalPlan(logical_plan) => {
+                            let physical_plan = try_send!(
+                                service
+                                    .generate_physical_plan(
+                                        &logical_plan,
+                                        physical_tool_planner_model.as_ref(),
+                                        physical_prompt_planner_model.as_ref(),
+                                    )
+                                    .await,
+                                tx
+                            );
 
-                        write_artifact("physical/physical_plan", &id, &physical_plan)
-                            .expect("Failed to save physical plan");
+                            write_artifact("physical/physical_plan", &id, &physical_plan)
+                                .expect("Failed to save physical plan");
 
-                        pipeline = pipeline::AgentPipeline::Execution(physical_plan);
-                    }
-                    pipeline::AgentPipeline::Execution(physical_plan) => {
-                        let mut executor = PhysicalJobExecutor::new(
-                            physical_plan,
-                            Arc::clone(&service.llms),
-                            service.tools.clone(),
-                            self.models.verifier.clone(),
-                        );
-                        let output = try_send!(
-                            executor.execute().await.map_err(|e| {
-                                OpenAIError::InvalidArgument(format!(
-                                    "Error executing physical plan: {e}"
-                                ))
-                            }),
-                            tx
-                        );
+                            pipeline = pipeline::AgentPipeline::Execution(physical_plan);
+                        }
+                        pipeline::AgentPipeline::Execution(physical_plan) => {
+                            let mut executor = PhysicalJobExecutor::new(
+                                physical_plan,
+                                Arc::clone(&service.llms),
+                                service.tools.clone(),
+                                self.models.verifier.clone(),
+                            );
+                            let output = try_send!(
+                                executor.execute().await.map_err(|e| {
+                                    OpenAIError::InvalidArgument(format!(
+                                        "Error executing physical plan: {e}"
+                                    ))
+                                }),
+                                tx
+                            );
 
-                        pipeline = pipeline::AgentPipeline::Output(output);
+                            pipeline = pipeline::AgentPipeline::Output(output);
+                        }
+                        pipeline::AgentPipeline::Output(ref s) => {
+                            let _ = tx
+                                .send(with_ending(pipeline.previous_step_summary().as_str()))
+                                .await;
+                            let _ = tx.send(create_working_stream_payload(s.clone())).await;
+
+                            break;
+                        }
                     }
-                    pipeline::AgentPipeline::Output(_) => {
-                        let _ = tx
-                            .send(with_ending(pipeline.previous_step_summary().as_str()))
-                            .await;
+                    let _ = tx
+                        .send(with_ending(pipeline.previous_step_summary().as_str()))
+                        .await;
+
+                    if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
                         break;
                     }
                 }
-                let _ = tx
-                    .send(with_ending(pipeline.previous_step_summary().as_str()))
-                    .await;
-
-                if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
-                    break;
-                }
             }
-        });
+            .instrument(Span::current()),
+        );
 
         Box::pin(ReceiverStream::new(rx))
     }

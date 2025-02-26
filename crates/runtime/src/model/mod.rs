@@ -27,6 +27,7 @@ mod metrics;
 mod tool_use;
 mod wrapper;
 
+use crate::DataFusion;
 pub use chat::{try_to_chat_model, LLMModelStore};
 pub use embed::{try_to_embedding, EmbeddingModelStore};
 pub use eval::{
@@ -42,8 +43,7 @@ pub use eval::{
     scorer::{builtin_scorer, load_llm_scorer, EvalScorerRegistry, Scorer},
 };
 pub use tool_use::ToolUsingChat;
-
-use crate::DataFusion;
+pub(crate) use wrapper::ChatWrapper;
 
 pub static ENABLE_MODEL_SUPPORT_MESSAGE: &str = "To enable model support, either: \n  1) `spice install ai` \n  2) Build spiced binary with flag `--features models`.";
 

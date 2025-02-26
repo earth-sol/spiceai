@@ -37,7 +37,7 @@ pub(crate) fn research_complete_msg(r: &Research) -> String {
         .filter(|a| matches!(a, Artifact::TextSnippet(_)))
         .count();
     format!(
-        "Finished Research.\nIncluding {num_snippets} text snippets.\nIncluding the following documents: {}",
+        "\n\nFinished Research.\nIncluding {num_snippets} text snippets.\nIncluding the following documents: {}",
         artifact_paths.join(", ")
     )
 }

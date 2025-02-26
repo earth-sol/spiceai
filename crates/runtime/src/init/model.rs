@@ -17,8 +17,11 @@ limitations under the License.
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    get_params_with_secrets, metrics, model::ENABLE_MODEL_SUPPORT_MESSAGE, status,
-    timing::TimeMeasurement, Runtime, Tooling,
+    get_params_with_secrets, metrics,
+    model::{ChatWrapper, ENABLE_MODEL_SUPPORT_MESSAGE},
+    status,
+    timing::TimeMeasurement,
+    Runtime, Tooling,
 };
 use agent_orchestrator::{AgentChat, AgentModels};
 use app::App;
@@ -153,7 +156,13 @@ impl Runtime {
             verifier_name,
         );
 
-        let agent_chat = AgentChat::new(objective, agent_models, llms_clone, tools);
+        let agent_chat = ChatWrapper::new(
+            Box::new(AgentChat::new(objective, agent_models, llms_clone, tools)),
+            app.name.clone().as_str(),
+            None,
+            vec![],
+        );
+        // let agent_chat = AgentChat::new(objective, agent_models, llms_clone, tools);
         llm_map.insert(app.name.clone(), Box::new(agent_chat));
         drop(llm_map);
 

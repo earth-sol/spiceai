@@ -118,7 +118,7 @@ impl From<Action> for StepType {
 
 impl PhysicalPlan {
     pub(crate) fn summary() -> String {
-        "Finished creating Physical Plan. Executing physical plan".to_string()
+        "\nFinished creating Physical Plan. Executing physical plan".to_string()
     }
 
     pub fn build_request(
@@ -151,9 +151,9 @@ impl PhysicalPlan {
             # Logical Plan Step
 
             {body}
-            
+
             # Available Tools
-            
+
             The following tools are available for selection: {tool_str}"
             )
             .into(),

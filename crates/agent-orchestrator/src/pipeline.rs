@@ -160,7 +160,7 @@ pub(crate) fn with_starting(
 pub(crate) fn with_ending(
     content: &str,
 ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-    create_working_stream_payload(format!("{content}</Working>"))
+    create_working_stream_payload(format!("{content}</Working>\n"))
 }
 
 #[allow(clippy::cast_possible_truncation, deprecated)]
