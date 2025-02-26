@@ -2,7 +2,7 @@ use async_openai::{error::OpenAIError, types::CreateChatCompletionResponse};
 use serde::{Deserialize, Serialize};
 use spicepod::component::model::Model;
 
-use super::Artifact;
+use super::{Artifact, Research};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ArtifactResponse {
@@ -42,4 +42,23 @@ pub fn researcher_model(underlying_model: Model) -> Model {
         .params
         .insert("openai_response_format".to_string(), yaml_value);
     model
+}
+
+pub(crate) fn research_complete_msg(r: &Research) -> String {
+    let Research { artifacts, .. } = r;
+    let artifact_paths = artifacts
+        .iter()
+        .filter_map(|a| match a {
+            Artifact::Document { path, .. } => Some(path.clone()),
+            Artifact::TextSnippet(_) => None,
+        })
+        .collect::<Vec<_>>();
+    let num_snippets = artifacts
+        .iter()
+        .filter(|a| matches!(a, Artifact::TextSnippet(_)))
+        .count();
+    format!(
+        "Finished Research.\nFound {num_snippets} text snippets.\nFound the following documents: {}",
+        artifact_paths.join(", ")
+    )
 }

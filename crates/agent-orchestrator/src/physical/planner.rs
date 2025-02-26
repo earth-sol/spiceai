@@ -65,7 +65,6 @@ pub fn tool_planner_model(physical_planner: Model) -> Model {
         .params
         .insert("openai_response_format".to_string(), yaml_value);
 
-
     let tools_str = include_str!("tools.json");
     model.params.insert("system_prompt".to_string(), serde_json::Value::String(format!("
         # Objective

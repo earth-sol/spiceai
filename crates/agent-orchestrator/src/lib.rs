@@ -16,10 +16,13 @@ use async_openai::{
 use async_trait::async_trait;
 use futures_util::TryStreamExt;
 use llms::chat::{nsql::SqlGeneration, Chat};
-use logical::plan::LogicalPlan;
+use logical::{logical_plan_complete_summary, plan::LogicalPlan};
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
-use pipeline::pipeline_into_stream;
-use research::{model::parse_response, Research};
+use pipeline::{with_ending, with_starting};
+use research::{
+    model::{parse_response, research_complete_msg},
+    Research,
+};
 use serde::Serialize;
 use snafu::ResultExt;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
@@ -147,6 +150,7 @@ impl AgentChat {
         Ok(physical_plan)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn run_pipeline_stream(
         self: Arc<Self>,
         mut pipeline: pipeline::AgentPipeline,
@@ -201,9 +205,13 @@ impl AgentChat {
 
             let service = self.clone();
             let id = id.clone();
-
-            let _ = tx.send(pipeline_into_stream(pipeline.clone())).await;
             loop {
+                let _ = tx
+                    .send(with_starting(
+                        &pipeline.title(),
+                        &pipeline.starting_message(),
+                    ))
+                    .await;
                 match pipeline {
                     pipeline::AgentPipeline::Research { prompt } => {
                         let research = match service
@@ -287,11 +295,15 @@ impl AgentChat {
                         pipeline = pipeline::AgentPipeline::Output(output);
                     }
                     pipeline::AgentPipeline::Output(_) => {
-                        let _ = tx.send(pipeline_into_stream(pipeline.clone())).await;
+                        let _ = tx
+                            .send(with_ending(pipeline.previous_step_summary().as_str()))
+                            .await;
                         break;
                     }
                 }
-                let _ = tx.send(pipeline_into_stream(pipeline.clone())).await;
+                let _ = tx
+                    .send(with_ending(pipeline.previous_step_summary().as_str()))
+                    .await;
             }
         });
 
@@ -350,7 +362,7 @@ impl Chat for AgentChat {
             .await?
             .ok_or_else(|| OpenAIError::InvalidArgument("No output was produced".to_string()))?;
 
-        stream_to_request_payload(final_stream_item)
+        Ok(stream_to_request_payload(final_stream_item))
     }
 }
 
@@ -358,8 +370,8 @@ impl Chat for AgentChat {
 #[allow(deprecated)]
 fn stream_to_request_payload(
     stream: CreateChatCompletionStreamResponse,
-) -> Result<CreateChatCompletionResponse, OpenAIError> {
-    Ok(CreateChatCompletionResponse {
+) -> CreateChatCompletionResponse {
+    CreateChatCompletionResponse {
         id: stream.id,
         object: stream.object,
         created: stream.created,
@@ -403,7 +415,7 @@ fn stream_to_request_payload(
         service_tier: stream.service_tier,
         system_fingerprint: stream.system_fingerprint,
         usage: stream.usage,
-    })
+    }
 }
 
 #[allow(deprecated)]
@@ -436,37 +448,3 @@ fn add_system_message(req: &mut CreateChatCompletionRequest, message: String) {
     req.messages
         .insert(0, ChatCompletionRequestMessage::System(message.into()));
 }
-
-// fn build_user_request(prompt: String) -> Result<CreateChatCompletionRequest, OpenAIError> {
-//     CreateChatCompletionRequestArgs::default()
-//         .messages(vec![ChatCompletionRequestMessage::User(prompt.into())])
-//         .build()
-// }
-
-// fn extract_request_content(req: &CreateChatCompletionRequest) -> Result<String, anyhow::Error> {
-//     let mut content = String::new();
-
-//     for message in &req.messages {
-//         match message {
-//             ChatCompletionRequestMessage::User(user_message) => match &user_message.content {
-//                 ChatCompletionRequestUserMessageContent::Text(user_message) => {
-//                     content.push_str(user_message);
-//                 }
-//                 ChatCompletionRequestUserMessageContent::Array(_) => {
-//                     return Err(anyhow::anyhow!("Invalid message content type"));
-//                 }
-//             },
-//             ChatCompletionRequestMessage::System(system_message) => match &system_message.content {
-//                 ChatCompletionRequestSystemMessageContent::Text(system_message) => {
-//                     content.push_str(system_message);
-//                 }
-//                 ChatCompletionRequestSystemMessageContent::Array(_) => {
-//                     return Err(anyhow::anyhow!("Invalid message content type"));
-//                 }
-//             },
-//             _ => return Err(anyhow::anyhow!("Invalid message type")),
-//         }
-//     }
-
-//     Ok(content)
-// }
