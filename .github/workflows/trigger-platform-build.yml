@@ -1,0 +1,32 @@
+name: Trigger Platform Build
+
+on:
+  push:
+    branches:
+      - feature/agent-hackathon
+
+  workflow_dispatch:
+
+jobs:
+  trigger-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get repo install token
+        id: repo-token
+        uses: getsentry/action-github-app-token@v3
+        with:
+          app_id: ${{ vars.REPO_INSTALL_APP_ID }}
+          private_key: ${{ secrets.REPO_INSTALL_APP_PRIVATE_KEY }}
+
+      - name: Trigger build
+        env:
+          GH_TOKEN: ${{ steps.repo-token.outputs.token }}
+        run: |
+          gh workflow run build-spiced.yml \
+            -R spicehq/ai-platform \
+            -f repository=spicehq/spiceai \
+            -f branch=feature/agent-hackathon \
+            -f features=models,mcp \
+            -f image=spiced-internal \
+            -f latest=true \
+            -f prod=true
