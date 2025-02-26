@@ -117,6 +117,10 @@ impl From<Action> for StepType {
 }
 
 impl PhysicalPlan {
+    pub(crate) fn summary() -> String {
+        "Finished Physical Plan. Executing physical plan".to_string()
+    }
+
     pub fn build_request(
         messages: Option<Vec<ChatCompletionRequestMessage>>,
         previous_steps: &[Step],

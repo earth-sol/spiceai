@@ -9,11 +9,10 @@ use async_openai::{
     },
 };
 
-use crate::get_output_message;
-use crate::research::Artifact;
-use crate::research::Research;
-use crate::LogicalPlan;
-use crate::PhysicalPlan;
+use crate::{
+    logical_plan_complete_summary, research::Research, research_complete_msg, LogicalPlan,
+    PhysicalPlan,
+};
 
 /// Defines the pipeline stages that an agent request goes through. The values for each stage are the inputs for that stage.
 #[derive(Clone, Debug)]
@@ -28,6 +27,38 @@ pub enum AgentPipeline {
     Execution(PhysicalPlan),
     /// The output stage is used to output the result of the execution.
     Output(String),
+}
+
+impl AgentPipeline {
+    pub(crate) fn previous_step_summary(&self) -> String {
+        match self {
+            Self::Research { prompt } => format!("Researching: {prompt}"),
+            Self::LogicalPlan(r) => research_complete_msg(r),
+            Self::PhysicalPlan(l) => logical_plan_complete_summary(l),
+            Self::Execution(_) => PhysicalPlan::summary(),
+            Self::Output(_) => "Execution Complete!".to_string(),
+        }
+    }
+
+    pub(crate) fn title(&self) -> String {
+        match self {
+            Self::Research { .. } => "research".to_string(),
+            Self::LogicalPlan(_) => "logical_plan".to_string(),
+            Self::PhysicalPlan(_) => "physical_plan".to_string(),
+            Self::Execution(_) => "execution".to_string(),
+            Self::Output(_) => "output".to_string(),
+        }
+    }
+
+    pub(crate) fn starting_message(&self) -> String {
+        match self {
+            Self::Research { .. } => "Starting research".to_string(),
+            Self::LogicalPlan(_) => "Creating logical plan".to_string(),
+            Self::PhysicalPlan(_) => "Creating physical plan".to_string(),
+            Self::Execution(_) => "Executing physical plan".to_string(),
+            Self::Output(_) => "Outputing result".to_string(),
+        }
+    }
 }
 
 pub enum AdvanceMode {
@@ -119,54 +150,22 @@ impl AgentPipeline {
     }
 }
 
-pub(crate) fn pipeline_into_stream(
-    pipeline: AgentPipeline,
+pub(crate) fn with_starting(
+    title: &str,
+    content: &str,
 ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-    match pipeline {
-        AgentPipeline::Research { .. } => {
-            create_working_stream_payload("research", "Starting to research")
-        }
-        AgentPipeline::LogicalPlan(Research { artifacts, .. }) => {
-            let artifact_paths = artifacts
-                .iter()
-                .filter_map(|a| match a {
-                    Artifact::Document { path, .. } => Some(path.clone()),
-                    Artifact::TextSnippet(_) => None,
-                })
-                .collect::<Vec<_>>();
-            let num_snippets = artifacts
-                .iter()
-                .filter(|a| matches!(a, Artifact::TextSnippet(_)))
-                .count();
-            create_working_stream_payload(
-                    "logical plan",
-                    &format!(
-                        "Finished Research.\nFound {num_snippets} text snippets. Found the following documents: {}. Creating logical plan",
-                        artifact_paths.join(", ")
-                    ),
-                )
-        }
-        AgentPipeline::PhysicalPlan(LogicalPlan { tasks }) => {
-            let objectives = tasks
-                .iter()
-                .map(|t| format!("- {}\n", t.objective.clone()))
-                .collect::<Vec<_>>();
-            create_working_stream_payload(
-                    "physical plan",
-                    &format!("Finished Logical Plan. {} tasks identified, with the following objectives:\n{}\nCreating physical plan", objectives.len(), objectives.join("")),
-                )
-        }
-        AgentPipeline::Execution(_physical_plan) => create_working_stream_payload(
-            "execution",
-            "Finished Physical Plan. Executing physical plan",
-        ),
-        AgentPipeline::Output(output) => Ok(get_output_message("id", output)),
-    }
+    create_working_stream_payload(format!("<Working title=\"{title}\">{content}"))
 }
 
-fn create_working_stream_payload(
-    title: &str,
-    body: &str,
+pub(crate) fn with_ending(
+    content: &str,
+) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
+    create_working_stream_payload(format!("{content}</Working>"))
+}
+
+#[allow(clippy::cast_possible_truncation, deprecated)]
+pub(crate) fn create_working_stream_payload(
+    content: String,
 ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
     let created = u32::try_from(
         SystemTime::now()
@@ -189,8 +188,7 @@ fn create_working_stream_payload(
             finish_reason: None,
             logprobs: None,
             delta: ChatCompletionStreamResponseDelta {
-                content: Some(format!("<Working title=\"{title}\">{body}</Working>\n")),
-                #[allow(deprecated)]
+                content: Some(content),
                 function_call: None,
                 tool_calls: None,
                 role: Some(Role::Assistant),
