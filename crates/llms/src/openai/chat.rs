@@ -67,16 +67,16 @@ impl<C: Config + Send + Sync> Chat for Openai<C> {
                 ChatCompletionRequestUserMessage {
                     name: None,
                     content: ChatCompletionRequestUserMessageContent::Text(
-                        "Respond with the single letter 'A'. This is a healthcheck.".to_string(),
+                        "For health check purposes, reply with exactly: ok".to_string(),
                     ),
                 },
             )],
             ..Default::default()
         };
         if self.supports_max_completion_tokens() {
-            req.max_completion_tokens = Some(150);
+            req.max_completion_tokens = Some(300);
         } else {
-            req.max_tokens = Some(150);
+            req.max_tokens = Some(300);
         }
 
         if let Err(e) = self.chat_request(req).instrument(span.clone()).await {

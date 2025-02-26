@@ -517,11 +517,14 @@ pub trait Chat: Sync + Send {
         if let Err(e) = self
             .chat_request(CreateChatCompletionRequest {
                 // Cannot be set too low. Some providers will error if it cannot complete in < `max_completion_tokens`.
-                max_completion_tokens: Some(100),
+                max_completion_tokens: Some(300),
                 messages: vec![ChatCompletionRequestMessage::User(
                     ChatCompletionRequestUserMessage {
                         name: None,
-                        content: ChatCompletionRequestUserMessageContent::Text("ping.".to_string()),
+                        content: ChatCompletionRequestUserMessageContent::Text(
+                            "For health check purposes, reply with exactly: ok"
+                                .to_string(),
+                        ),
                     },
                 )],
                 ..Default::default()
