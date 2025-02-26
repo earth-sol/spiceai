@@ -25,12 +25,12 @@ use axum::{
 use futures::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tools::SpiceModelTool;
 
 use crate::{
     tools::{factory::default_available_catalogs, Tooling},
     Runtime,
 };
-use tools::SpiceModelTool;
 
 /// Summary of a tool available to run, and the schema of its input parameters.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash, Default, Deserialize)]
