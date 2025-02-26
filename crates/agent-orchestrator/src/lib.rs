@@ -416,6 +416,7 @@ impl AgentChat {
                 loop {
                     let _ = tx
                         .send(with_starting(
+                            &pipeline.stage(),
                             &pipeline.title(),
                             &pipeline.starting_message(),
                         ))

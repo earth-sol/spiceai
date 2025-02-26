@@ -10,7 +10,8 @@ pub(crate) fn logical_plan_complete_summary(l: &LogicalPlan) -> String {
         .collect::<Vec<_>>();
 
     format!(
-        "\nFinished Logical Plan. {} tasks identified, with the following objectives:\n{}\nCreating physical plan",
-        objectives.len(), objectives.join("")
+        "Logical Plan created. {} tasks identified, with the following objectives:\n{}",
+        objectives.len(),
+        objectives.join("\n")
     )
 }

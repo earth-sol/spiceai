@@ -118,7 +118,7 @@ impl From<Action> for StepType {
 
 impl PhysicalPlan {
     pub(crate) fn summary() -> String {
-        "\nFinished creating Physical Plan. Executing physical plan".to_string()
+        "Physical Plan created.".to_string()
     }
 
     pub fn build_request(
@@ -139,22 +139,25 @@ impl PhysicalPlan {
         let body = serde_json::to_string(step)?;
         messages.push(ChatCompletionRequestMessage::User(
             format!(
-                "# Goal
+                "## Goal
+                Create a detailed physical plan step that implements the logical plan step below.
 
-            Create a physical plan step to achieve the logical plan step.
-            Keep in mind the overall task objective while creating the physical plan step.
+                ## Task Objective
+                {objective}
 
-            # Task Objective
+                ## Logical Plan Step
+                {body}
 
-            {objective}
+                ## Available Tools
+                {tool_str}
 
-            # Logical Plan Step
+                # Instructions
+                1. Select the most appropriate tool for this step based on the logical plan requirements
+                2. Define clear, executable parameters for your chosen tool
+                3. Include specific success criteria that can be evaluated
+                4. Ensure your plan directly supports the overall task objective
 
-            {body}
-
-            # Available Tools
-
-            The following tools are available for selection: {tool_str}"
+                Your response will be validated against a strict schema, so maintain proper formatting."
             )
             .into(),
         ));

@@ -25,18 +25,18 @@ pub enum AgenticStage {
     PhysicalPlan(LogicalPlan),
     /// The execution stage is used to execute the physical plan.
     Execution(PhysicalPlan),
-    /// The output stage is used to output the result of the execution.
+    /// The reporting stage is used to report the results of the execution stage.
     Reporting(String),
 }
 
 impl AgenticStage {
-    pub(crate) fn previous_step_summary(&self) -> String {
+    pub(crate) fn previous_stage_summary(&self) -> String {
         match self {
             Self::Research { prompt } => format!("Researching: {prompt}"),
             Self::LogicalPlan(r) => research_complete_msg(r),
             Self::PhysicalPlan(l) => logical_plan_complete_summary(l),
             Self::Execution(_) => PhysicalPlan::summary(),
-            Self::Reporting(_) => "Execution Complete!".to_string(),
+            Self::Reporting(_) => "Execution complete".to_string(),
         }
     }
 
@@ -66,7 +66,7 @@ impl AgenticStage {
             Self::LogicalPlan(_) => "Creating logical plan".to_string(),
             Self::PhysicalPlan(_) => "Creating physical plan".to_string(),
             Self::Execution(_) => "Executing physical plan".to_string(),
-            Self::Reporting(_) => "Creating final report".to_string(),
+            Self::Reporting(_) => "Generating report".to_string(),
         }
     }
 }
@@ -173,7 +173,7 @@ pub(crate) fn with_starting(
 pub(crate) fn with_ending(
     content: &str,
 ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-    create_working_stream_payload(format!("{content}</working>\n"))
+    create_working_stream_payload(format!("{content}</working>"))
 }
 
 #[allow(clippy::cast_possible_truncation, deprecated)]
