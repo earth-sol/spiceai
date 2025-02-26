@@ -25,11 +25,13 @@ use research::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::ResultExt;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::future::Future;
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tools::SpiceModelTool;
 use tracing::{Instrument, Span};
+use util::{fibonacci_backoff::FibonacciBackoffBuilder, retry, RetryError};
 
 pub mod logical;
 pub mod physical;
@@ -105,7 +107,13 @@ pub struct AgentChat {
     models: AgentModels,
     llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
     tools: HashMap<String, Arc<dyn SpiceModelTool>>,
+    max_retry: usize,
 }
+
+const DEFAULT_MAX_RETRY: usize = 1;
+// This limitation is about single message in chat completion and not related to the model context window.
+// TODO: Split one message into multiple messages if it exceeds the limit. https://github.com/spicehq/timmy/issues/47
+const MAX_CONTENT_LENGTH: usize = 1048576;
 
 impl AgentChat {
     pub fn new(
@@ -119,14 +127,79 @@ impl AgentChat {
             models,
             llms,
             tools,
+            max_retry: DEFAULT_MAX_RETRY,
         }
     }
 
-    #[allow(clippy::unused_async)]
+    pub fn with_max_retry(mut self, max_retry: usize) -> Self {
+        self.max_retry = max_retry;
+        self
+    }
+
+    async fn retry_stage<F, Fut, T>(&self, operation: F) -> Result<T, OpenAIError>
+    where
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<T, OpenAIError>>,
+    {
+        let retry_strategy = FibonacciBackoffBuilder::new()
+            .max_retries(Some(self.max_retry))
+            .max_duration(Some(Duration::from_secs(60)))
+            .build();
+
+        retry(retry_strategy, || async {
+            match operation().await {
+                Ok(result) => Ok(result),
+                Err(e) => {
+                    if should_retry_on_error(&e) {
+                        tracing::warn!("Error: {e}. Retrying operation.");
+                        return Err(RetryError::transient(e));
+                    }
+                    return Err(RetryError::Permanent(e));
+                }
+            }
+        })
+        .await
+    }
+
     async fn generate_research(
         &self,
         research_model: &dyn Chat,
-        prompt: String,
+        prompt: &String,
+    ) -> Result<Research, OpenAIError> {
+        self.retry_stage(|| self.generate_research_single(research_model, prompt))
+            .await
+    }
+
+    async fn generate_logical_plan(
+        &self,
+        logical_planner_model: &dyn Chat,
+        research: &Research,
+    ) -> Result<LogicalPlan, OpenAIError> {
+        self.retry_stage(|| self.generate_logical_plan_single(logical_planner_model, research))
+            .await
+    }
+
+    async fn generate_physical_plan(
+        &self,
+        plan: &LogicalPlan,
+        physical_tool_planner_model: &dyn Chat,
+        physical_prompt_planner_model: &dyn Chat,
+    ) -> Result<PhysicalPlan, OpenAIError> {
+        self.retry_stage(|| {
+            self.generate_physical_plan_single(
+                &plan,
+                physical_tool_planner_model,
+                physical_prompt_planner_model,
+            )
+        })
+        .await
+    }
+
+    #[allow(clippy::unused_async)]
+    async fn generate_research_single(
+        &self,
+        research_model: &dyn Chat,
+        prompt: &String,
     ) -> Result<Research, OpenAIError> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::research", input = prompt);
         let result: Result<Research, OpenAIError> = async {
@@ -147,8 +220,31 @@ impl AgentChat {
 
             let response = research_model.chat_request(initial_request).await?;
             let artifacts = parse_response(&response)?;
+            let artifacts_prompt = artifacts
+                .iter()
+                .map(|artifact| format!("{artifact}"))
+                .collect::<Vec<String>>()
+                .join("\n\n");
 
-            Ok(Research { prompt, artifacts })
+            let logical_plan_prompt = format!("{}\n\n{}", artifacts_prompt, prompt);
+            if logical_plan_prompt.len() > MAX_CONTENT_LENGTH {
+                return Err(OpenAIError::ApiError(async_openai::error::ApiError {
+                    message: format!(
+                        "Research artifacts exceeds size limit: {} (max: {})",
+                        logical_plan_prompt.len(),
+                        MAX_CONTENT_LENGTH
+                    )
+                    .to_string(),
+                    r#type: None,
+                    param: None,
+                    code: Some("string_above_max_length".to_string()),
+                }));
+            }
+
+            Ok(Research {
+                prompt: prompt.clone(),
+                artifacts: artifacts,
+            })
         }
         .instrument(span.clone())
         .await;
@@ -165,10 +261,10 @@ impl AgentChat {
         }
     }
 
-    async fn generate_logical_plan(
+    async fn generate_logical_plan_single(
         &self,
         logical_planner_model: &dyn Chat,
-        research: Research,
+        research: &Research,
     ) -> Result<LogicalPlan, OpenAIError> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::logical_plan", input = %serde_json::to_string(&research).unwrap_or_default());
 
@@ -226,7 +322,7 @@ impl AgentChat {
         }
     }
 
-    async fn generate_physical_plan(
+    async fn generate_physical_plan_single(
         &self,
         plan: &LogicalPlan,
         physical_tool_planner_model: &dyn Chat,
@@ -387,7 +483,6 @@ impl AgentChat {
                                 .send(with_ending(pipeline.previous_step_summary().as_str()))
                                 .await;
                             let _ = tx.send(create_working_stream_payload(s.clone())).await;
-
                             break;
                         }
                     }
@@ -427,6 +522,15 @@ fn write_artifact<T: ?Sized + Serialize>(
     std::fs::write(format!("data/{base_name}_{id}.json"), &artifact_json).boxed()?;
     std::fs::write(format!("data/{base_name}_latest.json"), &artifact_json).boxed()?;
     Ok(())
+}
+
+fn should_retry_on_error(e: &OpenAIError) -> bool {
+    if let OpenAIError::ApiError(api_error) = e {
+        if let Some(code) = &api_error.code {
+            return code == "string_above_max_length";
+        }
+    }
+    false
 }
 
 #[async_trait]
