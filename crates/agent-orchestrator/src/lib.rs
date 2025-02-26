@@ -16,11 +16,14 @@ use async_openai::{
 use async_trait::async_trait;
 use futures_util::TryStreamExt;
 use llms::chat::{nsql::SqlGeneration, Chat};
-use logical::plan::LogicalPlan;
+use logical::{logical_plan_complete_summary, plan::LogicalPlan};
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
-use pipeline::pipeline_into_stream;
-use research::{model::parse_response, Research};
-use serde::{de::DeserializeOwned, Serialize};
+use pipeline::{with_ending, with_starting};
+use research::{
+    model::{parse_response, research_complete_msg},
+    Research,
+};
+use serde::Serialize;
 use snafu::ResultExt;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
@@ -251,9 +254,13 @@ impl AgentChat {
 
             let service = Arc::clone(&self);
             let id = id.clone();
-
-            let _ = tx.send(pipeline_into_stream(pipeline.clone())).await;
             loop {
+                let _ = tx
+                    .send(with_starting(
+                        &pipeline.title(),
+                        &pipeline.starting_message(),
+                    ))
+                    .await;
                 match pipeline {
                     pipeline::AgentPipeline::Research { prompt } => {
                         let research = match service
@@ -337,11 +344,15 @@ impl AgentChat {
                         pipeline = pipeline::AgentPipeline::Output(output);
                     }
                     pipeline::AgentPipeline::Output(_) => {
-                        let _ = tx.send(pipeline_into_stream(pipeline.clone())).await;
+                        let _ = tx
+                            .send(with_ending(pipeline.previous_step_summary().as_str()))
+                            .await;
                         break;
                     }
                 }
-                let _ = tx.send(pipeline_into_stream(pipeline.clone())).await;
+                let _ = tx
+                    .send(with_ending(pipeline.previous_step_summary().as_str()))
+                    .await;
             }
         });
 
