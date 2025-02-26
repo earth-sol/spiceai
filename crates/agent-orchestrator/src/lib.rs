@@ -298,7 +298,7 @@ impl AgentChat {
     #[allow(clippy::too_many_lines)]
     fn run_pipeline_stream(
         self: Arc<Self>,
-        mut pipeline: pipeline::AgentPipeline,
+        mut pipeline: pipeline::AgenticStage,
         advance_mode: pipeline::AdvanceMode,
     ) -> ChatCompletionResponseStream {
         let (tx, rx) =
@@ -354,12 +354,13 @@ impl AgentChat {
             loop {
                 let _ = tx
                     .send(with_starting(
+                        &pipeline.stage(),
                         &pipeline.title(),
                         &pipeline.starting_message(),
                     ))
                     .await;
                 match pipeline {
-                    pipeline::AgentPipeline::Research { prompt } => {
+                    pipeline::AgenticStage::Research { prompt } => {
                         let research = match service
                             .generate_research(researcher_model.as_ref(), &prompt)
                             .await
@@ -377,10 +378,9 @@ impl AgentChat {
                         if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
                             break;
                         }
-
-                        pipeline = pipeline::AgentPipeline::LogicalPlan(research);
+                        pipeline = pipeline::AgenticStage::LogicalPlan(research);
                     }
-                    pipeline::AgentPipeline::LogicalPlan(research) => {
+                    pipeline::AgenticStage::LogicalPlan(research) => {
                         let logical_plan = match service
                             .generate_logical_plan(logical_planner_model.as_ref(), &research)
                             .await
@@ -398,9 +398,9 @@ impl AgentChat {
                         if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
                             break;
                         }
-                        pipeline = pipeline::AgentPipeline::PhysicalPlan(logical_plan);
+                        pipeline = pipeline::AgenticStage::PhysicalPlan(logical_plan);
                     }
-                    pipeline::AgentPipeline::PhysicalPlan(logical_plan) => {
+                    pipeline::AgenticStage::PhysicalPlan(logical_plan) => {
                         let physical_plan = match service
                             .generate_physical_plan(
                                 &logical_plan,
@@ -422,9 +422,9 @@ impl AgentChat {
                         if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
                             break;
                         }
-                        pipeline = pipeline::AgentPipeline::Execution(physical_plan);
+                        pipeline = pipeline::AgenticStage::Execution(physical_plan);
                     }
-                    pipeline::AgentPipeline::Execution(physical_plan) => {
+                    pipeline::AgenticStage::Execution(physical_plan) => {
                         let mut executor = PhysicalJobExecutor::new(
                             physical_plan,
                             Arc::clone(&service.llms),
@@ -442,17 +442,17 @@ impl AgentChat {
                                 break;
                             }
                         };
-                        pipeline = pipeline::AgentPipeline::Output(output);
+                        pipeline = pipeline::AgenticStage::Reporting(output);
                     }
-                    pipeline::AgentPipeline::Output(_) => {
+                    pipeline::AgenticStage::Reporting(_) => {
                         let _ = tx
-                            .send(with_ending(pipeline.previous_step_summary().as_str()))
+                            .send(with_ending(pipeline.previous_stage_summary().as_str()))
                             .await;
                         break;
                     }
                 }
                 let _ = tx
-                    .send(with_ending(pipeline.previous_step_summary().as_str()))
+                    .send(with_ending(pipeline.previous_stage_summary().as_str()))
                     .await;
             }
         });
@@ -502,7 +502,7 @@ impl Chat for AgentChat {
         &self,
         req: CreateChatCompletionRequest,
     ) -> Result<ChatCompletionResponseStream, OpenAIError> {
-        let (pipeline, advance_mode) = pipeline::AgentPipeline::try_new(&req)
+        let (pipeline, advance_mode) = pipeline::AgenticStage::try_new(&req)
             .map_err(|e| OpenAIError::InvalidArgument(format!("Error parsing request: {e}")))?;
 
         Ok(Arc::new(self.clone()).run_pipeline_stream(pipeline, advance_mode))

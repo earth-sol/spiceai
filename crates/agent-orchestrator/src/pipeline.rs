@@ -16,7 +16,7 @@ use crate::{
 
 /// Defines the pipeline stages that an agent request goes through. The values for each stage are the inputs for that stage.
 #[derive(Clone, Debug)]
-pub enum AgentPipeline {
+pub enum AgenticStage {
     /// The research stage is used to gather artifacts that will be used to create the logical plan.
     Research { prompt: String },
     /// The logical plan stage is used to create a logical plan from prompt and the artifacts gathered in the research stage.
@@ -25,28 +25,38 @@ pub enum AgentPipeline {
     PhysicalPlan(LogicalPlan),
     /// The execution stage is used to execute the physical plan.
     Execution(PhysicalPlan),
-    /// The output stage is used to output the result of the execution.
-    Output(String),
+    /// The reporting stage is used to report the results of the execution stage.
+    Reporting(String),
 }
 
-impl AgentPipeline {
-    pub(crate) fn previous_step_summary(&self) -> String {
+impl AgenticStage {
+    pub(crate) fn previous_stage_summary(&self) -> String {
         match self {
             Self::Research { prompt } => format!("Researching: {prompt}"),
             Self::LogicalPlan(r) => research_complete_msg(r),
             Self::PhysicalPlan(l) => logical_plan_complete_summary(l),
             Self::Execution(_) => PhysicalPlan::summary(),
-            Self::Output(_) => "Execution Complete!".to_string(),
+            Self::Reporting(_) => "Execution complete".to_string(),
+        }
+    }
+
+    pub(crate) fn stage(&self) -> String {
+        match self {
+            Self::Research { .. } => "research".to_string(),
+            Self::LogicalPlan(_) => "planning".to_string(),
+            Self::PhysicalPlan(_) => "planning".to_string(),
+            Self::Execution(_) => "execution".to_string(),
+            Self::Reporting(_) => "reporting".to_string(),
         }
     }
 
     pub(crate) fn title(&self) -> String {
         match self {
-            Self::Research { .. } => "research".to_string(),
-            Self::LogicalPlan(_) => "logical_plan".to_string(),
-            Self::PhysicalPlan(_) => "physical_plan".to_string(),
-            Self::Execution(_) => "execution".to_string(),
-            Self::Output(_) => "output".to_string(),
+            Self::Research { .. } => "Research".to_string(),
+            Self::LogicalPlan(_) => "Planning".to_string(),
+            Self::PhysicalPlan(_) => "Planning".to_string(),
+            Self::Execution(_) => "Execution".to_string(),
+            Self::Reporting(_) => "Report Generation".to_string(),
         }
     }
 
@@ -56,7 +66,7 @@ impl AgentPipeline {
             Self::LogicalPlan(_) => "Creating logical plan".to_string(),
             Self::PhysicalPlan(_) => "Creating physical plan".to_string(),
             Self::Execution(_) => "Executing physical plan".to_string(),
-            Self::Output(_) => "Creating final report".to_string(),
+            Self::Reporting(_) => "Generating report".to_string(),
         }
     }
 }
@@ -68,7 +78,7 @@ pub enum AdvanceMode {
     Continue,
 }
 
-impl AgentPipeline {
+impl AgenticStage {
     pub fn try_new(
         req: &CreateChatCompletionRequest,
     ) -> Result<(Self, AdvanceMode), anyhow::Error> {
@@ -152,15 +162,18 @@ impl AgentPipeline {
 
 pub(crate) fn with_starting(
     title: &str,
+    stage: &str,
     content: &str,
 ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-    create_working_stream_payload(format!("<Working title=\"{title}\">{content}"))
+    create_working_stream_payload(format!(
+        "<working stage=\"{stage}\" title=\"{title}\">{content}"
+    ))
 }
 
 pub(crate) fn with_ending(
     content: &str,
 ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-    create_working_stream_payload(format!("{content}</Working>"))
+    create_working_stream_payload(format!("{content}</working>"))
 }
 
 #[allow(clippy::cast_possible_truncation, deprecated)]
