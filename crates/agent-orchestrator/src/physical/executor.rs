@@ -356,8 +356,11 @@ impl PhysicalJobExecutor {
             .ok_or_else(|| anyhow::anyhow!("Model {} not found", model_name))?;
 
         let yaml_str = include_str!("executor_response_format.yaml");
-        let yaml_value: ResponseFormat =
-            serde_yaml::from_str(yaml_str).expect("Failed to parse YAML");
+        let Ok(yaml_value) = serde_yaml::from_str::<ResponseFormat>(yaml_str) else {
+            return Err(anyhow::anyhow!(
+                "Failed to parse response format: {yaml_str}"
+            ));
+        };
 
         let req = CreateChatCompletionRequestArgs::default()
             .response_format(yaml_value)

@@ -9,6 +9,7 @@ on:
       - trunk
       - release-*
       - feature-*
+      - feature/*
   workflow_dispatch:
 
 concurrency:
@@ -194,6 +195,7 @@ jobs:
     name: Build Docker Image
     runs-on: spiceai-runners
     needs: check_changes
+    if: false # skip docker for internal builds for now
 
     steps:
       - uses: actions/checkout@v4

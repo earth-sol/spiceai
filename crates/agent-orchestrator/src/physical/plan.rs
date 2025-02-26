@@ -66,6 +66,7 @@ pub struct PromptStep {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum Step {
     Tool(ToolStep),
     Prompt(PromptStep),
@@ -268,7 +269,16 @@ impl PhysicalPlan {
             tracing::info!("Generating physical plan for step: {:?}", step.uuid);
             match step.action.into() {
                 StepType::Tool => {
-                    let req = Self::build_request(None, steps.as_slice(), step, &task.objective)?;
+                    let message = vec![ChatCompletionRequestMessage::System(
+                        format!("The following models are available for selection: {executor}")
+                            .into(),
+                    )];
+                    let req = Self::build_request(
+                        Some(message),
+                        steps.as_slice(),
+                        step,
+                        &task.objective,
+                    )?;
                     steps.push(
                         Self::plan_request(req, StepType::Tool, tool_planner)
                             .await?

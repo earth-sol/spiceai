@@ -131,6 +131,7 @@ impl AgentChat {
         }
     }
 
+    #[must_use]
     pub fn with_max_retry(mut self, max_retry: usize) -> Self {
         self.max_retry = max_retry;
         self
@@ -154,7 +155,7 @@ impl AgentChat {
                         tracing::warn!("Error: {e}. Retrying operation.");
                         return Err(RetryError::transient(e));
                     }
-                    return Err(RetryError::Permanent(e));
+                    Err(RetryError::Permanent(e))
                 }
             }
         })
@@ -187,7 +188,7 @@ impl AgentChat {
     ) -> Result<PhysicalPlan, OpenAIError> {
         self.retry_stage(|| {
             self.generate_physical_plan_single(
-                &plan,
+                plan,
                 physical_tool_planner_model,
                 physical_prompt_planner_model,
             )
@@ -226,7 +227,7 @@ impl AgentChat {
                 .collect::<Vec<String>>()
                 .join("\n\n");
 
-            let logical_plan_prompt = format!("{}\n\n{}", artifacts_prompt, prompt);
+            let logical_plan_prompt = format!("{artifacts_prompt}\n\n{prompt}");
             if logical_plan_prompt.len() > MAX_CONTENT_LENGTH {
                 return Err(OpenAIError::ApiError(async_openai::error::ApiError {
                     message: format!(
@@ -243,7 +244,7 @@ impl AgentChat {
 
             Ok(Research {
                 prompt: prompt.clone(),
-                artifacts: artifacts,
+                artifacts,
             })
         }
         .instrument(span.clone())
@@ -366,7 +367,6 @@ impl AgentChat {
         let id = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
 
         let models = Arc::clone(&self.llms);
-
         tokio::spawn(
             async move {
                 let models = models.read().await;
@@ -429,8 +429,15 @@ impl AgentChat {
                                     .await,
                                 tx
                             );
-                            write_artifact("research/research_artifacts", &id, &research)
-                                .expect("Failed to save research artifacts");
+                            try_send!(
+                                write_artifact("research/research_artifacts", &id, &research)
+                                    .map_err(|e| {
+                                        OpenAIError::InvalidArgument(format!(
+                                            "Error writing research artifacts: {e}"
+                                        ))
+                                    }),
+                                tx
+                            );
                             pipeline = pipeline::AgenticStage::LogicalPlan(research);
                         }
                         pipeline::AgenticStage::LogicalPlan(research) => {
@@ -443,8 +450,16 @@ impl AgentChat {
                                     .await,
                                 tx
                             );
-                            write_artifact("logical/logical_plan", &id, &logical_plan)
-                                .expect("Failed to save logical plan");
+                            try_send!(
+                                write_artifact("logical/logical_plan", &id, &logical_plan).map_err(
+                                    |e| {
+                                        OpenAIError::InvalidArgument(format!(
+                                            "Error writing logical plan: {e}"
+                                        ))
+                                    }
+                                ),
+                                tx
+                            );
                             pipeline = pipeline::AgenticStage::PhysicalPlan(logical_plan);
                         }
                         pipeline::AgenticStage::PhysicalPlan(logical_plan) => {
@@ -459,8 +474,15 @@ impl AgentChat {
                                 tx
                             );
 
-                            write_artifact("physical/physical_plan", &id, &physical_plan)
-                                .expect("Failed to save physical plan");
+                            try_send!(
+                                write_artifact("physical/physical_plan", &id, &physical_plan)
+                                    .map_err(|e| {
+                                        OpenAIError::InvalidArgument(format!(
+                                            "Error writing physical plan: {e}"
+                                        ))
+                                    }),
+                                tx
+                            );
 
                             pipeline = pipeline::AgenticStage::Execution(physical_plan);
                         }
@@ -484,7 +506,7 @@ impl AgentChat {
                         }
                         pipeline::AgenticStage::Reporting(ref s) => {
                             let _ = tx
-                                .send(with_ending(&pipeline.previous_stage_summary().as_str()))
+                                .send(with_ending(pipeline.previous_stage_summary().as_str()))
                                 .await;
                             let _ = tx.send(create_working_stream_payload(s.clone())).await;
                             break;
@@ -511,8 +533,7 @@ fn write_artifact<T: ?Sized + Serialize>(
     id: &str,
     artifact: &T,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let artifact_json =
-        serde_json::to_string_pretty(artifact).expect("Failed to serialize logical plan");
+    let artifact_json = serde_json::to_string_pretty(artifact)?;
 
     tracing::debug!("{base_name}: {artifact_json}");
 

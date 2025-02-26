@@ -522,8 +522,7 @@ pub trait Chat: Sync + Send {
                     ChatCompletionRequestUserMessage {
                         name: None,
                         content: ChatCompletionRequestUserMessageContent::Text(
-                            "For health check purposes, reply with exactly: ok"
-                                .to_string(),
+                            "For health check purposes, reply with exactly: ok".to_string(),
                         ),
                     },
                 )],

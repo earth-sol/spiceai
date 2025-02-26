@@ -32,7 +32,7 @@ pub struct LLMScorer {
 
 #[async_trait]
 impl Scorer for LLMScorer {
-    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_possible_truncation, clippy::expect_used)] // FIX: expect should be handled with results instead, trait needs to be re-worked
     async fn score(
         &self,
         input: &DatasetInput,

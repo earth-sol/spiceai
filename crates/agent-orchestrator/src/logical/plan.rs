@@ -109,12 +109,14 @@ mod test {
                             "description": "Change to temporary directory",
                             "tags": ["filesystem"],
                             "action": "change_directory",
-                            "input": "/tmp"
+                            "input": "/tmp",
+                            "success_criteria": "Directory changed"
                         },
                         {
                             "description": "Create test directory",
                             "action": "create_directory",
-                            "input": "/tmp/test"
+                            "input": "/tmp/test",
+                            "success_criteria": "Directory created"
                         }
                     ]
                 }
@@ -144,7 +146,8 @@ mod test {
                             "uuid": "d1b3b3b4-0b3b-4b3b-8b3b-0b3b3b3b3b3b",
                             "description": "Step 1",
                             "action": "change_directory",
-                            "input": "/tmp"
+                            "input": "/tmp",
+                            "success_criteria": "Directory changed"
                         }
                     ]
                 }

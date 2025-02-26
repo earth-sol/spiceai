@@ -43,8 +43,7 @@ impl AgenticStage {
     pub(crate) fn stage(&self) -> String {
         match self {
             Self::Research { .. } => "research".to_string(),
-            Self::LogicalPlan(_) => "planning".to_string(),
-            Self::PhysicalPlan(_) => "planning".to_string(),
+            Self::LogicalPlan(_) | Self::PhysicalPlan(_) => "planning".to_string(),
             Self::Execution(_) => "execution".to_string(),
             Self::Reporting(_) => "reporting".to_string(),
         }
@@ -53,8 +52,7 @@ impl AgenticStage {
     pub(crate) fn title(&self) -> String {
         match self {
             Self::Research { .. } => "Research".to_string(),
-            Self::LogicalPlan(_) => "Planning".to_string(),
-            Self::PhysicalPlan(_) => "Planning".to_string(),
+            Self::LogicalPlan(_) | Self::PhysicalPlan(_) => "Planning".to_string(),
             Self::Execution(_) => "Execution".to_string(),
             Self::Reporting(_) => "Report Generation".to_string(),
         }
@@ -117,10 +115,9 @@ impl AgenticStage {
         };
 
         if last_line.starts_with(".research") {
-            let research_file = last_line
-                .split(' ')
-                .nth(1)
-                .expect("Research artifacts file not found");
+            let Some(research_file) = last_line.split(' ').nth(1) else {
+                return Err(anyhow::anyhow!("Research artifacts file not found"));
+            };
             tracing::debug!("Research artifacts file: {research_file}");
             let research_str = std::fs::read_to_string(research_file)
                 .map_err(|e| anyhow::anyhow!("Error reading research artifacts: {e}"))?;
@@ -130,10 +127,9 @@ impl AgenticStage {
             return Ok((Self::LogicalPlan(research), advance_mode));
         }
         if last_line.starts_with(".logical_plan") {
-            let logical_plan_file = last_line
-                .split(' ')
-                .nth(1)
-                .expect("Logical plan file not found");
+            let Some(logical_plan_file) = last_line.split(' ').nth(1) else {
+                return Err(anyhow::anyhow!("Logical plan file not found"));
+            };
             tracing::debug!("Logical plan file: {logical_plan_file}");
             let logical_plan_str = std::fs::read_to_string(logical_plan_file)
                 .map_err(|e| anyhow::anyhow!("Error reading logical plan: {e}"))?;
@@ -143,10 +139,9 @@ impl AgenticStage {
             return Ok((Self::PhysicalPlan(logical_plan), advance_mode));
         }
         if last_line.starts_with(".physical_plan") {
-            let physical_plan_file = last_line
-                .split(' ')
-                .nth(1)
-                .expect("Physical plan file not found");
+            let Some(physical_plan_file) = last_line.split(' ').nth(1) else {
+                return Err(anyhow::anyhow!("Physical plan file not found"));
+            };
             tracing::debug!("Physical plan file: {physical_plan_file}");
             let physical_plan_str = std::fs::read_to_string(physical_plan_file)
                 .map_err(|e| anyhow::anyhow!("Error reading physical plan: {e}"))?;
