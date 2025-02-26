@@ -5,10 +5,10 @@
 use async_openai::{
     error::OpenAIError,
     types::{
-        ChatChoice, ChatChoiceStream, ChatCompletionMessageToolCall, ChatCompletionNamedToolChoice,
+        ChatChoice, ChatCompletionMessageToolCall, ChatCompletionNamedToolChoice,
         ChatCompletionRequestMessage, ChatCompletionResponseMessage, ChatCompletionResponseStream,
-        ChatCompletionStreamResponseDelta, ChatCompletionToolChoiceOption, ChatCompletionToolType,
-        CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
+        ChatCompletionToolChoiceOption, ChatCompletionToolType, CreateChatCompletionRequest,
+        CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
         CreateChatCompletionStreamResponse, FunctionCall, FunctionName,
     },
 };
@@ -29,6 +29,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tools::SpiceModelTool;
+use tracing::Instrument;
 
 pub mod logical;
 pub mod physical;
@@ -67,6 +68,18 @@ impl AgentModels {
             verifier,
         }
     }
+}
+
+macro_rules! try_send {
+    ($expr:expr, $tx:expr) => {
+        match $expr {
+            Ok(val) => val,
+            Err(err) => {
+                let _ = $tx.send(Err(err)).await;
+                return;
+            }
+        }
+    };
 }
 
 #[derive(Debug)]
@@ -115,25 +128,41 @@ impl AgentChat {
         research_model: &dyn Chat,
         prompt: String,
     ) -> Result<Research, OpenAIError> {
-        let mut initial_request = CreateChatCompletionRequestArgs::default()
-            .messages(vec![ChatCompletionRequestMessage::User(
-                prompt.clone().into(),
-            )])
-            .build()?;
+        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::research", input = prompt);
+        let result: Result<Research, OpenAIError> = async {
+            let mut initial_request = CreateChatCompletionRequestArgs::default()
+                .messages(vec![ChatCompletionRequestMessage::User(
+                    prompt.clone().into(),
+                )])
+                .build()?;
 
-        initial_request.tool_choice = Some(ChatCompletionToolChoiceOption::Named(
-            ChatCompletionNamedToolChoice {
-                r#type: ChatCompletionToolType::Function,
-                function: FunctionName {
-                    name: "document_similarity".to_string(),
+            initial_request.tool_choice = Some(ChatCompletionToolChoiceOption::Named(
+                ChatCompletionNamedToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: FunctionName {
+                        name: "document_similarity".to_string(),
+                    },
                 },
-            },
-        ));
+            ));
 
-        let response = research_model.chat_request(initial_request).await?;
-        let artifacts = parse_response(&response)?;
+            let response = research_model.chat_request(initial_request).await?;
+            let artifacts = parse_response(&response)?;
 
-        Ok(Research { prompt, artifacts })
+            Ok(Research { prompt, artifacts })
+        }
+        .instrument(span.clone())
+        .await;
+
+        match result {
+            Ok(value) => {
+                tracing::info!(target: "task_history", captured_output = %serde_json::to_string(&value).unwrap_or_default());
+                Ok(value)
+            }
+            Err(e) => {
+                tracing::error!(target: "task_history", parent: &span, "{e}");
+                Err(e)
+            }
+        }
     }
 
     async fn generate_logical_plan(
@@ -141,44 +170,60 @@ impl AgentChat {
         logical_planner_model: &dyn Chat,
         research: Research,
     ) -> Result<LogicalPlan, OpenAIError> {
-        let artifacts_prompt = research
-            .artifacts
-            .iter()
-            .map(|artifact| format!("{artifact}"))
-            .collect::<Vec<String>>()
-            .join("\n\n");
-        let initial_request = CreateChatCompletionRequestArgs::default()
-            .messages(vec![ChatCompletionRequestMessage::User(
-                format!("{}\n\n{}", artifacts_prompt, research.prompt).into(),
-            )])
-            .build()?;
+        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan", input = %serde_json::to_string(&research).unwrap_or_default());
 
-        let response = logical_planner_model
-            .chat_request(initial_request.clone())
-            .await?;
-        let plan = match LogicalPlan::from_chat_completion(&response) {
-            Ok(plan) => plan,
-            Err(ConversionError::JsonSchema(e)) => {
-                tracing::warn!(
-                    "Logical plan created did not satisfy JSONSchema format. Reattempting.\n   Initial Error: {e}"
-                );
-                let response = logical_planner_model.chat_request(initial_request).await?;
-                LogicalPlan::from_chat_completion(&response)
-                    .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?
-            }
-            Err(ConversionError::SerdeJson(e)) => {
-                return Err(OpenAIError::InvalidArgument(format!(
-                    "Failed to convert chat response to logical plan: {e}"
-                )))
-            }
-            Err(ConversionError::SerdeYaml(e)) => {
-                return Err(OpenAIError::InvalidArgument(format!(
-                    "Failed to convert chat response to logical plan: {e}"
-                )))
-            }
-        };
+        let result: Result<LogicalPlan, OpenAIError> = async {
+            let artifacts_prompt = research
+                .artifacts
+                .iter()
+                .map(|artifact| format!("{artifact}"))
+                .collect::<Vec<String>>()
+                .join("\n\n");
+            let initial_request = CreateChatCompletionRequestArgs::default()
+                .messages(vec![ChatCompletionRequestMessage::User(
+                    format!("{}\n\n{}", artifacts_prompt, research.prompt).into(),
+                )])
+                .build()?;
 
-        Ok(plan)
+            let response = logical_planner_model
+                .chat_request(initial_request.clone())
+                .await?;
+            let plan = match LogicalPlan::from_chat_completion(&response) {
+                Ok(plan) => plan,
+                Err(ConversionError::JsonSchema(e)) => {
+                    tracing::warn!(
+                        "Logical plan created did not satisfy JSONSchema format. Reattempting.\n   Initial Error: {e}"
+                    );
+                    let response = logical_planner_model.chat_request(initial_request).await?;
+                    LogicalPlan::from_chat_completion(&response)
+                        .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?
+                }
+                Err(ConversionError::SerdeJson(e)) => {
+                    return Err(OpenAIError::InvalidArgument(format!(
+                        "Failed to convert chat response to logical plan: {e}"
+                    )))
+                }
+                Err(ConversionError::SerdeYaml(e)) => {
+                    return Err(OpenAIError::InvalidArgument(format!(
+                        "Failed to convert chat response to logical plan: {e}"
+                    )))
+                }
+            };
+
+            Ok(plan)
+
+        }.instrument(span.clone()).await;
+
+        match result {
+            Ok(value) => {
+                tracing::info!(target: "task_history", captured_output = %serde_json::to_string(&value).unwrap_or_default());
+                Ok(value)
+            }
+            Err(e) => {
+                tracing::error!(target: "task_history", parent: &span, "{e}");
+                Err(e)
+            }
+        }
     }
 
     async fn generate_physical_plan(
@@ -187,15 +232,31 @@ impl AgentChat {
         physical_tool_planner_model: &dyn Chat,
         physical_prompt_planner_model: &dyn Chat,
     ) -> Result<PhysicalPlan, OpenAIError> {
-        let physical_plan = PhysicalPlan::plan(
-            plan,
-            physical_tool_planner_model,
-            physical_prompt_planner_model,
-            self.models.executor.clone(),
-        )
-        .await?;
+        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan", input = %serde_json::to_string(&plan).unwrap_or_default());
 
-        Ok(physical_plan)
+        let result: Result<PhysicalPlan, OpenAIError> = async {
+            let physical_plan = PhysicalPlan::plan(
+                plan,
+                physical_tool_planner_model,
+                physical_prompt_planner_model,
+                self.models.executor.clone(),
+            )
+            .await?;
+            Ok(physical_plan)
+        }
+        .instrument(span.clone())
+        .await;
+
+        match result {
+            Ok(value) => {
+                tracing::info!(target: "task_history", captured_output = %serde_json::to_string(&value).unwrap_or_default());
+                Ok(value)
+            }
+            Err(e) => {
+                tracing::error!(target: "task_history", parent: &span, "{e}");
+                Err(e)
+            }
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -263,64 +324,42 @@ impl AgentChat {
                     .await;
                 match pipeline {
                     pipeline::AgentPipeline::Research { prompt } => {
-                        let research = match service
-                            .generate_research(researcher_model.as_ref(), prompt)
-                            .await
-                        {
-                            Ok(l) => l,
-                            Err(e) => {
-                                let _ = tx.send(Err(e)).await;
-                                break;
-                            }
-                        };
+                        let research = try_send!(
+                            service
+                                .generate_research(researcher_model.as_ref(), prompt)
+                                .await,
+                            tx
+                        );
                         write_artifact("research/research_artifacts", &id, &research)
                             .expect("Failed to save research artifacts");
-
-                        if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
-                            break;
-                        }
                         pipeline = pipeline::AgentPipeline::LogicalPlan(research);
                     }
                     pipeline::AgentPipeline::LogicalPlan(research) => {
-                        let logical_plan = match service
-                            .generate_logical_plan(logical_planner_model.as_ref(), research)
-                            .await
-                        {
-                            Ok(l) => l,
-                            Err(e) => {
-                                let _ = tx.send(Err(e)).await;
-                                break;
-                            }
-                        };
+                        let logical_plan = try_send!(
+                            service
+                                .generate_logical_plan(logical_planner_model.as_ref(), research)
+                                .await,
+                            tx
+                        );
                         write_artifact("logical/logical_plan", &id, &logical_plan)
                             .expect("Failed to save logical plan");
-
-                        if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
-                            break;
-                        }
                         pipeline = pipeline::AgentPipeline::PhysicalPlan(logical_plan);
                     }
                     pipeline::AgentPipeline::PhysicalPlan(logical_plan) => {
-                        let physical_plan = match service
-                            .generate_physical_plan(
-                                &logical_plan,
-                                physical_tool_planner_model.as_ref(),
-                                physical_prompt_planner_model.as_ref(),
-                            )
-                            .await
-                        {
-                            Ok(l) => l,
-                            Err(e) => {
-                                let _ = tx.send(Err(e)).await;
-                                break;
-                            }
-                        };
+                        let physical_plan = try_send!(
+                            service
+                                .generate_physical_plan(
+                                    &logical_plan,
+                                    physical_tool_planner_model.as_ref(),
+                                    physical_prompt_planner_model.as_ref(),
+                                )
+                                .await,
+                            tx
+                        );
+
                         write_artifact("physical/physical_plan", &id, &physical_plan)
                             .expect("Failed to save physical plan");
 
-                        if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
-                            break;
-                        }
                         pipeline = pipeline::AgentPipeline::Execution(physical_plan);
                     }
                     pipeline::AgentPipeline::Execution(physical_plan) => {
@@ -330,17 +369,15 @@ impl AgentChat {
                             service.tools.clone(),
                             self.models.verifier.clone(),
                         );
-                        let output = match executor.execute().await.map_err(|e| {
-                            OpenAIError::InvalidArgument(format!(
-                                "Error executing physical plan: {e}"
-                            ))
-                        }) {
-                            Ok(l) => l,
-                            Err(e) => {
-                                let _ = tx.send(Err(e)).await;
-                                break;
-                            }
-                        };
+                        let output = try_send!(
+                            executor.execute().await.map_err(|e| {
+                                OpenAIError::InvalidArgument(format!(
+                                    "Error executing physical plan: {e}"
+                                ))
+                            }),
+                            tx
+                        );
+
                         pipeline = pipeline::AgentPipeline::Output(output);
                     }
                     pipeline::AgentPipeline::Output(_) => {
@@ -353,6 +390,10 @@ impl AgentChat {
                 let _ = tx
                     .send(with_ending(pipeline.previous_step_summary().as_str()))
                     .await;
+
+                if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
+                    break;
+                }
             }
         });
 
@@ -464,31 +505,6 @@ fn stream_to_request_payload(
         service_tier: stream.service_tier,
         system_fingerprint: stream.system_fingerprint,
         usage: stream.usage,
-    }
-}
-
-#[allow(deprecated)]
-fn get_output_message(id: &str, output: String) -> CreateChatCompletionStreamResponse {
-    CreateChatCompletionStreamResponse {
-        id: id.to_string(),
-        object: String::new(),
-        created: 0,
-        model: String::new(),
-        choices: vec![ChatChoiceStream {
-            delta: ChatCompletionStreamResponseDelta {
-                content: Some(output),
-                function_call: None,
-                tool_calls: None,
-                role: None,
-                refusal: None,
-            },
-            index: 0,
-            finish_reason: None,
-            logprobs: None,
-        }],
-        service_tier: None,
-        system_fingerprint: None,
-        usage: None,
     }
 }
 

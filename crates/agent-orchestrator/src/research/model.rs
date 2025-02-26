@@ -1,6 +1,5 @@
 use async_openai::{error::OpenAIError, types::CreateChatCompletionResponse};
 use serde::{Deserialize, Serialize};
-use spicepod::component::model::Model;
 
 use super::{Artifact, Research};
 
