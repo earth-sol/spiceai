@@ -24,7 +24,7 @@ use tokio::sync::RwLock;
 use tracing::Span;
 use tracing_futures::Instrument;
 
-use crate::tools::SpiceModelTool;
+use crate::{tools::SpiceModelTool, Runtime};
 
 use super::Result;
 
@@ -62,9 +62,10 @@ impl SpiceModelTool for McpToolWrapper {
         let tool_use_result: Result<Value, Box<dyn std::error::Error + Send + Sync>> = async {
             let client = self.client.read().await;
 
-            let arg = serde_json::from_str(arg)?;
-
-            let response = client.call_tool(self.internal_name(), arg).await.boxed()?;
+            let response = client
+                .call_tool(self.internal_name(), serde_json::from_str(arg).unwrap())
+                .await
+                .boxed()?;
 
             let v = serde_json::to_value(response.content).boxed()?;
             Ok(v)

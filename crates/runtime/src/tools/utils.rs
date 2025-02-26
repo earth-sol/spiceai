@@ -28,8 +28,7 @@ use std::sync::Arc;
 
 use crate::Runtime;
 
-use super::{options::SpiceToolsOptions, Tooling};
-use tools::SpiceModelTool;
+use super::{options::SpiceToolsOptions, SpiceModelTool, Tooling};
 
 /// Creates the messages that would be sent and received if a language model were to request the `tool`
 /// to be called (via an assistant message), with defined `arg`, and the response from running the

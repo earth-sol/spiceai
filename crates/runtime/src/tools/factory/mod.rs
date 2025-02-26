@@ -16,18 +16,24 @@ limitations under the License.
 use async_trait::async_trait;
 use secrecy::SecretString;
 use spicepod::component::tool::Tool;
-use std::{collections::HashMap, sync::Arc};
 
 use crate::Runtime;
+
+#[cfg(feature = "mcp")]
+use super::mcp::factory::McpCatalogFactory;
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock},
+};
+use tokio::sync::Mutex;
 
 #[cfg(feature = "mcp")]
 use super::mcp::factory::McpCatalogFactory;
 
 use super::{
     builtin::catalog::BuiltinToolCatalog, catalog::SpiceToolCatalog,
-    memory::catalog::MemoryToolCatalog, Tooling,
+    memory::catalog::MemoryToolCatalog, SpiceModelTool, Tooling,
 };
-use tools::SpiceModelTool;
 
 pub enum ToolFactory {
     Catalog(Arc<dyn ToolCatalogFactory>),
@@ -81,9 +87,11 @@ pub trait ToolCatalogFactory: Send + Sync {
     ) -> Result<Arc<dyn SpiceToolCatalog>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
+static TOOL_SHED_FACTORY: LazyLock<Mutex<HashMap<String, ToolFactory>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 pub async fn register_all_factories(rt: Arc<Runtime>) {
-    let tool_factories = rt.tool_factories();
-    let mut registry = tool_factories.lock().await;
+    let mut registry = TOOL_SHED_FACTORY.lock().await;
     registry.insert(
         "builtin".to_string(),
         ToolFactory::Tool(Arc::new(BuiltinToolCatalog::new(Arc::clone(&rt)))),
