@@ -21,11 +21,7 @@ use crate::Runtime;
 
 #[cfg(feature = "mcp")]
 use super::mcp::factory::McpCatalogFactory;
-use std::{
-    collections::HashMap,
-    sync::{Arc, LazyLock},
-};
-use tokio::sync::Mutex;
+use std::{collections::HashMap, sync::Arc};
 
 use super::{
     builtin::catalog::BuiltinToolCatalog, catalog::SpiceToolCatalog,
@@ -84,11 +80,9 @@ pub trait ToolCatalogFactory: Send + Sync {
     ) -> Result<Arc<dyn SpiceToolCatalog>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
-static TOOL_SHED_FACTORY: LazyLock<Mutex<HashMap<String, ToolFactory>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
 pub async fn register_all_factories(rt: Arc<Runtime>) {
-    let mut registry = TOOL_SHED_FACTORY.lock().await;
+    let tool_factories = rt.tool_factories();
+    let mut registry = tool_factories.lock().await;
     registry.insert(
         "builtin".to_string(),
         ToolFactory::Tool(Arc::new(BuiltinToolCatalog::new(Arc::clone(&rt)))),
