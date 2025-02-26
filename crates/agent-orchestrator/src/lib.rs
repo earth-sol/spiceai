@@ -113,7 +113,7 @@ pub struct AgentChat {
 const DEFAULT_MAX_RETRY: usize = 1;
 // This limitation is about single message in chat completion and not related to the model context window.
 // TODO: Split one message into multiple messages if it exceeds the limit. https://github.com/spicehq/timmy/issues/47
-const MAX_CONTENT_LENGTH: usize = 1048576;
+const MAX_CONTENT_LENGTH: usize = 1_048_576;
 
 impl AgentChat {
     pub fn new(
@@ -425,7 +425,7 @@ impl AgentChat {
                         pipeline::AgenticStage::Research { prompt } => {
                             let research = try_send!(
                                 service
-                                    .generate_research(researcher_model.as_ref(), prompt)
+                                    .generate_research(researcher_model.as_ref(), &prompt)
                                     .await,
                                 tx
                             );
@@ -436,7 +436,10 @@ impl AgentChat {
                         pipeline::AgenticStage::LogicalPlan(research) => {
                             let logical_plan = try_send!(
                                 service
-                                    .generate_logical_plan(logical_planner_model.as_ref(), research)
+                                    .generate_logical_plan(
+                                        logical_planner_model.as_ref(),
+                                        &research
+                                    )
                                     .await,
                                 tx
                             );
@@ -481,14 +484,14 @@ impl AgentChat {
                         }
                         pipeline::AgenticStage::Reporting(ref s) => {
                             let _ = tx
-                                .send(with_ending(pipeline.previous_step_summary().as_str()))
+                                .send(with_ending(&pipeline.previous_stage_summary().as_str()))
                                 .await;
                             let _ = tx.send(create_working_stream_payload(s.clone())).await;
                             break;
                         }
                     }
                     let _ = tx
-                        .send(with_ending(pipeline.previous_step_summary().as_str()))
+                        .send(with_ending(pipeline.previous_stage_summary().as_str()))
                         .await;
 
                     if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
