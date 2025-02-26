@@ -17,6 +17,7 @@ use llms::chat::Chat;
 use serde::Deserialize;
 use tokio::sync::RwLock;
 use tools::SpiceModelTool;
+use tracing::Instrument;
 pub struct PhysicalJobExecutor {
     // INPUTS
     plan: PhysicalPlan,
@@ -90,41 +91,58 @@ impl From<anyhow::Error> for ExecuteToolError {
 
 impl PhysicalJobExecutor {
     pub async fn execute(&mut self) -> Result<String, anyhow::Error> {
-        // reset physical plan execution log
-        reset_execution_log();
+        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_execution", input = %serde_json::to_string(&self.plan).unwrap_or_default());
 
-        let mut task_history = vec![];
-        let mut step_history = vec![];
+        let result: Result<String, anyhow::Error> = async {
+            // reset physical plan execution log
+            reset_execution_log();
 
-        for task in &self.plan.tasks {
-            tracing::info!("Executing task: {}", task.objective);
+            let mut task_history = vec![];
+            let mut step_history = vec![];
 
-            tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
+            for task in &self.plan.tasks {
+                tracing::info!("Executing task: {}", task.objective);
 
-            for step in &task.steps {
-                let output = self
-                    .execute_step(&mut step_history, step)
-                    .await
-                    .inspect_err(|err| {
-                        trace_execution_progress(step, &err.to_string());
-                    })?;
-                tracing::info!("Step output: {output:?}");
-                step_history.push(output);
+                tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
+
+                for step in &task.steps {
+                    let output = self
+                        .execute_step(&mut step_history, step)
+                        .await
+                        .inspect_err(|err| {
+                            trace_execution_progress(step, &err.to_string());
+                        })?;
+                    tracing::info!("Step output: {output:?}");
+                    step_history.push(output);
+                }
+
+                self.execution_history.push(step_history.clone());
+
+                task_history.extend(step_history.clone());
+                step_history = self
+                    .summarize_executed_steps(&self.verifier_model, &step_history)
+                    .await?;
             }
 
-            self.execution_history.push(step_history.clone());
-
-            task_history.extend(step_history.clone());
-            step_history = self
-                .summarize_executed_steps(&self.verifier_model, &step_history)
+            let summary = self
+                .final_summary(&self.verifier_model, &task_history)
                 .await?;
+
+            Ok(summary)
         }
+        .instrument(span.clone())
+        .await;
 
-        let summary = self
-            .final_summary(&self.verifier_model, &task_history)
-            .await?;
-
-        Ok(summary)
+        match result {
+            Ok(value) => {
+                tracing::info!(target: "task_history", captured_output = %value);
+                Ok(value)
+            }
+            Err(e) => {
+                tracing::error!(target: "task_history", parent: &span, "{e}");
+                Err(e)
+            }
+        }
     }
 
     async fn execute_step(
