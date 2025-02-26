@@ -18,7 +18,8 @@ use futures_util::TryStreamExt;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::{logical_plan_complete_summary, plan::LogicalPlan};
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
-use pipeline::{create_working_stream_payload, with_ending, with_starting};
+use pipeline::create_working_stream_payload;
+use progress::{Index, Progress};
 use research::{
     model::{parse_response, research_complete_msg},
     Research,
@@ -36,6 +37,7 @@ use util::{fibonacci_backoff::FibonacciBackoffBuilder, retry, RetryError};
 pub mod logical;
 pub mod physical;
 pub mod pipeline;
+mod progress;
 pub mod research;
 
 #[derive(Clone)]
@@ -72,7 +74,8 @@ impl AgentModels {
     }
 }
 
-macro_rules! try_send {
+/// Helper macro to send an error to the [`mpsc::Sender`] if the expression is an error.
+macro_rules! try_send_err {
     ($expr:expr, $tx:expr) => {
         match $expr {
             Ok(val) => val,
@@ -413,23 +416,18 @@ impl AgentChat {
 
                 let service = Arc::clone(&self);
                 let id = id.clone();
+                let mut progress = Progress::new(pipeline.index(0, 0), tx.clone());
                 loop {
-                    let _ = tx
-                        .send(with_starting(
-                            &pipeline.stage(),
-                            &pipeline.title(),
-                            &pipeline.starting_message(),
-                        ))
-                        .await;
+                    progress.start_working_stage().await;
                     match pipeline {
                         pipeline::AgenticStage::Research { prompt } => {
-                            let research = try_send!(
+                            let research = try_send_err!(
                                 service
                                     .generate_research(researcher_model.as_ref(), &prompt)
                                     .await,
                                 tx
                             );
-                            try_send!(
+                            try_send_err!(
                                 write_artifact("research/research_artifacts", &id, &research)
                                     .map_err(|e| {
                                         OpenAIError::InvalidArgument(format!(
@@ -441,7 +439,7 @@ impl AgentChat {
                             pipeline = pipeline::AgenticStage::LogicalPlan(research);
                         }
                         pipeline::AgenticStage::LogicalPlan(research) => {
-                            let logical_plan = try_send!(
+                            let logical_plan = try_send_err!(
                                 service
                                     .generate_logical_plan(
                                         logical_planner_model.as_ref(),
@@ -450,7 +448,7 @@ impl AgentChat {
                                     .await,
                                 tx
                             );
-                            try_send!(
+                            try_send_err!(
                                 write_artifact("logical/logical_plan", &id, &logical_plan).map_err(
                                     |e| {
                                         OpenAIError::InvalidArgument(format!(
@@ -463,7 +461,7 @@ impl AgentChat {
                             pipeline = pipeline::AgenticStage::PhysicalPlan(logical_plan);
                         }
                         pipeline::AgenticStage::PhysicalPlan(logical_plan) => {
-                            let physical_plan = try_send!(
+                            let physical_plan = try_send_err!(
                                 service
                                     .generate_physical_plan(
                                         &logical_plan,
@@ -474,7 +472,7 @@ impl AgentChat {
                                 tx
                             );
 
-                            try_send!(
+                            try_send_err!(
                                 write_artifact("physical/physical_plan", &id, &physical_plan)
                                     .map_err(|e| {
                                         OpenAIError::InvalidArgument(format!(
@@ -493,7 +491,7 @@ impl AgentChat {
                                 service.tools.clone(),
                                 self.models.verifier.clone(),
                             );
-                            let output = try_send!(
+                            let output = try_send_err!(
                                 executor.execute().await.map_err(|e| {
                                     OpenAIError::InvalidArgument(format!(
                                         "Error executing physical plan: {e}"
@@ -505,16 +503,19 @@ impl AgentChat {
                             pipeline = pipeline::AgenticStage::Reporting(output);
                         }
                         pipeline::AgenticStage::Reporting(ref s) => {
-                            let _ = tx
-                                .send(with_ending(pipeline.previous_stage_summary().as_str()))
+                            progress
+                                .with_working_ending(pipeline.previous_stage_summary().as_str())
                                 .await;
-                            let _ = tx.send(create_working_stream_payload(s.clone())).await;
+                            progress.send_message(s.as_str()).await;
                             break;
                         }
                     }
-                    let _ = tx
-                        .send(with_ending(pipeline.previous_stage_summary().as_str()))
+                    progress
+                        .with_working_ending(pipeline.previous_stage_summary().as_str())
                         .await;
+
+                    // Advance to the next stage (pipeline itself updated above).
+                    progress.new_stage((&pipeline).into());
 
                     if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
                         break;
