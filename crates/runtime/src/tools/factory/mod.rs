@@ -27,9 +27,6 @@ use std::{
 };
 use tokio::sync::Mutex;
 
-#[cfg(feature = "mcp")]
-use super::mcp::factory::McpCatalogFactory;
-
 use super::{
     builtin::catalog::BuiltinToolCatalog, catalog::SpiceToolCatalog,
     memory::catalog::MemoryToolCatalog, SpiceModelTool, Tooling,

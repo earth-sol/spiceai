@@ -1,7 +1,6 @@
 use plan::LogicalPlan;
 
 pub mod plan;
-pub mod planner;
 
 pub(crate) fn logical_plan_complete_summary(l: &LogicalPlan) -> String {
     let objectives = l

@@ -23,7 +23,7 @@ use research::{
     model::{parse_response, research_complete_msg},
     Research,
 };
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use snafu::ResultExt;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
