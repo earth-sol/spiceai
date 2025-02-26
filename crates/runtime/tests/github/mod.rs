@@ -64,11 +64,13 @@ async fn test_github_issues() -> Result<(), String> {
                 .build()
                 .await;
 
+            let cloned_rt = Arc::new(rt.clone());
+
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
-                () = rt.load_components() => {}
+                () = cloned_rt.load_components() => {}
             }
 
             let mut now = std::time::Instant::now();
@@ -169,11 +171,13 @@ async fn test_github_commits() -> Result<(), String> {
                 .build()
                 .await;
 
+            let cloned_rt = Arc::new(rt.clone());
+
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
-                () = rt.load_components() => {}
+                () = cloned_rt.load_components() => {}
             }
 
             let now = std::time::Instant::now();
@@ -228,11 +232,13 @@ async fn test_github_stargazers() -> Result<(), String> {
                 .build()
                 .await;
 
+            let cloned_rt = Arc::new(rt.clone());
+
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
-                () = rt.load_components() => {}
+                () = cloned_rt.load_components() => {}
             }
 
             let now = std::time::Instant::now();

@@ -257,11 +257,13 @@ async fn test_graphql() -> Result<(), String> {
                 .build()
                 .await;
 
+            let cloned_rt = Arc::new(rt.clone());
+
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
-                () = rt.load_components() => {}
+                () = cloned_rt.load_components() => {}
             }
 
             let queries: QueryTests = vec![
@@ -334,11 +336,13 @@ async fn test_graphql_pagination() -> Result<(), String> {
             .build()
             .await;
 
+        let cloned_rt = Arc::new(rt.clone());
+
         tokio::select! {
             () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                 return Err("Timed out waiting for datasets to load".to_string());
             }
-            () = rt.load_components() => {}
+            () = cloned_rt.load_components() => {}
         }
 
         let queries: QueryTests = vec![

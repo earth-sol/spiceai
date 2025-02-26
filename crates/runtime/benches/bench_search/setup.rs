@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::collections::HashMap;
-
 use arrow::array::RecordBatch;
 use datafusion::sql::TableReference;
 use futures::TryStreamExt;
 use runtime::{dataupdate::DataUpdate, Runtime};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::{
     utils::{get_branch_name, get_commit_sha, init_tracing},
@@ -73,6 +73,7 @@ pub(crate) async fn setup_benchmark(
     };
 
     let rt = Runtime::builder().with_app(app).build().await;
+    let cloned_rt = Arc::new(rt.clone());
 
     // include embeddings initial loading time to indexing time
     benchmark_result.start_index();
@@ -81,7 +82,7 @@ pub(crate) async fn setup_benchmark(
         () = tokio::time::sleep(std::time::Duration::from_secs(5 * 60)) => {
             panic!("Timed out waiting for datasets to load in setup_benchmark()");
         }
-        () = rt.load_components() => {}
+        () = cloned_rt.load_components() => {}
     }
 
     Ok((rt, benchmark_result))
