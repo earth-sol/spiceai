@@ -56,7 +56,7 @@ impl AgentPipeline {
             Self::LogicalPlan(_) => "Creating logical plan".to_string(),
             Self::PhysicalPlan(_) => "Creating physical plan".to_string(),
             Self::Execution(_) => "Executing physical plan".to_string(),
-            Self::Output(_) => "Outputing result".to_string(),
+            Self::Output(_) => "Creating final report".to_string(),
         }
     }
 }

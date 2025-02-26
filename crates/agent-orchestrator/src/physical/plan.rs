@@ -118,7 +118,7 @@ impl From<Action> for StepType {
 
 impl PhysicalPlan {
     pub(crate) fn summary() -> String {
-        "Finished Physical Plan. Executing physical plan".to_string()
+        "Finished creating Physical Plan. Executing physical plan".to_string()
     }
 
     pub fn build_request(
