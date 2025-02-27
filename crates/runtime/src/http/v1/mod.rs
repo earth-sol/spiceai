@@ -30,6 +30,7 @@ pub mod search;
 pub mod spicepods;
 pub mod status;
 pub mod tools;
+pub mod workers;
 
 use std::sync::Arc;
 

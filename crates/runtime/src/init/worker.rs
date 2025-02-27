@@ -19,10 +19,9 @@ limitations under the License.
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{get_params_with_secrets, metrics, status, timing::TimeMeasurement, Runtime};
+use crate::{get_params_with_secrets, metrics, status, timing::TimeMeasurement, workers, Runtime};
 use opentelemetry::KeyValue;
 use snafu::prelude::*;
-use workers::initialize_worker;
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -84,8 +83,8 @@ impl Runtime {
 
         let params = get_params_with_secrets(self.secrets(), &p).await;
 
-        // Initialize the worker
-        match initialize_worker(worker_config, Arc::new(params)).await {
+        // Use the new worker factory system to load the worker
+        match workers::load_worker(worker_config, Arc::new(params)).await {
             Ok(worker) => {
                 // Add worker to registry
                 let mut registry = self.workers.write().await;

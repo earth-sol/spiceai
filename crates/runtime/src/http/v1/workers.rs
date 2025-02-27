@@ -1,0 +1,160 @@
+/*
+Copyright 2024-2025 The Spice.ai OSS Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+use std::{collections::HashMap, sync::Arc};
+
+use app::App;
+use axum::{
+    extract::Query,
+    http::status,
+    response::{IntoResponse, Json, Response},
+    Extension,
+};
+use csv::Writer;
+use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
+
+use crate::{status::ComponentStatus, Runtime};
+
+use super::Format;
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+pub struct WorkersQueryParams {
+    /// The format of the response (e.g., `json` or `csv`).
+    #[serde(default)]
+    pub format: Format,
+}
+
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct WorkerResponse {
+    object: String,
+    data: Vec<Worker>,
+}
+
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct Worker {
+    /// The source of the worker
+    from: String,
+
+    /// The name of the worker
+    name: String,
+
+    /// The role of the worker
+    role: String,
+}
+
+/// List Workers
+///
+/// Returns a list of workers in the system.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/v1/workers",
+    operation_id = "get_workers",
+    params(ModelsQueryParams),
+    responses(
+        (status = 200, description = "List of workers in JSON format", content((
+            OpenAIModelResponse = "application/json",
+            example = json!({
+                "object": "list",
+                "data": [
+                    {
+                        "from": "models:gpt-4o",
+                        "name": "gpt-4o-researcher",
+                        "role": "researcher"
+                    },
+                    {
+                        "from": "models:gpt-4o",
+                        "name": "gpt-4o-writer",
+                        "role": "writer"
+                    }
+                ]
+            })
+        ), (
+            String = "text/csv",
+            example = "
+from,name,role
+models:gpt-4o,gpt-4o-researcher,researcher
+models:gpt-4o,gpt-4o-writer,writer
+"
+        ))),
+        (status = 500, description = "Internal server error occurred while processing workers", content((
+            serde_json::Value = "application/json",
+            example = json!({
+                "error": "App not initialized"
+            })
+        )))
+    )
+))]
+
+pub(crate) async fn get(
+    Extension(app): Extension<Arc<RwLock<Option<Arc<App>>>>>,
+    Extension(rt): Extension<Arc<Runtime>>,
+    Query(params): Query<WorkersQueryParams>,
+) -> Response {
+    let workers = match app.read().await.as_ref() {
+        Some(a) => a
+            .workers
+            .iter()
+            .map(|w| {
+                let d = if w.datasets.is_empty() {
+                    None
+                } else {
+                    Some(w.datasets.clone())
+                };
+                Worker {
+                    from: w.from.clone(),
+                    name: w.name.clone(),
+                    role: w.role.clone(),
+                }
+            })
+            .collect::<Vec<Worker>>(),
+        None => {
+            return (
+                status::StatusCode::INTERNAL_SERVER_ERROR,
+                "App not initialized",
+            )
+                .into_response();
+        }
+    };
+
+    match params.format {
+        Format::Json => (
+            status::StatusCode::OK,
+            Json(OpenAIModelResponse {
+                object: "list".to_string(),
+                data: models,
+            }),
+        )
+            .into_response(),
+        Format::Csv => match convert_details_to_csv(&workers) {
+            Ok(csv) => (status::StatusCode::OK, csv).into_response(),
+            Err(e) => {
+                tracing::error!("Error converting to CSV: {e}");
+                (status::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+            }
+        },
+    }
+}
+
+fn convert_details_to_csv(workers: &[Worker]) -> Result<String, Box<dyn std::error::Error>> {
+    let mut w = Writer::from_writer(vec![]);
+    for worker in workers {
+        let _ = w.serialize(worker);
+    }
+    w.flush()?;
+    Ok(String::from_utf8(w.into_inner()?)?)
+}

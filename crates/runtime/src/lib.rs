@@ -89,6 +89,7 @@ pub mod topological_ordering;
 pub(crate) mod tracers;
 mod tracing_util;
 mod view;
+pub mod workers;
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -625,6 +626,7 @@ impl Runtime {
         dataaccelerator::unregister_all().await;
         tools::factory::unregister_all_factories().await;
         document_parse::unregister_all().await;
+        workers::unregister_all().await;
         self.df.shutdown().await;
     }
 }
