@@ -321,3 +321,31 @@ pub(crate) mod telemetry {
         QUERY_EXECUTION_DURATION_MS.record(duration.as_secs_f64() * 1000.0, dimensions);
     }
 }
+
+/// Metrics related to workers
+pub(crate) mod workers {
+    use super::{global, Counter, Histogram, LazyLock, Meter, UpDownCounter};
+
+    pub(crate) static WORKERS_METER: LazyLock<Meter> = LazyLock::new(|| global::meter("worker"));
+
+    pub(crate) static COUNT: LazyLock<UpDownCounter<i64>> = LazyLock::new(|| {
+        WORKERS_METER
+            .i64_up_down_counter("spice.workers")
+            .with_description("Number of workers loaded")
+            .build()
+    });
+
+    pub(crate) static LOAD_DURATION_MS: LazyLock<Histogram<f64>> = LazyLock::new(|| {
+        WORKERS_METER
+            .f64_histogram("spice.workers.load_duration_ms")
+            .with_description("Time to load a worker in milliseconds")
+            .build()
+    });
+
+    pub(crate) static LOAD_ERROR: LazyLock<Counter<u64>> = LazyLock::new(|| {
+        WORKERS_METER
+            .u64_counter("spice.workers.load_errors")
+            .with_description("Number of worker load errors")
+            .build()
+    });
+}

@@ -25,7 +25,7 @@ use std::{fmt::Debug, path::PathBuf};
 
 use component::{
     catalog::Catalog, dataset::Dataset, embeddings::Embeddings, eval::Eval, extension::Extension,
-    model::Model, runtime::Runtime, secret::Secret, view::View,
+    model::Model, runtime::Runtime, secret::Secret, view::View, worker::Worker,
 };
 
 use spec::{SpicepodDefinition, SpicepodVersion};
@@ -95,6 +95,8 @@ pub struct Spicepod {
     pub evals: Vec<Eval>,
 
     pub tools: Vec<Tool>,
+
+    pub workers: Vec<Worker>,
 
     pub runtime: Runtime,
 }
@@ -174,6 +176,14 @@ impl Spicepod {
             component::resolve_component_references(fs, &path, &spicepod_definition.tools, "tools")
                 .context(UnableToResolveSpicepodComponentsSnafu { path: path.clone() })?;
 
+        let resolved_workers = component::resolve_component_references(
+            fs,
+            &path,
+            &spicepod_definition.workers,
+            "workers",
+        )
+        .context(UnableToResolveSpicepodComponentsSnafu { path: path.clone() })?;
+
         detect_duplicate_component_names("secrets", &spicepod_definition.secrets[..])?;
         detect_duplicate_component_names("dataset", &resolved_datasets[..])?;
         detect_duplicate_component_names("view", &resolved_views[..])?;
@@ -181,6 +191,7 @@ impl Spicepod {
         detect_duplicate_component_names("embedding", &resolved_embeddings[..])?;
         detect_duplicate_component_names("eval", &resolved_evals[..])?;
         detect_duplicate_component_names("tool", &resolved_tools[..])?;
+        detect_duplicate_component_names("worker", &resolved_workers[..])?;
 
         Ok(from_definition(
             spicepod_definition,
@@ -191,6 +202,7 @@ impl Spicepod {
             resolved_evals,
             resolved_tools,
             resolved_models,
+            resolved_workers,
         ))
     }
 
@@ -251,6 +263,7 @@ fn from_definition(
     evals: Vec<Eval>,
     tools: Vec<Tool>,
     models: Vec<Model>,
+    workers: Vec<Worker>,
 ) -> Spicepod {
     Spicepod {
         name: spicepod_definition.name,
@@ -272,6 +285,7 @@ fn from_definition(
         embeddings,
         evals,
         tools,
+        workers,
         dependencies: spicepod_definition.dependencies,
         runtime: spicepod_definition.runtime,
     }

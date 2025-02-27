@@ -1,0 +1,19 @@
+[package]
+edition.workspace = true
+exclude.workspace = true
+homepage.workspace = true
+license.workspace = true
+name = "workers"
+description = "Workers"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+arrow = { workspace = true }
+async-trait.workspace = true
+model_components = { path = "../model_components" }
+secrecy = { workspace = true }
+serde_json.workspace = true
+snafu = { workspace = true }
+spicepod = { path = "../spicepod" }

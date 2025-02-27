@@ -23,6 +23,7 @@ members = [
     "crates/test-framework",
     "crates/tools",
     "crates/util",
+    "crates/workers",
     "tools/evalconverter",
     "tools/flightpublisher/",
     "tools/flightsubscriber/",

@@ -18,6 +18,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use app::App;
 use tokio::sync::{Mutex, RwLock};
+use workers::WorkerRegistry;
 
 use crate::{
     catalogconnector, dataaccelerator, dataconnector,
@@ -187,6 +188,7 @@ impl RuntimeBuilder {
             prometheus_registry: self.prometheus_registry,
             rate_limits: self.rate_limits.unwrap_or_default(),
             status,
+            workers: Arc::new(RwLock::new(WorkerRegistry::new())),
         };
 
         let mut extensions: HashMap<String, Arc<dyn Extension>> = HashMap::new();

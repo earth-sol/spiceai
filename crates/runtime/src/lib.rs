@@ -48,6 +48,7 @@ use tokio::sync::{oneshot::error::RecvError, RwLock};
 use tools::factory::{default_available_catalogs, ToolFactory};
 use tools::{catalog::SpiceToolCatalog, Tooling};
 pub use util::shutdown_signal;
+use workers::WorkerRegistry;
 
 use crate::extension::Extension;
 pub mod accelerated_table;
@@ -302,6 +303,9 @@ pub struct Runtime {
     spaced_tracer: Arc<tracers::SpacedTracer>,
 
     status: Arc<status::RuntimeStatus>,
+
+    /// Registry of loaded workers
+    workers: Arc<RwLock<WorkerRegistry>>,
 }
 
 impl Runtime {
@@ -608,6 +612,12 @@ impl Runtime {
         if let Err(err) = load_result {
             tracing::error!("Could not start the Spice runtime: {err}");
         }
+    }
+
+    /// Get the worker registry
+    #[must_use]
+    pub fn workers(&self) -> Arc<RwLock<WorkerRegistry>> {
+        Arc::clone(&self.workers)
     }
 }
 
