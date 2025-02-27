@@ -204,6 +204,7 @@ impl AgentChat {
         plan: &LogicalPlan,
         physical_tool_planner_model: &dyn Chat,
         physical_prompt_planner_model: &dyn Chat,
+        progress: &Progress,
         tx: &Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
         retry_message: String,
     ) -> Result<PhysicalPlan, OpenAIError> {
@@ -212,6 +213,7 @@ impl AgentChat {
                 plan,
                 physical_tool_planner_model,
                 physical_prompt_planner_model,
+                progress,
             )
         })
         .await
@@ -223,7 +225,7 @@ impl AgentChat {
         research_model: &dyn Chat,
         prompt: &String,
     ) -> Result<Research, OpenAIError> {
-        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::research", input = prompt);
+        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::research", input = %prompt);
         let result: Result<Research, OpenAIError> = async {
             let mut initial_request = CreateChatCompletionRequestArgs::default()
                 .messages(vec![ChatCompletionRequestMessage::User(
@@ -349,6 +351,7 @@ impl AgentChat {
         plan: &LogicalPlan,
         physical_tool_planner_model: &dyn Chat,
         physical_prompt_planner_model: &dyn Chat,
+        progress: &Progress,
     ) -> Result<PhysicalPlan, OpenAIError> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan", input = %serde_json::to_string(&plan).unwrap_or_default());
 
@@ -358,7 +361,9 @@ impl AgentChat {
                 physical_tool_planner_model,
                 physical_prompt_planner_model,
                 self.models.executor.clone(),
+                progress,
             )
+            .instrument(span.clone())
             .await?;
             Ok(physical_plan)
         }
@@ -434,7 +439,7 @@ impl AgentChat {
 
                 let service = Arc::clone(&self);
                 let id = id.clone();
-                let mut progress = Progress::new(pipeline.index(0, 0), tx.clone());
+                let mut progress = Progress::new(pipeline.new_stage_index(), tx.clone());
                 loop {
                     progress.start_working_stage().await;
                     let retry_message = pipeline.retry_message();
@@ -493,6 +498,7 @@ impl AgentChat {
                                         &logical_plan,
                                         physical_tool_planner_model.as_ref(),
                                         physical_prompt_planner_model.as_ref(),
+                                        &progress,
                                         &tx,
                                         retry_message
                                     )
@@ -520,7 +526,7 @@ impl AgentChat {
                                 self.models.verifier.clone(),
                             );
                             let output = try_send_err!(
-                                executor.execute().await.map_err(|e| {
+                                executor.execute(&progress).await.map_err(|e| {
                                     OpenAIError::InvalidArgument(format!(
                                         "Error executing physical plan: {e}"
                                     ))

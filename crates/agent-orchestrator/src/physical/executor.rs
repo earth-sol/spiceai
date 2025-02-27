@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{validate_structured_output, ConversionError};
+use crate::{progress::Progress, validate_structured_output, ConversionError};
 
 use super::plan::{PhysicalPlan, PromptStep, Step, ToolStep};
 use async_openai::types::{
@@ -90,7 +90,7 @@ impl From<anyhow::Error> for ExecuteToolError {
 }
 
 impl PhysicalJobExecutor {
-    pub async fn execute(&mut self) -> Result<String, anyhow::Error> {
+    pub async fn execute(&mut self, progress: &Progress) -> Result<String, anyhow::Error> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_execution", input = %serde_json::to_string(&self.plan).unwrap_or_default());
 
         let result: Result<String, anyhow::Error> = async {
@@ -100,28 +100,66 @@ impl PhysicalJobExecutor {
             let mut task_history = vec![];
             let mut step_history = vec![];
 
-            for task in &self.plan.tasks {
-                tracing::info!("Executing task: {}", task.objective);
+            for (t, task) in self.plan.tasks.iter().enumerate() {
+                let task_span = tracing::span!(target: "task_history", parent: &span, tracing::Level::INFO, "orchestrator::physical_task_execution", input = %serde_json::to_string(&task).unwrap_or_default(), task = t); // Yes
 
-                tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
+                let step_history: Vec<ChatCompletionRequestMessage> = async {
+                    let t_progress = progress.with_new_task(t + 1);
+                    tracing::info!("Executing task: {}", task.objective);
 
-                for step in &task.steps {
-                    let output = self
-                        .execute_step(&mut step_history, step)
+                    tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
+                    t_progress
+                        .send_open_message(format!("Executing {} task", t_progress.task_str()).as_str())
+                        .await;
+                    for (i, step) in task.steps.iter().enumerate() {
+                        let step_span = tracing::span!(target: "task_history",  parent: &task_span, tracing::Level::INFO, "orchestrator::physical_step_execution", input = %serde_json::to_string(&task).unwrap_or_default(), task = t);  // Yes
+                        async {
+                            let output = self
+                                .execute_step(&mut step_history, step)
+                                .await
+                                .inspect_err(|err| {
+                                    trace_execution_progress(step, &err.to_string());
+                                    tracing::error!(target: "task_history", parent: &step_span, "{err}");
+                                    tracing::error!(target: "task_history", parent: &task_span, "{err}");
+                                })?;
+                            tracing::info!(
+                                target: "task_history",
+                                parent: &step_span,
+                                captured_output = %serde_json::to_string(&output).unwrap_or_default()
+                            );
+                            tracing::info!("Step output: {output:?}");
+                            step_history.push(output);
+                            let s_progress = t_progress.with_new_step(i + 1);
+                            s_progress
+                                .send_complete_message(
+                                    format!(
+                                        "Finished executing {} step in {} task.",
+                                        s_progress.step_str(),
+                                        s_progress.task_str()
+                                    )
+                                    .as_str(),
+                                )
+                                .await;
+                            Ok::<(), anyhow::Error>(())
+                        }
+                        .instrument(step_span.clone())
+                        .await?;
+                    };
+                    t_progress
+                        .send_close_message(Some(
+                            format!("Completed executing {} task.", t_progress.task_str()).as_str(),
+                        ))
+                        .await;
+
+                    self
+                        .summarize_executed_steps(&self.verifier_model, &step_history)
                         .await
-                        .inspect_err(|err| {
-                            trace_execution_progress(step, &err.to_string());
-                        })?;
-                    tracing::info!("Step output: {output:?}");
-                    step_history.push(output);
-                }
+                        .inspect_err(|e| tracing::error!(target: "task_history", parent: &task_span, "{e}"))
 
+                }.instrument(task_span.clone()).await?;
                 self.execution_history.push(step_history.clone());
 
                 task_history.extend(step_history.clone());
-                step_history = self
-                    .summarize_executed_steps(&self.verifier_model, &step_history)
-                    .await?;
             }
 
             let summary = self
@@ -135,7 +173,7 @@ impl PhysicalJobExecutor {
 
         match result {
             Ok(value) => {
-                tracing::info!(target: "task_history", captured_output = %value);
+                tracing::info!(target: "task_history", parent: &span, captured_output = %value);
                 Ok(value)
             }
             Err(e) => {

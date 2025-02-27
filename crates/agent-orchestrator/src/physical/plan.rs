@@ -7,6 +7,7 @@ use async_openai::{
 };
 use llms::chat::Chat;
 use serde::{Deserialize, Serialize};
+use tracing::{Instrument, Span};
 use uuid::Uuid;
 
 use crate::{
@@ -14,6 +15,7 @@ use crate::{
         self,
         plan::{Action, LogicalPlan},
     },
+    progress::Progress,
     validate_structured_output, ConversionError,
 };
 
@@ -262,53 +264,92 @@ impl PhysicalPlan {
         tool_planner: &dyn Chat,
         prompt_planner: &dyn Chat,
         executor: String,
+        progress: Progress,
     ) -> Result<Task, async_openai::error::OpenAIError> {
-        tracing::info!("Generating physical plan for task: {}", task.objective);
-        let mut steps: Vec<Step> = vec![];
-        for step in &task.steps {
-            tracing::info!("Generating physical plan for step: {:?}", step.uuid);
-            match step.action.into() {
-                StepType::Tool => {
-                    let message = vec![ChatCompletionRequestMessage::System(
-                        format!("The following models are available for selection: {executor}")
-                            .into(),
-                    )];
-                    let req = Self::build_request(
-                        Some(message),
-                        steps.as_slice(),
-                        step,
-                        &task.objective,
-                    )?;
-                    steps.push(
-                        Self::plan_request(req, StepType::Tool, tool_planner)
-                            .await?
-                            .with_task_id(task.uuid),
-                    );
-                }
-                StepType::Prompt => {
-                    let message = vec![ChatCompletionRequestMessage::System(
-                        format!("The following models are available for selection: {executor}")
-                            .into(),
-                    )];
-                    let req = Self::build_request(
-                        Some(message),
-                        steps.as_slice(),
-                        step,
-                        &task.objective,
-                    )?;
-                    steps.push(
-                        Self::plan_request(req, StepType::Prompt, prompt_planner)
-                            .await?
-                            .with_task_id(task.uuid),
-                    );
-                }
+        let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_task", input = %serde_json::to_string(&task).unwrap_or_default(), executor=executor); // No
+        let result: Result<Task, OpenAIError> = async {
+            tracing::info!("Generating physical plan for task: {}", task.objective);
+            let mut steps: Vec<Step> = vec![];
+            for (i, step) in task.steps.iter().enumerate() {
+                let step_span = tracing::span!(
+                    target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_step", // Yes
+                    input = %serde_json::to_string(&step).unwrap_or_default(),
+                    step_number=i
+                );
+                let output: Result<(), async_openai::error::OpenAIError> = async {
+                    tracing::info!("Generating physical plan for step: {:?}", step.uuid);
+                    let result = match step.action.into() {
+                        StepType::Tool => {
+                            let message = vec![ChatCompletionRequestMessage::System(
+                                format!("The following models are available for selection: {executor}")
+                                    .into(),
+                            )];
+                            let req = Self::build_request(
+                                Some(message),
+                                steps.as_slice(),
+                                step,
+                                &task.objective,
+                            ).inspect_err(|e| tracing::error!(target: "task_history", parent: &step_span, "{e}"))?;
+                            Self::plan_request(req, StepType::Tool, tool_planner).await
+                        }
+                        StepType::Prompt => {
+                            let message = vec![ChatCompletionRequestMessage::System(
+                                format!("The following models are available for selection: {executor}")
+                                    .into(),
+                            )];
+                            let req = Self::build_request(
+                                Some(message),
+                                steps.as_slice(),
+                                step,
+                                &task.objective,
+                            )?;
+                            Self::plan_request(req, StepType::Prompt, prompt_planner).await
+                        }
+                    }.inspect_err(|e| tracing::error!(target: "task_history", parent: &step_span, "{e}"))?
+                    .with_task_id(task.uuid);
+
+                    tracing::info!(target: "task_history", parent: &step_span, captured_output = %serde_json::to_string(&result).unwrap_or_default());
+                    steps.push(result);
+
+                    let s_progress = progress.with_new_step(i + 1);
+                    s_progress
+                        .send_complete_message(
+                            format!(
+                                "Finished {} step in {} task.",
+                                s_progress.step_str(),
+                                s_progress.task_str()
+                            )
+                            .as_str(),
+                        )
+                        .await;
+
+                    Ok(())
+                }.instrument(step_span.clone()).await;
+                output?;
+            }
+
+            progress
+                .send_complete_message(format!("Finished {} task.", progress.task_str()).as_str())
+                .await;
+
+            Ok(Task {
+                objective: task.objective.clone(),
+                steps,
+            })
+        }
+        .instrument(span.clone())
+        .await;
+
+        match result {
+            Ok(value) => {
+                tracing::info!(target: "task_history", captured_output = %serde_json::to_string(&value).unwrap_or_default());
+                Ok(value)
+            }
+            Err(e) => {
+                tracing::error!(target: "task_history", parent: &span, "{e}");
+                Err(e)
             }
         }
-
-        Ok(Task {
-            objective: task.objective.clone(),
-            steps,
-        })
     }
 
     pub async fn plan(
@@ -316,13 +357,22 @@ impl PhysicalPlan {
         tool_planner: &dyn Chat,
         prompt_planner: &dyn Chat,
         executor: String,
+        progress: &Progress,
     ) -> Result<Self, async_openai::error::OpenAIError> {
         // for each task, convert the list of steps from the logical plan based on their StepType
-        let futs = logical_plan
-            .tasks
-            .iter()
-            .map(|t| Self::plan_task(t, tool_planner, prompt_planner, executor.clone()));
-        let tasks = futures::future::try_join_all(futs).await?;
+        let futs = logical_plan.tasks.iter().enumerate().map(|(i, t)| {
+            Self::plan_task(
+                t,
+                tool_planner,
+                prompt_planner,
+                executor.clone(),
+                progress.with_new_task(i + 1),
+            )
+            .instrument(Span::current())
+        });
+        let tasks = futures::future::try_join_all(futs)
+            .instrument(Span::current())
+            .await?;
 
         Ok(Self { tasks })
     }

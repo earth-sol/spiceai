@@ -71,11 +71,11 @@ impl AgenticStage {
         }
     }
 
-    pub(crate) fn index(&self, task: usize, step: usize) -> Index {
+    pub(crate) fn new_stage_index(&self) -> Index {
         Index {
             stage: self.into(),
-            task,
-            step,
+            task: None,
+            step: None,
         }
     }
 

@@ -6,7 +6,7 @@ pub(crate) fn logical_plan_complete_summary(l: &LogicalPlan) -> String {
     let objectives = l
         .tasks
         .iter()
-        .map(|t| format!("- {}\n", t.objective.clone()))
+        .map(|t| format!("- {}", t.objective.clone()))
         .collect::<Vec<_>>();
 
     format!(
