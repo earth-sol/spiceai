@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use app::App;
 use axum::{
@@ -26,7 +26,7 @@ use csv::Writer;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::{status::ComponentStatus, Runtime};
+use crate::Runtime;
 
 use super::Format;
 
@@ -64,10 +64,10 @@ pub(crate) struct Worker {
     get,
     path = "/v1/workers",
     operation_id = "get_workers",
-    params(ModelsQueryParams),
+    params(WorkersQueryParams),
     responses(
         (status = 200, description = "List of workers in JSON format", content((
-            OpenAIModelResponse = "application/json",
+            WorkerResponse = "application/json",
             example = json!({
                 "object": "list",
                 "data": [
@@ -109,17 +109,10 @@ pub(crate) async fn get(
         Some(a) => a
             .workers
             .iter()
-            .map(|w| {
-                let d = if w.datasets.is_empty() {
-                    None
-                } else {
-                    Some(w.datasets.clone())
-                };
-                Worker {
-                    from: w.from.clone(),
-                    name: w.name.clone(),
-                    role: w.role.clone(),
-                }
+            .map(|w| Worker {
+                from: w.from.clone(),
+                name: w.name.clone(),
+                role: w.role.clone(),
             })
             .collect::<Vec<Worker>>(),
         None => {
@@ -136,7 +129,7 @@ pub(crate) async fn get(
             status::StatusCode::OK,
             Json(OpenAIModelResponse {
                 object: "list".to_string(),
-                data: models,
+                data: workers,
             }),
         )
             .into_response(),
