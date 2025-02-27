@@ -17,7 +17,7 @@ limitations under the License.
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use app::App;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use workers::WorkerRegistry;
 
 use crate::{
