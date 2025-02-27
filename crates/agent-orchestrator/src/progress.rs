@@ -1,18 +1,8 @@
-use std::{fmt::Display, time::SystemTime};
+use std::fmt::Display;
 
-use async_openai::{
-    error::OpenAIError,
-    types::{
-        ChatChoiceStream, ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageContent,
-        ChatCompletionRequestUserMessageContent, ChatCompletionStreamResponseDelta,
-        CreateChatCompletionRequest, CreateChatCompletionStreamResponse, Role,
-    },
-};
+use async_openai::{error::OpenAIError, types::CreateChatCompletionStreamResponse};
 
-use crate::{
-    create_working_stream_payload, logical_plan_complete_summary, pipeline::AgenticStage,
-    research::Research, research_complete_msg, LogicalPlan, PhysicalPlan,
-};
+use crate::{create_working_stream_payload, pipeline::AgenticStage};
 
 pub enum StageName {
     Research,
@@ -38,8 +28,7 @@ impl Display for StageName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Research => write!(f, "research"),
-            Self::LogicalPlan => write!(f, "planning"),
-            Self::PhysicalPlan => write!(f, "planning"),
+            Self::PhysicalPlan | Self::LogicalPlan => write!(f, "planning"),
             Self::Execution => write!(f, "execution"),
             Self::Reporting => write!(f, "reporting"),
         }
@@ -75,14 +64,6 @@ impl Progress {
         self.sender.send(req).await.is_ok()
     }
 
-    pub fn increment_task(&mut self) {
-        self.idx.task += 1;
-    }
-
-    pub fn increment_step(&mut self) {
-        self.idx.step += 1;
-    }
-
     pub fn new_stage(&mut self, stage: StageName) {
         self.idx.stage = stage;
         self.idx.task = 0;
@@ -98,10 +79,6 @@ pub struct Index {
 }
 
 impl Index {
-    pub(crate) fn stage(&self) -> String {
-        self.stage.to_string()
-    }
-
     pub(crate) fn title(&self) -> String {
         match self.stage {
             StageName::Research => "Research".to_string(),

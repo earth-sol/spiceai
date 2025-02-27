@@ -53,8 +53,7 @@ impl Display for StageName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Research => write!(f, "research"),
-            Self::LogicalPlan => write!(f, "planning"),
-            Self::PhysicalPlan => write!(f, "planning"),
+            Self::LogicalPlan | Self::PhysicalPlan => write!(f, "planning"),
             Self::Execution => write!(f, "execution"),
             Self::Reporting => write!(f, "reporting"),
         }

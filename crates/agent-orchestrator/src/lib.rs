@@ -19,7 +19,7 @@ use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::{logical_plan_complete_summary, plan::LogicalPlan};
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
 use pipeline::create_working_stream_payload;
-use progress::{Index, Progress};
+use progress::Progress;
 use research::{
     model::{parse_response, research_complete_msg},
     Research,
