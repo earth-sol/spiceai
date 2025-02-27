@@ -23,9 +23,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
+use workers::SpiceWorker;
 
 #[derive(Debug, Snafu)]
-pub enum Error {
+pub enum WorkerError {
     #[snafu(display("Unsupported worker type: {worker_type}"))]
     UnsupportedWorkerType { worker_type: String },
 
@@ -33,7 +34,7 @@ pub enum Error {
     WorkerCreationFailed { source: workers::Error },
 }
 
-pub type Result<T, E = Error> = std::result::Result<T, E>;
+pub type Result<T, E = WorkerError> = std::result::Result<T, E>;
 pub type AnyErrorResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 type NewWorkerResult = AnyErrorResult<Box<dyn SpiceWorker>>;
@@ -122,7 +123,7 @@ pub async fn load_worker(
     params: Arc<HashMap<String, SecretString>>,
 ) -> Result<Box<dyn SpiceWorker>> {
     match create_worker(worker_config, params).await {
-        Some(result) => result.map_err(|e| Error::WorkerCreationFailed {
+        Some(result) => result.map_err(|e| WorkerError::WorkerCreationFailed {
             source: workers::Error::InvalidWorkerConfig {
                 message: e.to_string(),
             },
@@ -132,7 +133,7 @@ pub async fn load_worker(
             let parts: Vec<&str> = worker_config.from.splitn(2, ':').collect();
             let worker_type = parts.first().map_or("", |s| *s);
 
-            Err(Error::UnsupportedWorkerType {
+            Err(WorkerError::UnsupportedWorkerType {
                 worker_type: worker_type.to_string(),
             })
         }

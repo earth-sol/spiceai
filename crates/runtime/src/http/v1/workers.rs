@@ -25,7 +25,6 @@ use axum::{
 use csv::Writer;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use utoipa;
 
 use crate::Runtime;
 
@@ -103,7 +102,7 @@ models:gpt-4o,gpt-4o-writer,writer
 
 pub(crate) async fn get(
     Extension(app): Extension<Arc<RwLock<Option<Arc<App>>>>>,
-    Extension(rt): Extension<Arc<Runtime>>,
+    Extension(_rt): Extension<Arc<Runtime>>,
     Query(params): Query<WorkersQueryParams>,
 ) -> Response {
     let workers = match app.read().await.as_ref() {

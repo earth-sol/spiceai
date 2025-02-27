@@ -35,6 +35,7 @@ use flight::RateLimits;
 pub use http::ApiDoc;
 use model::{EmbeddingModelStore, EvalScorerRegistry, LLMModelStore};
 
+use ::workers::WorkerRegistry;
 use model_components::model::Model;
 pub use notify::Error as NotifyError;
 use secrecy::SecretString;
@@ -47,7 +48,6 @@ use tokio::sync::{oneshot::error::RecvError, RwLock};
 use tools::factory::default_available_catalogs;
 use tools::{catalog::SpiceToolCatalog, Tooling};
 pub use util::shutdown_signal;
-use workers::WorkerRegistry;
 
 use crate::extension::Extension;
 pub mod accelerated_table;
