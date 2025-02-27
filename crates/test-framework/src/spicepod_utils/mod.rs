@@ -38,7 +38,6 @@ pub fn load_spicepod(path: PathBuf) -> anyhow::Result<SpicepodDefinition> {
 pub fn from_app(app: App) -> SpicepodDefinition {
     SpicepodDefinition {
         name: app.name,
-        objective: None,
         runtime: app.runtime,
         extensions: app.extensions,
         secrets: app.secrets,
