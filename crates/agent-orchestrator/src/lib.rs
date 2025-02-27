@@ -362,6 +362,7 @@ impl AgentChat {
                 physical_prompt_planner_model,
                 self.models.executor.clone(),
                 progress,
+                &self.tools,
             )
             .instrument(span.clone())
             .await?;

@@ -23,24 +23,13 @@ use axum::{
     Extension, Json,
 };
 use futures::{stream, StreamExt};
-use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tools::SpiceModelTool;
+use tools::{ListToolElement, SpiceModelTool};
 
 use crate::{
     tools::{factory::default_available_catalogs, Tooling},
     Runtime,
 };
-
-/// Summary of a tool available to run, and the schema of its input parameters.
-#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash, Default, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-struct ListToolElement {
-    name: String,
-    description: Option<String>,
-    parameters: Option<serde_json::Value>,
-    is_catalog: bool,
-}
 
 /// List Tools
 ///

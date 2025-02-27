@@ -7,6 +7,8 @@ use async_openai::{
 };
 use llms::chat::Chat;
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, sync::Arc};
+use tools::{ListToolElement, SpiceModelTool};
 use tracing::{Instrument, Span};
 use uuid::Uuid;
 
@@ -119,6 +121,22 @@ impl From<Action> for StepType {
     }
 }
 
+fn get_tools(tools: &HashMap<String, Arc<dyn SpiceModelTool>>) -> String {
+    let mut tools_elements = vec![];
+
+    for (key, value) in tools {
+        let tool_element = ListToolElement {
+            name: key.to_string(),
+            description: value.description().map(|d| d.to_string()),
+            parameters: value.parameters(),
+            is_catalog: false,
+        };
+        tools_elements.push(tool_element);
+    }
+
+    format!("{tools_elements:?}")
+}
+
 impl PhysicalPlan {
     pub(crate) fn summary() -> String {
         "Physical Plan created.".to_string()
@@ -129,10 +147,9 @@ impl PhysicalPlan {
         previous_steps: &[Step],
         step: &logical::plan::Step,
         objective: &str,
+        tools: &String,
     ) -> Result<CreateChatCompletionRequest, OpenAIError> {
         let mut messages = messages.unwrap_or_default();
-
-        let tool_str = include_str!("tools.json");
         let previous_steps_body = serde_json::to_string(previous_steps)?;
         let previous_steps_message = ChatCompletionRequestMessage::System(
             format!("# Previous Steps\n\nThe following steps have been planned already: {previous_steps_body}.").into(),
@@ -152,7 +169,7 @@ impl PhysicalPlan {
                 {body}
 
                 ## Available Tools
-                {tool_str}
+                {tools}
 
                 # Instructions
                 1. Select the most appropriate tool for this step based on the logical plan requirements
@@ -265,11 +282,13 @@ impl PhysicalPlan {
         prompt_planner: &dyn Chat,
         executor: String,
         progress: Progress,
+        tools: &HashMap<String, Arc<dyn SpiceModelTool>>,
     ) -> Result<Task, async_openai::error::OpenAIError> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_task", input = %serde_json::to_string(&task).unwrap_or_default(), executor=executor); // No
         let result: Result<Task, OpenAIError> = async {
             tracing::info!("Generating physical plan for task: {}", task.objective);
             let mut steps: Vec<Step> = vec![];
+        let tool_list = get_tools(tools);
             for (i, step) in task.steps.iter().enumerate() {
                 let step_span = tracing::span!(
                     target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_step", // Yes
@@ -289,6 +308,7 @@ impl PhysicalPlan {
                                 steps.as_slice(),
                                 step,
                                 &task.objective,
+                        &tool_list,
                             ).inspect_err(|e| tracing::error!(target: "task_history", parent: &step_span, "{e}"))?;
                             Self::plan_request(req, StepType::Tool, tool_planner).await
                         }
@@ -302,6 +322,7 @@ impl PhysicalPlan {
                                 steps.as_slice(),
                                 step,
                                 &task.objective,
+                        &tool_list,
                             )?;
                             Self::plan_request(req, StepType::Prompt, prompt_planner).await
                         }
@@ -358,6 +379,7 @@ impl PhysicalPlan {
         prompt_planner: &dyn Chat,
         executor: String,
         progress: &Progress,
+        tools: &HashMap<String, Arc<dyn SpiceModelTool>>,
     ) -> Result<Self, async_openai::error::OpenAIError> {
         // for each task, convert the list of steps from the logical plan based on their StepType
         let futs = logical_plan.tasks.iter().enumerate().map(|(i, t)| {
@@ -367,6 +389,7 @@ impl PhysicalPlan {
                 prompt_planner,
                 executor.clone(),
                 progress.with_new_task(i + 1),
+                tools,
             )
             .instrument(Span::current())
         });

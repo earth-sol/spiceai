@@ -19,6 +19,7 @@ limitations under the License.
 #![allow(clippy::doc_markdown)]
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 
@@ -32,4 +33,13 @@ pub trait SpiceModelTool: Sync + Send {
     }
     fn parameters(&self) -> Option<Value>;
     async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>>;
+}
+
+/// Summary of a tool available to run, and the schema of its input parameters.
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash, Default, Deserialize, utoipa::ToSchema)]
+pub struct ListToolElement {
+    pub name: String,
+    pub description: Option<String>,
+    pub parameters: Option<serde_json::Value>,
+    pub is_catalog: bool,
 }

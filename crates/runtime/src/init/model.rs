@@ -21,6 +21,7 @@ use crate::{
     model::{ChatWrapper, ENABLE_MODEL_SUPPORT_MESSAGE},
     status,
     timing::TimeMeasurement,
+    tools::factory::default_available_catalogs,
     Runtime, Tooling,
 };
 use agent_orchestrator::{AgentChat, AgentModels};
@@ -75,11 +76,11 @@ impl Runtime {
                 self.load_model(model).await;
             }
 
-            self.load_operator(app).await;
+            Arc::clone(&self).load_operator(app).await;
         }
     }
 
-    async fn load_operator(&self, app: &Arc<App>) {
+    async fn load_operator(self: Arc<Self>, app: &Arc<App>) {
         let (Some(objective), Some(orchestrator)) =
             (app.objective.clone(), app.orchestrator.clone())
         else {
@@ -123,6 +124,11 @@ impl Runtime {
         };
 
         let mut tools: HashMap<String, Arc<dyn SpiceModelTool>> = HashMap::new();
+        let default_catalogs = default_available_catalogs(Arc::clone(&self));
+        let default_catalog_names = default_catalogs
+            .iter()
+            .map(|c| c.name())
+            .collect::<Vec<_>>();
         for (name, tool) in self.tools.read().await.iter() {
             tracing::debug!("[operator] Loading tool: {}", name);
             match tool {
@@ -133,7 +139,11 @@ impl Runtime {
                         Arc::clone(spice_model_tool),
                     );
                 }
+
                 Tooling::Catalog(spice_tool_catalog) => {
+                    if default_catalog_names.contains(&name.as_str()) {
+                        continue;
+                    };
                     let catalog_name = spice_tool_catalog.name();
                     for spice_model_tool in spice_tool_catalog.all().await {
                         let fully_qualified_tool_name =
