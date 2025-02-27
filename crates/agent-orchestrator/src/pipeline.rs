@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::{fmt::Display, time::SystemTime};
 
 use async_openai::{
     error::OpenAIError,
@@ -10,8 +10,8 @@ use async_openai::{
 };
 
 use crate::{
-    logical_plan_complete_summary, research::Research, research_complete_msg, LogicalPlan,
-    PhysicalPlan,
+    logical_plan_complete_summary, progress::Index, research::Research, research_complete_msg,
+    LogicalPlan, PhysicalPlan,
 };
 
 /// Defines the pipeline stages that an agent request goes through. The values for each stage are the inputs for that stage.
@@ -29,6 +29,37 @@ pub enum AgenticStage {
     Reporting(String),
 }
 
+pub enum StageName {
+    Research,
+    LogicalPlan,
+    PhysicalPlan,
+    Execution,
+    Reporting,
+}
+
+impl From<&AgenticStage> for StageName {
+    fn from(stage: &AgenticStage) -> Self {
+        match stage {
+            AgenticStage::Research { .. } => Self::Research,
+            AgenticStage::LogicalPlan(_) => Self::LogicalPlan,
+            AgenticStage::PhysicalPlan(_) => Self::PhysicalPlan,
+            AgenticStage::Execution(_) => Self::Execution,
+            AgenticStage::Reporting(_) => Self::Reporting,
+        }
+    }
+}
+
+impl Display for StageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Research => write!(f, "research"),
+            Self::LogicalPlan | Self::PhysicalPlan => write!(f, "planning"),
+            Self::Execution => write!(f, "execution"),
+            Self::Reporting => write!(f, "reporting"),
+        }
+    }
+}
+
 impl AgenticStage {
     pub(crate) fn previous_stage_summary(&self) -> String {
         match self {
@@ -40,31 +71,11 @@ impl AgenticStage {
         }
     }
 
-    pub(crate) fn stage(&self) -> String {
-        match self {
-            Self::Research { .. } => "research".to_string(),
-            Self::LogicalPlan(_) | Self::PhysicalPlan(_) => "planning".to_string(),
-            Self::Execution(_) => "execution".to_string(),
-            Self::Reporting(_) => "reporting".to_string(),
-        }
-    }
-
-    pub(crate) fn title(&self) -> String {
-        match self {
-            Self::Research { .. } => "Research".to_string(),
-            Self::LogicalPlan(_) | Self::PhysicalPlan(_) => "Planning".to_string(),
-            Self::Execution(_) => "Execution".to_string(),
-            Self::Reporting(_) => "Report Generation".to_string(),
-        }
-    }
-
-    pub(crate) fn starting_message(&self) -> String {
-        match self {
-            Self::Research { .. } => "Starting research".to_string(),
-            Self::LogicalPlan(_) => "Creating logical plan".to_string(),
-            Self::PhysicalPlan(_) => "Creating physical plan".to_string(),
-            Self::Execution(_) => "Executing physical plan".to_string(),
-            Self::Reporting(_) => "Generating report".to_string(),
+    pub(crate) fn index(&self, task: usize, step: usize) -> Index {
+        Index {
+            stage: self.into(),
+            task,
+            step,
         }
     }
 }
@@ -153,22 +164,6 @@ impl AgenticStage {
 
         Ok((Self::Research { prompt: content }, AdvanceMode::Continue))
     }
-}
-
-pub(crate) fn with_starting(
-    title: &str,
-    stage: &str,
-    content: &str,
-) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-    create_working_stream_payload(format!(
-        "<working stage=\"{stage}\" title=\"{title}\">{content}"
-    ))
-}
-
-pub(crate) fn with_ending(
-    content: &str,
-) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-    create_working_stream_payload(format!("{content}</working>"))
 }
 
 #[allow(clippy::cast_possible_truncation, deprecated)]
