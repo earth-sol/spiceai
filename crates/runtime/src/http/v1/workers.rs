@@ -25,6 +25,7 @@ use axum::{
 use csv::Writer;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use utoipa;
 
 use crate::Runtime;
 
@@ -127,7 +128,7 @@ pub(crate) async fn get(
     match params.format {
         Format::Json => (
             status::StatusCode::OK,
-            Json(OpenAIModelResponse {
+            Json(WorkerResponse {
                 object: "list".to_string(),
                 data: workers,
             }),

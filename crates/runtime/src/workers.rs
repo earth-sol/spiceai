@@ -23,7 +23,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
-use workers::{ModelWorker, Result as WorkerResult, SpiceWorker};
 
 #[derive(Debug, Snafu)]
 pub enum Error {
