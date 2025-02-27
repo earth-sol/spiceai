@@ -28,12 +28,12 @@ use serde::{de::DeserializeOwned, Serialize};
 use snafu::ResultExt;
 use std::future::Future;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tools::SpiceModelTool;
 use tracing::{Instrument, Span};
 use util::{fibonacci_backoff::FibonacciBackoffBuilder, retry, RetryError};
-
 pub mod logical;
 pub mod physical;
 pub mod pipeline;
@@ -140,7 +140,12 @@ impl AgentChat {
         self
     }
 
-    async fn retry_stage<F, Fut, T>(&self, operation: F) -> Result<T, OpenAIError>
+    async fn retry_stage<F, Fut, T>(
+        &self,
+        tx: &Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
+        retry_message: String,
+        operation: F,
+    ) -> Result<T, OpenAIError>
     where
         F: Fn() -> Fut,
         Fut: Future<Output = Result<T, OpenAIError>>,
@@ -156,6 +161,9 @@ impl AgentChat {
                 Err(e) => {
                     if should_retry_on_error(&e) {
                         tracing::warn!("Error: {e}. Retrying operation.");
+                        let _ = tx
+                            .send(create_working_stream_payload(format!("{retry_message}\n")))
+                            .await;
                         return Err(RetryError::transient(e));
                     }
                     Err(RetryError::Permanent(e))
@@ -169,18 +177,26 @@ impl AgentChat {
         &self,
         research_model: &dyn Chat,
         prompt: &String,
+        tx: &Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
+        retry_message: String,
     ) -> Result<Research, OpenAIError> {
-        self.retry_stage(|| self.generate_research_single(research_model, prompt))
-            .await
+        self.retry_stage(tx, retry_message, || {
+            self.generate_research_single(research_model, prompt)
+        })
+        .await
     }
 
     async fn generate_logical_plan(
         &self,
         logical_planner_model: &dyn Chat,
         research: &Research,
+        tx: &Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
+        retry_message: String,
     ) -> Result<LogicalPlan, OpenAIError> {
-        self.retry_stage(|| self.generate_logical_plan_single(logical_planner_model, research))
-            .await
+        self.retry_stage(tx, retry_message, || {
+            self.generate_logical_plan_single(logical_planner_model, research)
+        })
+        .await
     }
 
     async fn generate_physical_plan(
@@ -188,8 +204,10 @@ impl AgentChat {
         plan: &LogicalPlan,
         physical_tool_planner_model: &dyn Chat,
         physical_prompt_planner_model: &dyn Chat,
+        tx: &Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
+        retry_message: String,
     ) -> Result<PhysicalPlan, OpenAIError> {
-        self.retry_stage(|| {
+        self.retry_stage(tx, retry_message, || {
             self.generate_physical_plan_single(
                 plan,
                 physical_tool_planner_model,
@@ -419,11 +437,17 @@ impl AgentChat {
                 let mut progress = Progress::new(pipeline.index(0, 0), tx.clone());
                 loop {
                     progress.start_working_stage().await;
+                    let retry_message = pipeline.retry_message();
                     match pipeline {
                         pipeline::AgenticStage::Research { prompt } => {
                             let research = try_send_err!(
                                 service
-                                    .generate_research(researcher_model.as_ref(), &prompt)
+                                    .generate_research(
+                                        researcher_model.as_ref(),
+                                        &prompt,
+                                        &tx,
+                                        retry_message
+                                    )
                                     .await,
                                 tx
                             );
@@ -443,7 +467,9 @@ impl AgentChat {
                                 service
                                     .generate_logical_plan(
                                         logical_planner_model.as_ref(),
-                                        &research
+                                        &research,
+                                        &tx,
+                                        retry_message
                                     )
                                     .await,
                                 tx
@@ -467,6 +493,8 @@ impl AgentChat {
                                         &logical_plan,
                                         physical_tool_planner_model.as_ref(),
                                         physical_prompt_planner_model.as_ref(),
+                                        &tx,
+                                        retry_message
                                     )
                                     .await,
                                 tx
