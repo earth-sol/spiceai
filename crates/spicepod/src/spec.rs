@@ -29,7 +29,8 @@ use crate::component::runtime::Runtime;
 use crate::component::secret::Secret;
 use crate::component::tool::Tool;
 use crate::component::{
-    dataset::Dataset, extension::Extension, model::Model, view::View, ComponentOrReference,
+    dataset::Dataset, extension::Extension, model::Model, view::View, worker::Worker,
+    ComponentOrReference,
 };
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Default)]
@@ -112,6 +113,10 @@ pub struct SpicepodDefinition {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     pub tools: Vec<ComponentOrReference<Tool>>,
+
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
+    pub workers: Vec<ComponentOrReference<Worker>>,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]

@@ -38,6 +38,7 @@ pub fn load_spicepod(path: PathBuf) -> anyhow::Result<SpicepodDefinition> {
 pub fn from_app(app: App) -> SpicepodDefinition {
     SpicepodDefinition {
         name: app.name,
+        objective: None,
         runtime: app.runtime,
         extensions: app.extensions,
         secrets: app.secrets,
@@ -73,6 +74,11 @@ pub fn from_app(app: App) -> SpicepodDefinition {
             .collect(),
         embeddings: app
             .embeddings
+            .into_iter()
+            .map(ComponentOrReference::Component)
+            .collect(),
+        workers: app
+            .workers
             .into_iter()
             .map(ComponentOrReference::Component)
             .collect(),

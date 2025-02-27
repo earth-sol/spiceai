@@ -47,6 +47,7 @@ use tokio::sync::{oneshot::error::RecvError, RwLock};
 use tools::factory::default_available_catalogs;
 use tools::{catalog::SpiceToolCatalog, Tooling};
 pub use util::shutdown_signal;
+use workers::WorkerRegistry;
 
 use crate::extension::Extension;
 pub mod accelerated_table;
@@ -300,6 +301,9 @@ pub struct Runtime {
     spaced_tracer: Arc<tracers::SpacedTracer>,
 
     status: Arc<status::RuntimeStatus>,
+
+    /// Registry of loaded workers
+    workers: Arc<RwLock<WorkerRegistry>>,
 }
 
 impl Runtime {
@@ -504,6 +508,11 @@ impl Runtime {
             for tool_catalog in default_available_catalogs() {
                 self.status
                     .update_tool_catalog(tool_catalog.name(), ComponentStatus::Initializing);
+            }
+
+            for model in &app.models {
+                self.status
+                    .update_model(&model.name, ComponentStatus::Initializing);
             }
         }
 

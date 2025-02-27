@@ -10238,6 +10238,7 @@ dependencies = [
  "utoipa-swagger-ui",
  "uuid 1.13.1",
  "winver",
+ "workers",
  "x509-certificate",
 ]
 
@@ -13882,6 +13883,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3268f3d866458b787f390cf61f4bbb563b922d091359f9608842999eaee3943c"
 dependencies = [
  "bitflags 2.8.0",
+]
+
+[[package]]
+name = "workers"
+version = "1.1.0-unstable"
+dependencies = [
+ "arrow",
+ "async-trait",
+ "model_components",
+ "secrecy 0.8.0",
+ "serde_json",
+ "snafu",
+ "spicepod",
 ]
 
 [[package]]
