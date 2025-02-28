@@ -612,8 +612,6 @@ impl Runtime {
         if let Err(err) = load_result {
             tracing::error!("Could not start the Spice runtime: {err}");
         }
-
-        tracing::info!("All components are loaded. Spice runtime is ready!");
     }
 
     /// Get the worker registry
