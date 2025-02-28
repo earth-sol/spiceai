@@ -501,7 +501,7 @@ impl AgentChat {
                                 let _ = progress
                                     .send_message(
                                         format!(
-                                            "Research was scored {score} by eval model '{model_name}'."
+                                            "<meta name=\"score\" value=\"{score}\"/>\n<meta name=\"scorer\" value=\"{model_name}\"/>"
                                         )
                                         .as_str(),
                                     )
