@@ -24,6 +24,7 @@ use research::{
     model::{parse_response, research_complete_msg},
     Research,
 };
+use score::score;
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::ResultExt;
 use std::future::Future;
@@ -485,27 +486,17 @@ impl AgentChat {
                                     .await,
                                 tx
                             );
-                            if let Some(EvalModelConfig { ref model_name, .. }) = self.models.research_artifact_eval {
-                                let Some(model) = models.get(model_name) else {
-                                    let _ = tx
-                                        .send(Err(OpenAIError::InvalidArgument(format!(
-                                            "Model {model_name} not found."
-                                        ))))
-                                        .await;
-                                    return;
-                                };
-                                let score = try_send_err!(
-                                    score::score_research(prompt.as_str(), &research, model.as_ref()).await,
-                                    tx
-                                );
-                                let _ = progress
-                                    .send_message(
-                                        format!(
-                                            "<meta name=\"score\" value=\"{score}\"/>\n<meta name=\"scorer\" value=\"{model_name}\"/>"
-                                        )
-                                        .as_str(),
-                                    )
-                                    .await;
+                            if let Err(()) = evaluate_with_model(
+                                self.models.research_artifact_eval.as_ref(),
+                                &models,
+                                &tx,
+                                &progress,
+                                prompt.clone(),
+                                format!("{research:?}"),
+                            )
+                            .await
+                            {
+                                return;
                             }
                             try_send_err!(
                                 write_artifact("research/research_artifacts", &id, &research)
@@ -530,6 +521,18 @@ impl AgentChat {
                                     .await,
                                 tx
                             );
+                            if let Err(()) = evaluate_with_model(
+                                self.models.logical_plan_eval.as_ref(),
+                                &models,
+                                &tx,
+                                &progress,
+                                format!("{research:?}"),
+                                format!("{logical_plan:?}"),
+                            )
+                            .await
+                            {
+                                return;
+                            }
                             try_send_err!(
                                 write_artifact("logical/logical_plan", &id, &logical_plan).map_err(
                                     |e| {
@@ -555,6 +558,19 @@ impl AgentChat {
                                     .await,
                                 tx
                             );
+
+                            if let Err(()) = evaluate_with_model(
+                                self.models.physical_plan_eval.as_ref(),
+                                &models,
+                                &tx,
+                                &progress,
+                                format!("{logical_plan:?}"),
+                                format!("{physical_plan:?}"),
+                            )
+                            .await
+                            {
+                                return;
+                            }
 
                             try_send_err!(
                                 write_artifact("physical/physical_plan", &id, &physical_plan)
@@ -615,6 +631,38 @@ impl AgentChat {
 
         Box::pin(ReceiverStream::new(rx))
     }
+}
+
+async fn evaluate_with_model(
+    eval_config: Option<&EvalModelConfig>,
+    models: &HashMap<String, Box<dyn Chat>>,
+    tx: &mpsc::Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
+    progress: &Progress,
+    input: String,
+    actual: String,
+) -> Result<(), ()> {
+    if let Some(EvalModelConfig { ref model_name, .. }) = eval_config {
+        let Some(model) = models.get(model_name) else {
+            let _ = tx
+                .send(Err(OpenAIError::InvalidArgument(format!(
+                    "Model {model_name} not found."
+                ))))
+                .await;
+            return Err(());
+        };
+
+        let score = match score(model.as_ref(), input, actual).await {
+            Ok(score) => score,
+            Err(err) => {
+                let _ = tx.send(Err(err)).await;
+                return Err(());
+            }
+        };
+
+        progress.send_scoring_message(model_name, score).await;
+    }
+
+    Ok(())
 }
 
 fn write_artifact<T: ?Sized + Serialize>(

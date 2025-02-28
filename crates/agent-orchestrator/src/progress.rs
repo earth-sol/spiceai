@@ -67,6 +67,13 @@ impl Progress {
         self.sender.send(req).await.is_ok()
     }
 
+    pub async fn send_scoring_message(&self, model_name: &String, score: f32) -> bool {
+        let content = format!(
+            "<meta name=\"score\" value=\"{score}\"/>\n<meta name=\"scorer\" value=\"{model_name}\"/>"
+        );
+        self.send_message(content.as_str()).await
+    }
+
     pub async fn send_complete_message(&self, content: &str) -> bool {
         let req = self.idx.closed_message(content);
         self.sender.send(req).await.is_ok()
