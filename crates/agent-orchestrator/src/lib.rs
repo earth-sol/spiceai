@@ -28,7 +28,6 @@ use serde::{de::DeserializeOwned, Serialize};
 use snafu::ResultExt;
 use std::future::Future;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
-use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tools::SpiceModelTool;
@@ -142,8 +141,8 @@ impl AgentChat {
 
     async fn retry_stage<F, Fut, T>(
         &self,
-        tx: &Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
         retry_message: String,
+        progress: &Progress,
         operation: F,
     ) -> Result<T, OpenAIError>
     where
@@ -161,8 +160,8 @@ impl AgentChat {
                 Err(e) => {
                     if should_retry_on_error(&e) {
                         tracing::warn!("Error: {e}. Retrying operation.");
-                        let _ = tx
-                            .send(create_working_stream_payload(format!("{retry_message}\n")))
+                        progress
+                            .send_message(format!("{retry_message}\n").as_str())
                             .await;
                         return Err(RetryError::transient(e));
                     }
@@ -177,10 +176,10 @@ impl AgentChat {
         &self,
         research_model: &dyn Chat,
         prompt: &String,
-        tx: &Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
         retry_message: String,
+        progress: &Progress,
     ) -> Result<Research, OpenAIError> {
-        self.retry_stage(tx, retry_message, || {
+        self.retry_stage(retry_message, progress, || {
             self.generate_research_single(research_model, prompt)
         })
         .await
@@ -190,10 +189,10 @@ impl AgentChat {
         &self,
         logical_planner_model: &dyn Chat,
         research: &Research,
-        tx: &Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
         retry_message: String,
+        progress: &Progress,
     ) -> Result<LogicalPlan, OpenAIError> {
-        self.retry_stage(tx, retry_message, || {
+        self.retry_stage(retry_message, progress, || {
             self.generate_logical_plan_single(logical_planner_model, research)
         })
         .await
@@ -204,11 +203,10 @@ impl AgentChat {
         plan: &LogicalPlan,
         physical_tool_planner_model: &dyn Chat,
         physical_prompt_planner_model: &dyn Chat,
-        progress: &Progress,
-        tx: &Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
         retry_message: String,
+        progress: &Progress,
     ) -> Result<PhysicalPlan, OpenAIError> {
-        self.retry_stage(tx, retry_message, || {
+        self.retry_stage(retry_message, progress, || {
             self.generate_physical_plan_single(
                 plan,
                 physical_tool_planner_model,
@@ -451,8 +449,8 @@ impl AgentChat {
                                     .generate_research(
                                         researcher_model.as_ref(),
                                         &prompt,
-                                        &tx,
-                                        retry_message
+                                        retry_message,
+                                        &progress,
                                     )
                                     .await,
                                 tx
@@ -474,8 +472,8 @@ impl AgentChat {
                                     .generate_logical_plan(
                                         logical_planner_model.as_ref(),
                                         &research,
-                                        &tx,
-                                        retry_message
+                                        retry_message,
+                                        &progress,
                                     )
                                     .await,
                                 tx
@@ -499,9 +497,8 @@ impl AgentChat {
                                         &logical_plan,
                                         physical_tool_planner_model.as_ref(),
                                         physical_prompt_planner_model.as_ref(),
+                                        retry_message,
                                         &progress,
-                                        &tx,
-                                        retry_message
                                     )
                                     .await,
                                 tx
@@ -539,14 +536,18 @@ impl AgentChat {
                         }
                         pipeline::AgenticStage::Reporting(ref s) => {
                             progress
-                                .with_working_ending(pipeline.previous_stage_summary().as_str())
+                                .with_working_ending(
+                                    format!("{}\n", pipeline.previous_stage_summary()).as_str(),
+                                )
                                 .await;
                             progress.send_message(s.as_str()).await;
                             break;
                         }
                     }
                     progress
-                        .with_working_ending(pipeline.previous_stage_summary().as_str())
+                        .with_working_ending(
+                            format!("{}\n", pipeline.previous_stage_summary()).as_str(),
+                        )
                         .await;
 
                     // Advance to the next stage (pipeline itself updated above).

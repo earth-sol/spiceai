@@ -336,7 +336,7 @@ impl PhysicalPlan {
                     s_progress
                         .send_complete_message(
                             format!(
-                                "Finished {} step in {} task.",
+                                "Finished {} step in {} task.\n",
                                 s_progress.step_str(),
                                 s_progress.task_str()
                             )
@@ -350,7 +350,7 @@ impl PhysicalPlan {
             }
 
             progress
-                .send_complete_message(format!("Finished {} task.", progress.task_str()).as_str())
+                .send_complete_message(format!("Finished {} task.\n", progress.task_str()).as_str())
                 .await;
 
             Ok(Task {

@@ -38,7 +38,7 @@ pub(crate) fn research_complete_msg(r: &Research) -> String {
         .count();
     let total_artifacts = artifacts.len();
     format!(
-        "Research completed.\nTotal artifacts: {total_artifacts}\nIncluding {num_snippets} text snippets.\nIncluding the following documents: {}",
+        "Research completed.\n- Total artifacts: {total_artifacts}\n- Including {num_snippets} text snippets.\n- Including the following documents: {}",
         artifact_paths.join(", ")
     )
 }
