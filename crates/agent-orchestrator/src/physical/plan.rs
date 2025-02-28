@@ -158,7 +158,9 @@ impl From<Action> for StepType {
     }
 }
 
-fn get_tools(tools: &HashMap<String, Arc<dyn SpiceModelTool>>) -> String {
+fn get_tools(
+    tools: &HashMap<String, Arc<dyn SpiceModelTool>>,
+) -> Result<String, serde_json::Error> {
     let mut tools_elements = vec![];
 
     for (key, value) in tools {
@@ -171,7 +173,10 @@ fn get_tools(tools: &HashMap<String, Arc<dyn SpiceModelTool>>) -> String {
         tools_elements.push(tool_element);
     }
 
-    format!("{tools_elements:?}")
+    Ok(format!(
+        "\n```json\n{}\n```",
+        serde_json::to_string(&tools_elements)?
+    ))
 }
 
 impl PhysicalPlan {
@@ -325,7 +330,7 @@ impl PhysicalPlan {
         let result: Result<Task, OpenAIError> = async {
             tracing::info!("Generating physical plan for task: {}", task.objective);
             let mut steps: Vec<Step> = vec![];
-        let tool_list = get_tools(tools);
+            let tool_list = get_tools(tools).map_err(|e| OpenAIError::InvalidArgument(format!("Failed to get tools: {e}")))?;
             for (i, step) in task.steps.iter().enumerate() {
                 let step_span = tracing::span!(
                     target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_step", // Yes
@@ -345,7 +350,7 @@ impl PhysicalPlan {
                                 steps.as_slice(),
                                 step,
                                 &task.objective,
-                        &tool_list,
+                                &tool_list,
                             ).inspect_err(|e| tracing::error!(target: "task_history", parent: &step_span, "{e}"))?;
                             Self::plan_request(req, StepType::Tool, tool_planner).await
                         }
@@ -359,7 +364,7 @@ impl PhysicalPlan {
                                 steps.as_slice(),
                                 step,
                                 &task.objective,
-                        &tool_list,
+                                &tool_list,
                             )?;
                             Self::plan_request(req, StepType::Prompt, prompt_planner).await
                         }
