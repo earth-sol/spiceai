@@ -41,6 +41,7 @@ pub mod research;
 mod score;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct AgentModels {
     _orchestrator: String,
     executor: String,
@@ -494,7 +495,7 @@ impl AgentChat {
                                     return;
                                 };
                                 let score = try_send_err!(
-                                    score::score_research(prompt.as_str(), &research, model).await,
+                                    score::score_research(prompt.as_str(), &research, model.as_ref()).await,
                                     tx
                                 );
                                 let _ = progress

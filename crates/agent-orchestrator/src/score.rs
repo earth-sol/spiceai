@@ -13,7 +13,7 @@ pub struct OutputScore {
     score: f32,
 }
 
-async fn score(model: &Box<dyn Chat>, input: String, actual: String) -> Result<f32, OpenAIError> {
+async fn score(model: &dyn Chat, input: String, actual: String) -> Result<f32, OpenAIError> {
     let mut schema = serde_json::to_value(schema_for!(OutputScore))
         .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
     schema["additionalProperties"] = Value::Bool(false);
@@ -58,7 +58,7 @@ async fn score(model: &Box<dyn Chat>, input: String, actual: String) -> Result<f
 pub(crate) async fn score_research(
     input: &str,
     research: &Research,
-    model: &Box<dyn Chat>,
+    model: &dyn Chat,
 ) -> Result<f32, OpenAIError> {
     score(model, input.to_string(), format!("{research:?}")).await
 }
