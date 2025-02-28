@@ -103,6 +103,21 @@ pub struct SpicepodDefinition {
     #[serde(default)]
     pub verifier: Option<String>,
 
+    /// A model to score the correctness of the logical plan made by an orchestrator.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub logical_plan_eval_model: Option<String>,
+
+    /// A model to score the correctness of the research undertaken by an orchestrator.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub research_eval_model: Option<String>,
+
+    /// A model to score the correctness of the physical plan made by an orchestrator.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub physical_plan_eval_model: Option<String>,
+
     /// Optional runtime configuration
     #[serde(default, skip_serializing_if = "is_default")]
     pub runtime: Runtime,

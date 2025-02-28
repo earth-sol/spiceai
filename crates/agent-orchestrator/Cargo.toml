@@ -18,6 +18,7 @@ futures.workspace = true
 futures-util = "0.3.31"
 jsonschema = "0.29.0"
 llms = { path = "../llms" }
+schemars = "0.8.19"
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
@@ -27,5 +28,5 @@ tokio.workspace = true
 tokio-stream = "0.1.17"
 tools = { path = "../tools" }
 tracing.workspace = true
-uuid = { workspace = true, features = ["v4", "serde", "fast-rng"] }
 util = { path = "../util" }
+uuid = { workspace = true, features = ["v4", "serde", "fast-rng"] }

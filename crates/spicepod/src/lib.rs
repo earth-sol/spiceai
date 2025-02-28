@@ -76,6 +76,12 @@ pub struct Spicepod {
 
     pub researcher: Option<String>,
 
+    pub research_eval_model: Option<String>,
+
+    pub logical_plan_eval_model: Option<String>,
+
+    pub physical_plan_eval_model: Option<String>,
+
     pub extensions: HashMap<String, Extension>,
 
     pub secrets: Vec<Secret>,
@@ -275,6 +281,9 @@ fn from_definition(
         researcher: spicepod_definition.researcher,
         verifier: spicepod_definition.verifier,
         executor: spicepod_definition.executor,
+        research_eval_model: spicepod_definition.research_eval_model,
+        logical_plan_eval_model: spicepod_definition.logical_plan_eval_model,
+        physical_plan_eval_model: spicepod_definition.physical_plan_eval_model,
         version: spicepod_definition.version,
         extensions: spicepod_definition.extensions,
         secrets: spicepod_definition.secrets,

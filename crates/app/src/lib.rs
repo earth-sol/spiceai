@@ -59,6 +59,12 @@ pub struct App {
 
     pub executor: Option<String>,
 
+    pub research_eval_model: Option<String>,
+
+    pub logical_plan_eval_model: Option<String>,
+
+    pub physical_plan_eval_model: Option<String>,
+
     pub secrets: Vec<Secret>,
 
     pub extensions: HashMap<String, Extension>,
@@ -117,6 +123,9 @@ pub struct AppBuilder {
     researcher: Option<String>,
     verifier: Option<String>,
     executor: Option<String>,
+    research_eval_model: Option<String>,
+    logical_plan_eval_model: Option<String>,
+    physical_plan_eval_model: Option<String>,
     secrets: Vec<Secret>,
     extensions: HashMap<String, Extension>,
     catalogs: Vec<Catalog>,
@@ -143,6 +152,9 @@ impl AppBuilder {
             researcher: None,
             verifier: None,
             executor: None,
+            research_eval_model: None,
+            logical_plan_eval_model: None,
+            physical_plan_eval_model: None,
             secrets: vec![],
             extensions: HashMap::new(),
             catalogs: vec![],
@@ -288,6 +300,9 @@ impl AppBuilder {
             workers: self.workers,
             spicepods: self.spicepods,
             runtime: self.runtime,
+            research_eval_model: self.research_eval_model,
+            logical_plan_eval_model: self.logical_plan_eval_model,
+            physical_plan_eval_model: self.physical_plan_eval_model,
         }
     }
 
@@ -389,6 +404,10 @@ impl AppBuilder {
         let researcher = spicepod_root.researcher.clone();
         let verifier = spicepod_root.verifier.clone();
 
+        let research_eval_model = spicepod_root.research_eval_model.clone();
+        let logical_plan_eval_model = spicepod_root.logical_plan_eval_model.clone();
+        let physical_plan_eval_model = spicepod_root.physical_plan_eval_model.clone();
+
         spicepods.push(spicepod_root);
 
         Ok(App {
@@ -400,6 +419,9 @@ impl AppBuilder {
             physical_prompt_planner,
             researcher,
             verifier,
+            research_eval_model,
+            logical_plan_eval_model,
+            physical_plan_eval_model,
             executor,
             secrets,
             extensions,
