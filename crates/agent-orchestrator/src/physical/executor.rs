@@ -108,9 +108,9 @@ impl PhysicalJobExecutor {
                     tracing::info!("Executing task: {}", task.objective);
 
                     tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
-                    t_progress
-                        .send_open_message(format!("Executing {} task: {}", t_progress.task_str(), task.objective).as_str())
-                        .await;
+                    // t_progress
+                    //     .send_open_message(format!("Executing {} task: {}", t_progress.task_str(), task.objective).as_str())
+                    //     .await;
                     for (i, step) in task.steps.iter().enumerate() {
                         let step_span = tracing::span!(target: "task_history",  parent: &task_span, tracing::Level::INFO, "orchestrator::physical_step_execution", input = %serde_json::to_string(&task).unwrap_or_default(), task = t);  // Yes
                         async {
@@ -132,7 +132,7 @@ impl PhysicalJobExecutor {
                             let s_progress = t_progress.with_new_step(i + 1);
                             s_progress
                                 .send_complete_message(
-                                    step.execute_step_summary(i+1).as_str(),
+                                    step.execute_step_summary().as_str(),
                                 )
                                 .await;
                             step_history.push(output);
@@ -141,11 +141,7 @@ impl PhysicalJobExecutor {
                         .instrument(step_span.clone())
                         .await?;
                     };
-                    t_progress
-                        .send_close_message(Some(
-                            format!("Completed executing {} task.\n", t_progress.task_str()).as_str(),
-                        ))
-                        .await;
+                    t_progress.send_close_message(None).await;
 
                     self
                         .summarize_executed_steps(&self.verifier_model, &step_history)
