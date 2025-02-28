@@ -109,7 +109,7 @@ impl ChatWrapper {
         req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionRequest, OpenAIError> {
         let mut prepared_req = self.with_system_prompt(req)?;
-
+        prepared_req.model.clone_from(&self.public_name.clone());
         prepared_req = self.with_model_defaults(prepared_req);
         prepared_req = Self::with_stream_usage(prepared_req);
         Ok(prepared_req)
