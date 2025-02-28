@@ -167,6 +167,7 @@ pub struct Args {
     pub set_runtime: Vec<(String, String)>,
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn run(args: Args) -> Result<()> {
     let prometheus_registry = args.metrics.map(|_| prometheus::Registry::new());
 
@@ -256,11 +257,28 @@ pub async fn run(args: Args) -> Result<()> {
         Box::pin(cloned_rt.start_servers(args.runtime, tls_config, endpoint_auth)).await
     });
 
-    tokio::select! {
-        () = rt.load_components() => {},
+    let components_loaded = tokio::select! {
+        () = Arc::clone(&rt).load_components() => true,
         () = runtime::shutdown_signal() => {
             tracing::debug!("Cancelling runtime initializing!");
+            false
         },
+    };
+
+    if components_loaded {
+        tokio::spawn({
+            async move {
+                let rt = Arc::clone(&rt);
+                loop {
+                    if rt.status().is_ready() {
+                        tracing::info!("All components are loaded. Spice runtime is ready!");
+                        break;
+                    }
+
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+            }
+        });
     }
 
     match server_thread.await {

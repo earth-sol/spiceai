@@ -335,11 +335,12 @@ impl PhysicalJobExecutor {
             # Guidelines
 
             1. A non-zero status code does not always mean the tool call failed - ensure you inspect the relevant tool output, or call additional tools if needed, to determine if the output actually indicates a failure.
-            2. If the tool call message indicates a terminal command was executed, ensure you retrieve the relevant terminal output and classify based on the retrieved terminal output.
-            3. Ensure you consider that the existence of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure.
-            4. Use any of your available tools to verify the success criteria has been met.
-            5. If there is no evidence or confirmation from the tool output that the success criteria has been met, make tool calls to retrieve the relevant information to verify the success criteria has been met.
-            6. If additional tool calls are required to classify success, make them before classifying.
+            2. If the tool call hangs without returning a status code, it could be a daemon process that continues running in the background:. A daemon showing error messages in its logs doesn't necessarily mean failure.
+            3. If the tool call message indicates a terminal command was executed, ensure you retrieve the relevant terminal output and classify based on the retrieved terminal output.
+            4. Ensure you consider that the existence of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure.
+            5. Use any of your available tools to verify the success criteria has been met.
+            6. If there is no evidence or confirmation from the tool output that the success criteria has been met, make tool calls to retrieve the relevant information to verify the success criteria has been met.
+            7. If additional tool calls are required to classify success, make them before classifying.
 
             # Example Successful Classification Process
 
@@ -348,6 +349,16 @@ impl PhysicalJobExecutor {
             3. Make a tool call to retrieve the relevant terminal logs.
             4. The terminal logs include no error messages, and the command output is as expected.
             5. The tool call is classified as successful.
+            
+            # Example Successful Classification Process
+
+            1. Inspect the tool output. The tool output shows that a background service `postgres` was started with a command that exited with status code 0.
+            2. Make a tool call to check if the daemon process is running with `ps -aux | grep postgres`.
+            3. The tool output confirms the daemon is running with PID 12345.
+            4. Make a tool call to retrieve the relevant terminal logs.
+            5. The logs show some error messages about configuration warnings, but the service is still running.
+            6. The tool call is classified as successful because the daemon is running as expected, despite the warnings in the logs.
+            7. The warning details are included in the reason section of the verification response.
 
             # Example Failed Classification Process
 
