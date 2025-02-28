@@ -52,7 +52,7 @@ impl Progress {
 
     /// Send a new `Working` start message for the current
     pub async fn start_working_stage(&self) -> bool {
-        let content = self.idx.starting_message();
+        let content = format!("{}\n", self.idx.starting_message());
         let req = self.idx.with_starting(content.as_str());
         self.sender.send(req).await.is_ok()
     }
@@ -159,7 +159,7 @@ impl Index {
         content: &str,
     ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
         create_working_stream_payload(format!(
-            "<working stage=\"{stage}\" title=\"{title}\" {task}{step}>{content}",
+            "<working stage=\"{stage}\" title=\"{title}\" {task}{step}>\n{content}",
             stage = self.stage,
             title = self.title(),
             task = self.task.map(|t| format!("task={t} ")).unwrap_or_default(),
@@ -175,7 +175,7 @@ impl Index {
         content: &str,
     ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
         create_working_stream_payload(format!(
-            "<working stage=\"{stage}\" title=\"{title}\" {task}{step}>{content}</working>\n",
+            "<working stage=\"{stage}\" title=\"{title}\" {task}{step}>\n{content}</working>\n",
             stage = self.stage,
             title = self.title(),
             task = self.task.map(|t| format!("task={t} ")).unwrap_or_default(),

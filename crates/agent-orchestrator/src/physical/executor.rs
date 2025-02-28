@@ -133,7 +133,7 @@ impl PhysicalJobExecutor {
                             s_progress
                                 .send_complete_message(
                                     format!(
-                                        "Finished executing {} step in {} task.",
+                                        "Finished executing {} step in {} task.\n",
                                         s_progress.step_str(),
                                         s_progress.task_str()
                                     )
@@ -147,7 +147,7 @@ impl PhysicalJobExecutor {
                     };
                     t_progress
                         .send_close_message(Some(
-                            format!("Completed executing {} task.", t_progress.task_str()).as_str(),
+                            format!("Completed executing {} task.\n", t_progress.task_str()).as_str(),
                         ))
                         .await;
 
