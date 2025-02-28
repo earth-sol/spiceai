@@ -108,9 +108,6 @@ impl PhysicalJobExecutor {
                     tracing::info!("Executing task: {}", task.objective);
 
                     tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
-                    // t_progress
-                    //     .send_open_message(format!("Executing {} task: {}", t_progress.task_str(), task.objective).as_str())
-                    //     .await;
                     for (i, step) in task.steps.iter().enumerate() {
                         let step_span = tracing::span!(target: "task_history",  parent: &task_span, tracing::Level::INFO, "orchestrator::physical_step_execution", input = %serde_json::to_string(&task).unwrap_or_default(), task = t);  // Yes
                         async {
