@@ -38,8 +38,10 @@ pub mod physical;
 pub mod pipeline;
 mod progress;
 pub mod research;
+mod score;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct AgentModels {
     _orchestrator: String,
     executor: String,
@@ -48,9 +50,22 @@ pub struct AgentModels {
     physical_prompt_planner: String,
     researcher: String,
     verifier: String,
+
+    /// Optional models to check that, for each stage, the output satisfies an evaluation model's score.
+    research_artifact_eval: Option<EvalModelConfig>,
+    logical_plan_eval: Option<EvalModelConfig>,
+    physical_plan_eval: Option<EvalModelConfig>,
+}
+
+/// Encapsulate eval models and score configurations for checking each stage.
+#[derive(Clone)]
+pub struct EvalModelConfig {
+    pub model_name: String,
+    pub threshold: Option<f32>,
 }
 
 impl AgentModels {
+    #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn new(
         orchestrator: String,
@@ -60,6 +75,9 @@ impl AgentModels {
         physical_prompt_planner: String,
         researcher: String,
         verifier: String,
+        research_eval_model: Option<String>,
+        logical_plan_eval_model: Option<String>,
+        physical_plan_eval_model: Option<String>,
     ) -> Self {
         Self {
             _orchestrator: orchestrator,
@@ -69,6 +87,18 @@ impl AgentModels {
             physical_prompt_planner,
             researcher,
             verifier,
+            research_artifact_eval: research_eval_model.map(|model_name| EvalModelConfig {
+                model_name,
+                threshold: None,
+            }),
+            logical_plan_eval: logical_plan_eval_model.map(|model_name| EvalModelConfig {
+                model_name,
+                threshold: None,
+            }),
+            physical_plan_eval: physical_plan_eval_model.map(|model_name| EvalModelConfig {
+                model_name,
+                threshold: None,
+            }),
         }
     }
 }
@@ -455,6 +485,28 @@ impl AgentChat {
                                     .await,
                                 tx
                             );
+                            if let Some(EvalModelConfig { ref model_name, .. }) = self.models.research_artifact_eval {
+                                let Some(model) = models.get(model_name) else {
+                                    let _ = tx
+                                        .send(Err(OpenAIError::InvalidArgument(format!(
+                                            "Model {model_name} not found."
+                                        ))))
+                                        .await;
+                                    return;
+                                };
+                                let score = try_send_err!(
+                                    score::score_research(prompt.as_str(), &research, model.as_ref()).await,
+                                    tx
+                                );
+                                let _ = progress
+                                    .send_message(
+                                        format!(
+                                            "<meta name=\"score\" value=\"{score}\"/>\n<meta name=\"scorer\" value=\"{model_name}\"/>"
+                                        )
+                                        .as_str(),
+                                    )
+                                    .await;
+                            }
                             try_send_err!(
                                 write_artifact("research/research_artifacts", &id, &research)
                                     .map_err(|e| {

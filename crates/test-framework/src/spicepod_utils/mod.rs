@@ -93,5 +93,8 @@ pub fn from_app(app: App) -> SpicepodDefinition {
         executor: None,
         researcher: None,
         verifier: None,
+        research_eval_model: None,
+        logical_plan_eval_model: None,
+        physical_plan_eval_model: None,
     }
 }

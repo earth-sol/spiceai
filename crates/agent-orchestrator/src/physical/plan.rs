@@ -84,6 +84,43 @@ impl Step {
             Step::Prompt(prompt_step) => prompt_step.task_uuid,
         }
     }
+
+    /// Summary to output whilst planning this step
+    #[must_use]
+    pub fn plan_step_summary(&self, idx: usize) -> String {
+        match self {
+            Step::Tool(tool_step) => {
+                format!(
+                    "Step {}. Run tool '{}' with payload {}. Success Criteria: {}",
+                    idx, tool_step.tool, tool_step.body, tool_step.success_criteria
+                )
+            }
+            Step::Prompt(prompt_step) => {
+                format!(
+                    "Step {}. Run prompt '{}' with model {}. Success Criteria: {}",
+                    idx, prompt_step.prompt, prompt_step.model, prompt_step.success_criteria
+                )
+            }
+        }
+    }
+    /// Summary to output whilst executing this step
+    #[must_use]
+    pub fn execute_step_summary(&self, idx: usize) -> String {
+        match self {
+            Step::Tool(tool_step) => {
+                format!(
+                    "Step {}. Running tool '{}' with payload {}. Success Criteria: {}",
+                    idx, tool_step.tool, tool_step.body, tool_step.success_criteria
+                )
+            }
+            Step::Prompt(prompt_step) => {
+                format!(
+                    "Step {}. Running prompt '{}' with model {}. Success Criteria: {}",
+                    idx, prompt_step.prompt, prompt_step.model, prompt_step.success_criteria
+                )
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -330,20 +367,14 @@ impl PhysicalPlan {
                     .with_task_id(task.uuid);
 
                     tracing::info!(target: "task_history", parent: &step_span, captured_output = %serde_json::to_string(&result).unwrap_or_default());
-                    steps.push(result);
-
                     let s_progress = progress.with_new_step(i + 1);
                     s_progress
                         .send_complete_message(
-                            format!(
-                                "Finished {} step in {} task.\n",
-                                s_progress.step_str(),
-                                s_progress.task_str()
-                            )
-                            .as_str(),
+                            result.plan_step_summary(i+1).as_str(),
                         )
                         .await;
 
+                    steps.push(result);
                     Ok(())
                 }.instrument(step_span.clone()).await;
                 output?;

@@ -164,6 +164,9 @@ impl Runtime {
             physical_prompt_planner_name,
             researcher_name,
             verifier_name,
+            app.research_eval_model.clone(),
+            app.logical_plan_eval_model.clone(),
+            app.physical_plan_eval_model.clone(),
         );
 
         let agent_chat = ChatWrapper::new(

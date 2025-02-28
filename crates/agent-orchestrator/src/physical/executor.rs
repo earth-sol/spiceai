@@ -109,7 +109,7 @@ impl PhysicalJobExecutor {
 
                     tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
                     t_progress
-                        .send_open_message(format!("Executing {} task", t_progress.task_str()).as_str())
+                        .send_open_message(format!("Executing {} task: {}", t_progress.task_str(), task.objective).as_str())
                         .await;
                     for (i, step) in task.steps.iter().enumerate() {
                         let step_span = tracing::span!(target: "task_history",  parent: &task_span, tracing::Level::INFO, "orchestrator::physical_step_execution", input = %serde_json::to_string(&task).unwrap_or_default(), task = t);  // Yes
@@ -128,18 +128,14 @@ impl PhysicalJobExecutor {
                                 captured_output = %serde_json::to_string(&output).unwrap_or_default()
                             );
                             tracing::info!("Step output: {output:?}");
-                            step_history.push(output);
+
                             let s_progress = t_progress.with_new_step(i + 1);
                             s_progress
                                 .send_complete_message(
-                                    format!(
-                                        "Finished executing {} step in {} task.\n",
-                                        s_progress.step_str(),
-                                        s_progress.task_str()
-                                    )
-                                    .as_str(),
+                                    step.execute_step_summary(i+1).as_str(),
                                 )
                                 .await;
+                            step_history.push(output);
                             Ok::<(), anyhow::Error>(())
                         }
                         .instrument(step_span.clone())
