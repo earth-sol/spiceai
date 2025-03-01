@@ -14,6 +14,8 @@ use async_openai::{
 };
 
 use async_trait::async_trait;
+use event_stream::get_event_stream;
+use futures::stream;
 use futures_util::TryStreamExt;
 use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::{logical_plan_complete_summary, plan::LogicalPlan};
@@ -31,9 +33,11 @@ use std::future::Future;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::StreamExt;
 use tools::SpiceModelTool;
 use tracing::{Instrument, Span};
 use util::{fibonacci_backoff::FibonacciBackoffBuilder, retry, RetryError};
+
 pub mod logical;
 pub mod physical;
 pub mod pipeline;
@@ -191,9 +195,7 @@ impl AgentChat {
                 Err(e) => {
                     if should_retry_on_error(&e) {
                         tracing::warn!("Error: {e}. Retrying operation.");
-                        progress
-                            .send_message(format!("{retry_message}\n").as_str())
-                            .await;
+                        progress.send_message(retry_message.as_str()).await;
                         return Err(RetryError::transient(e));
                     }
                     Err(RetryError::Permanent(e))
@@ -423,6 +425,33 @@ impl AgentChat {
         let id = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
 
         let models = Arc::clone(&self.llms);
+
+        let mut progress = Progress::new(pipeline.new_stage_index(), tx.clone());
+        let (stream_ended, stream_ended_receiver) = tokio::sync::oneshot::channel::<()>();
+
+        if let Ok(mut event_stream) = get_event_stream() {
+            let progress_clone = progress.clone();
+            let mut main_stream_ended = Box::pin(stream::once(async move {
+                let _ = stream_ended_receiver.await;
+            }));
+            tokio::spawn(async move {
+                loop {
+                    tokio::select! {
+                        Some(event) = event_stream.next() => {
+                            if !progress_clone.send_message(&event).await {
+                                // Stream is closed - stop waiting for new events
+                                return;
+                            }
+                        }
+                        _ = main_stream_ended.next() => {
+                            // Stream ended signal received
+                            return;
+                        }
+                    }
+                }
+            });
+        };
+
         tokio::spawn(
             async move {
                 let models = models.read().await;
@@ -469,7 +498,6 @@ impl AgentChat {
 
                 let service = Arc::clone(&self);
                 let id = id.clone();
-                let mut progress = Progress::new(pipeline.new_stage_index(), tx.clone());
                 loop {
                     progress.start_working_stage().await;
                     let retry_message = pipeline.retry_message();
@@ -625,6 +653,7 @@ impl AgentChat {
                         break;
                     }
                 }
+                let _ = stream_ended.send(());
             }
             .instrument(Span::current()),
         );

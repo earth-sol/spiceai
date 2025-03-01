@@ -63,7 +63,7 @@ impl Progress {
     }
 
     pub async fn send_message(&self, content: &str) -> bool {
-        let req = create_working_stream_payload(content.to_string());
+        let req = create_working_stream_payload(format!("{content}\n"));
         self.sender.send(req).await.is_ok()
     }
 

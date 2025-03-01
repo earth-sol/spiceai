@@ -68,6 +68,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "chrono",
+ "event-stream",
  "futures",
  "futures-util",
  "jsonschema",
@@ -4184,6 +4185,19 @@ checksum = "3c3e4e0dd3673c1139bf041f3008816d9cf2946bbfac2945c09e523b8d7b05b2"
 dependencies = [
  "event-listener 5.4.0",
  "pin-project-lite",
+]
+
+[[package]]
+name = "event-stream"
+version = "1.1.0-unstable"
+dependencies = [
+ "futures",
+ "futures-util",
+ "snafu",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -11372,6 +11386,7 @@ version = "1.1.0-unstable"
 dependencies = [
  "app",
  "clap",
+ "event-stream",
  "flightrepl",
  "futures",
  "opentelemetry",

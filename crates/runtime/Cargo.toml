@@ -132,6 +132,7 @@ tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
 tracing-futures.workspace = true
+tracing-subscriber.workspace = true
 tract-core = "0.21.0"
 url = "2.5.4"
 util = { path = "../util" }
