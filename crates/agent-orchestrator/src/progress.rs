@@ -1,16 +1,32 @@
-use std::fmt::Display;
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    sync::{Arc, RwLock},
+};
 
-use async_openai::{error::OpenAIError, types::CreateChatCompletionStreamResponse};
+use serde::Serialize;
 
-use crate::{create_working_stream_payload, pipeline::AgenticStage};
+use crate::pipeline::AgenticStage;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum StageName {
     Research,
     LogicalPlan,
     PhysicalPlan,
     Execution,
     Reporting,
+}
+
+impl StageName {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Research => "research",
+            Self::LogicalPlan => "logical_plan",
+            Self::PhysicalPlan => "physical_plan",
+            Self::Execution => "execution",
+            Self::Reporting => "reporting",
+        }
+    }
 }
 
 impl From<&AgenticStage> for StageName {
@@ -27,121 +43,155 @@ impl From<&AgenticStage> for StageName {
 
 impl Display for StageName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.id())
+    }
+}
+
+/// The type of progress message to send.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProgressType {
+    /// The output of a stage, task, or step has been evaluated.
+    #[serde(rename = "eval")]
+    Evaluation,
+    /// An error has occurred.
+    #[serde(rename = "err")]
+    Error,
+    /// A warning has occurred.
+    #[serde(rename = "warn")]
+    Warning,
+    /// A log message associated with a stage, task, or step.
+    Log,
+}
+
+impl Display for ProgressType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl ProgressType {
+    pub fn as_str(self) -> &'static str {
         match self {
-            Self::Research => write!(f, "research"),
-            Self::PhysicalPlan | Self::LogicalPlan => write!(f, "planning"),
-            Self::Execution => write!(f, "execution"),
-            Self::Reporting => write!(f, "reporting"),
+            Self::Evaluation => "eval",
+            Self::Error => "err",
+            Self::Warning => "warn",
+            Self::Log => "log",
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
+#[allow(clippy::struct_field_names)]
 pub struct Progress {
-    idx: Index,
-    sender: tokio::sync::mpsc::Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
+    #[serde(rename = "type")]
+    progress_type: ProgressType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    tags: HashMap<String, String>,
 }
 
 impl Progress {
-    pub fn new(
-        idx: Index,
-        sender: tokio::sync::mpsc::Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
-    ) -> Self {
-        Self { idx, sender }
-    }
-
-    /// Send a new `Working` start message for the current
-    pub async fn start_working_stage(&self) -> bool {
-        let content = format!("{}\n", self.idx.starting_message());
-        let req = self.idx.with_starting(content.as_str());
-        self.sender.send(req).await.is_ok()
-    }
-
-    pub async fn with_working_ending(&self, content: &str) -> bool {
-        let req = Index::with_ending(content);
-        self.sender.send(req).await.is_ok()
-    }
-
-    pub async fn send_message(&self, content: &str) -> bool {
-        let req = create_working_stream_payload(format!("{content}\n"));
-        self.sender.send(req).await.is_ok()
-    }
-
-    pub async fn send_scoring_message(&self, model_name: &String, score: f32) -> bool {
-        let content = format!(
-            "<meta name=\"score\" value=\"{score}\"/>\n<meta name=\"scorer\" value=\"{model_name}\"/>"
-        );
-        self.send_message(content.as_str()).await
-    }
-
-    pub async fn send_complete_message(&self, content: &str) -> bool {
-        let req = self.idx.closed_message(content);
-        self.sender.send(req).await.is_ok()
-    }
-
-    pub async fn send_open_message(&self, content: &str) -> bool {
-        let req = self.idx.with_starting(content);
-        self.sender.send(req).await.is_ok()
-    }
-
-    pub async fn send_close_message(&self, content: Option<&str>) -> bool {
-        let req = Index::with_ending(content.unwrap_or_default());
-        self.sender.send(req).await.is_ok()
-    }
-
-    pub fn step(&self) -> Option<usize> {
-        self.idx.step
-    }
-
-    pub fn step_str(&self) -> String {
-        self.idx.step.map(format_pos).unwrap_or_default()
-    }
-
-    pub fn task_str(&self) -> String {
-        self.idx.task.map(format_pos).unwrap_or_default()
-    }
-
-    pub fn task(&self) -> Option<usize> {
-        self.idx.task
-    }
-
-    pub fn new_stage(&mut self, stage: StageName) {
-        self.idx.stage = stage;
-        self.idx.task = None;
-        self.idx.step = None;
-    }
-
-    pub fn with_new_task(&self, task: usize) -> Self {
+    pub fn new(progress_type: ProgressType) -> Self {
         Self {
-            idx: Index {
-                stage: self.idx.stage.clone(),
-                task: Some(task),
-                step: None,
-            },
-            sender: self.sender.clone(),
+            progress_type,
+            id: None,
+            parent_id: None,
+            title: None,
+            content: None,
+            tags: HashMap::new(),
         }
     }
-    pub fn with_new_step(&self, step: usize) -> Self {
-        Self {
-            idx: Index {
-                stage: self.idx.stage.clone(),
-                task: self.idx.task,
-                step: Some(step),
-            },
-            sender: self.sender.clone(),
-        }
+
+    pub fn id(mut self, id: String) -> Self {
+        self.id = Some(id);
+        self
     }
+
+    pub fn parent_id(mut self, parent_id: String) -> Self {
+        self.parent_id = Some(parent_id);
+        self
+    }
+
+    pub fn title(mut self, title: String) -> Self {
+        self.title = Some(title);
+        self
+    }
+
+    pub fn content(mut self, content: String) -> Self {
+        self.content = Some(content);
+        self
+    }
+
+    pub fn tag(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.tags.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn to_jsonl(&self) -> String {
+        let raw_json = match serde_json::to_string(self) {
+            Ok(json) => json,
+            Err(_) => {
+                r#"{ "type": "err", "content": "Unexpected error converting progress to JSONL" }"#
+                    .to_string()
+            }
+        };
+        format!("!---jsonl{raw_json}")
+    }
+}
+
+/// Send an `Advance` message for the current stage.
+pub fn advance_stage(idx: &Arc<RwLock<Index>>, next_stage: StageName) {
+    let mut idx = match idx.write() {
+        Ok(idx) => idx,
+        Err(e) => e.into_inner(),
+    };
+    idx.stage = next_stage;
+    let progress = Progress::new(ProgressType::Log)
+        .id(idx.id().to_string())
+        .content(idx.starting_message())
+        .title(idx.title())
+        .to_jsonl();
+    tracing::info!(target: "task_history", progress = %progress);
+}
+
+pub fn current_stage(idx: &Arc<RwLock<Index>>) -> StageName {
+    let idx = match idx.read() {
+        Ok(idx) => idx,
+        Err(e) => e.into_inner(),
+    };
+    idx.stage
 }
 
 /// Index points to a specific part with an [`AgenticStage`]. Some stages don't have subtasks or substeps.
 #[derive(Clone, Debug)]
 pub struct Index {
     pub stage: StageName,
-    pub task: Option<usize>,
-    pub step: Option<usize>,
 }
 
 impl Index {
+    pub(crate) fn new(stage: StageName) -> Self {
+        Self { stage }
+    }
+
+    pub(crate) fn log(idx: &Arc<RwLock<Index>>, log: String) -> String {
+        let idx = match idx.read() {
+            Ok(idx) => idx,
+            Err(e) => e.into_inner(),
+        };
+        let progress = Progress::new(ProgressType::Log)
+            .parent_id(idx.id().to_string())
+            .content(log);
+        progress.to_jsonl()
+    }
+
     pub(crate) fn title(&self) -> String {
         match self.stage {
             StageName::Research => "Researching".to_string(),
@@ -162,47 +212,7 @@ impl Index {
         }
     }
 
-    pub(crate) fn with_starting(
-        &self,
-        content: &str,
-    ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-        create_working_stream_payload(format!(
-            "<working stage=\"{stage}\" title=\"{title}\" {task}{step}>\n{content}",
-            stage = self.stage,
-            title = self.title(),
-            task = self.task.map(|t| format!("task={t} ")).unwrap_or_default(),
-            step = self.step.map(|s| format!("step={s} ")).unwrap_or_default(),
-        ))
-    }
-
-    /// Creates a new message for the current task and step, but also closes it.
-    ///
-    /// Adding a closing bracket is to, currently, ensure multiple conflicting open tags are not sent in parallel.
-    pub(crate) fn closed_message(
-        &self,
-        content: &str,
-    ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-        create_working_stream_payload(format!(
-            "<working stage=\"{stage}\" title=\"{title}\" {task}{step}>\n{content}</working>\n",
-            stage = self.stage,
-            title = self.title(),
-            task = self.task.map(|t| format!("task={t} ")).unwrap_or_default(),
-            step = self.step.map(|s| format!("step={s} ")).unwrap_or_default(),
-        ))
-    }
-
-    pub(crate) fn with_ending(
-        content: &str,
-    ) -> Result<CreateChatCompletionStreamResponse, OpenAIError> {
-        create_working_stream_payload(format!("{content}</working>\n"))
-    }
-}
-
-fn format_pos(i: usize) -> String {
-    match i {
-        1 => "1st".to_string(),
-        2 => "2nd".to_string(),
-        3 => "3rd".to_string(),
-        _ => format!("{i}th"),
+    pub(crate) fn id(&self) -> &'static str {
+        self.stage.id()
     }
 }

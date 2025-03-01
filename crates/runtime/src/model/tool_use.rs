@@ -207,7 +207,7 @@ impl ToolUsingChat {
         for (tool_call, _) in &tool_and_response_content {
             tracing::info!(
                 target: "task_history",
-                progress = format!("Tool {} called with args {}.", tool_call.function.name, tool_call.function.arguments),
+                progress = format!("Tool {} called with args:\n```json\n{}\n```.", tool_call.function.name, tool_call.function.arguments),
             );
         }
 

@@ -5,7 +5,11 @@ use std::{
     sync::Arc,
 };
 
-use crate::{progress::Progress, validate_structured_output, ConversionError};
+use crate::{
+    physical::agentic_retry::extract_content,
+    progress::{Progress, ProgressType, StageName},
+    validate_structured_output, ConversionError,
+};
 
 use super::plan::{PhysicalPlan, PromptStep, Step, ToolStep};
 use async_openai::types::{
@@ -90,8 +94,10 @@ impl From<anyhow::Error> for ExecuteToolError {
 }
 
 impl PhysicalJobExecutor {
-    pub async fn execute(&mut self, progress: &Progress) -> Result<String, anyhow::Error> {
+    pub async fn execute(&mut self) -> Result<String, anyhow::Error> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_execution", input = %serde_json::to_string(&self.plan).unwrap_or_default());
+        let progress =
+            Progress::new(ProgressType::Log).parent_id(StageName::Execution.id().to_string());
 
         let result: Result<String, anyhow::Error> = async {
             // reset physical plan execution log
@@ -104,47 +110,49 @@ impl PhysicalJobExecutor {
                 let task_span = tracing::span!(target: "task_history", parent: &span, tracing::Level::INFO, "orchestrator::physical_task_execution", input = %serde_json::to_string(&task).unwrap_or_default(), task = t); // Yes
 
                 let step_history: Vec<ChatCompletionRequestMessage> = async {
-                    let t_progress = progress.with_new_task(t + 1);
+                    let t_progress = progress.clone().tag("task", format!("{}", t + 1));
                     tracing::info!("Executing task: {}", task.objective);
 
                     tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
                     for (i, step) in task.steps.iter().enumerate() {
+                        let s_progress = t_progress.clone().tag("step", format!("{}", i + 1));
                         let step_span = tracing::span!(target: "task_history",  parent: &task_span, tracing::Level::INFO, "orchestrator::physical_step_execution", input = %serde_json::to_string(&task).unwrap_or_default(), task = t);  // Yes
                         async {
                             let output = self
-                                .execute_step(&mut step_history, step)
+                                .execute_step(&mut step_history, step, s_progress.clone())
                                 .await
                                 .inspect_err(|err| {
                                     trace_execution_progress(step, &err.to_string());
                                     tracing::error!(target: "task_history", parent: &step_span, "{err}");
-                                    tracing::error!(target: "task_history", parent: &task_span, "{err}");
+                                    let e_progress = s_progress.clone().content(format!("{err}")).to_jsonl();
+                                    tracing::error!(target: "task_history", progress = %e_progress);
                                 })?;
                             tracing::info!(
                                 target: "task_history",
                                 parent: &step_span,
                                 captured_output = %serde_json::to_string(&output).unwrap_or_default()
                             );
-                            tracing::info!("Step output: {output:?}");
+                            let output_content = extract_content(&output)?;
+                            let step_output_progress = s_progress.clone().content(output_content).to_jsonl();
+                            tracing::info!(target: "task_history", progress = %step_output_progress);
 
-                            let s_progress = t_progress.with_new_step(i + 1);
-                            s_progress
-                                .send_complete_message(
-                                    step.execute_step_summary().as_str(),
-                                )
-                                .await;
+                            let s_progress = s_progress.content(step.execute_step_summary()).to_jsonl();
+                            tracing::info!(target: "task_history", progress = %s_progress);
                             step_history.push(output);
                             Ok::<(), anyhow::Error>(())
                         }
                         .instrument(step_span.clone())
                         .await?;
                     };
-                    t_progress.send_close_message(None).await;
 
                     self
                         .summarize_executed_steps(&self.verifier_model, &step_history)
                         .await
-                        .inspect_err(|e| tracing::error!(target: "task_history", parent: &task_span, "{e}"))
-
+                        .inspect_err(|e| {
+                            tracing::error!(target: "task_history", parent: &task_span, "{e}");
+                            let e_progress = t_progress.clone().content(format!("{e}")).to_jsonl();
+                            tracing::error!(target: "task_history", progress = %e_progress);
+                        })
                 }.instrument(task_span.clone()).await?;
                 self.execution_history.push(step_history.clone());
 
@@ -167,6 +175,8 @@ impl PhysicalJobExecutor {
             }
             Err(e) => {
                 tracing::error!(target: "task_history", parent: &span, "{e}");
+                let e_progress = progress.clone().content(format!("{e}")).to_jsonl();
+                tracing::error!(target: "task_history", progress = %e_progress);
                 Err(e)
             }
         }
@@ -176,13 +186,17 @@ impl PhysicalJobExecutor {
         &self,
         step_history: &mut Vec<ChatCompletionRequestMessage>,
         step: &Step,
+        progress: Progress,
     ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
         match step {
             Step::Tool(tool_step) => self
-                .execute_tool(step_history, tool_step)
+                .execute_tool(step_history, tool_step, progress)
                 .await
                 .map_err(|e| anyhow::anyhow!("Error executing tool: {e}")),
-            Step::Prompt(prompt_step) => self.execute_prompt(step_history, prompt_step).await,
+            Step::Prompt(prompt_step) => {
+                self.execute_prompt(step_history, prompt_step, progress)
+                    .await
+            }
         }
     }
 
@@ -190,6 +204,7 @@ impl PhysicalJobExecutor {
         &self,
         step_history: &mut Vec<ChatCompletionRequestMessage>,
         step: &PromptStep,
+        progress: Progress,
     ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
         let prompt = step.prompt.clone();
         let llms = &*self.llms.read().await;
@@ -215,6 +230,8 @@ impl PhysicalJobExecutor {
         };
 
         trace_execution_progress(&Step::Prompt(step.clone()), &message);
+        let p_progress = progress.clone().content(message.clone()).to_jsonl();
+        tracing::info!(target: "task_history", progress = %p_progress);
 
         let tool_message = ChatCompletionRequestUserMessageArgs::default()
             .content(ChatCompletionRequestUserMessageContent::Text(message))
@@ -227,6 +244,7 @@ impl PhysicalJobExecutor {
         &self,
         step_history: &[ChatCompletionRequestMessage],
         step: &ToolStep,
+        progress: Progress,
     ) -> Result<ChatCompletionRequestMessage, ExecuteToolError> {
         let tool = self
             .tools
@@ -258,6 +276,7 @@ impl PhysicalJobExecutor {
                 &step.success_criteria,
                 None,
                 None,
+                progress,
             )
             .await?;
 
@@ -307,7 +326,7 @@ impl PhysicalJobExecutor {
         }
     }
 
-    #[allow(dead_code, clippy::too_many_lines)]
+    #[allow(dead_code, clippy::too_many_lines, clippy::too_many_arguments)]
     async fn tool_call_succeeded(
         &self,
         step_history: &[ChatCompletionRequestMessage],
@@ -316,6 +335,7 @@ impl PhysicalJobExecutor {
         success_criteria: &str,
         iteration: Option<usize>,
         extra_message: Option<ChatCompletionRequestMessage>,
+        progress: Progress,
     ) -> Result<VerificationResponse, anyhow::Error> {
         let iteration = iteration.unwrap_or(0);
 
@@ -456,6 +476,7 @@ impl PhysicalJobExecutor {
                                     )
                                     .into(),
                                 )),
+                                progress,
                             ),
                         )
                         .await;
@@ -492,7 +513,8 @@ impl PhysicalJobExecutor {
                                     iteration + 1
                                 )
                                 .into()
-                            ))
+                            )),
+                            progress,
                         ))
                         .await;
                     }
@@ -645,9 +667,7 @@ fn trace_execution_progress(step: &Step, output: &str) {
 
 fn reset_execution_log() {
     let log_path = "data/physical/physical_plan_execution.log";
-    if let Err(e) = std::fs::remove_file(log_path) {
-        tracing::error!("Failed to reset execution log file: {e}");
-    }
+    let _ = std::fs::remove_file(log_path);
 }
 
 fn log_execution_update(update_message: &str) {

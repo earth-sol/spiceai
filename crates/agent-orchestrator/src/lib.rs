@@ -21,16 +21,19 @@ use llms::chat::{nsql::SqlGeneration, Chat};
 use logical::{logical_plan_complete_summary, plan::LogicalPlan};
 use physical::{executor::PhysicalJobExecutor, plan::PhysicalPlan};
 use pipeline::create_working_stream_payload;
-use progress::Progress;
+use progress::{Index, Progress, ProgressType, StageName};
 use research::{
     model::{parse_response, research_complete_msg},
     Research,
 };
 use score::score;
-use serde::{de::DeserializeOwned, Serialize};
-use snafu::ResultExt;
+use serde::de::DeserializeOwned;
 use std::future::Future;
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock as RwLockSync},
+    time::Duration,
+};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
@@ -145,6 +148,7 @@ pub struct AgentChat {
     llms: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
     tools: HashMap<String, Arc<dyn SpiceModelTool>>,
     max_retry: usize,
+    progress_index: Arc<RwLockSync<Index>>,
 }
 
 const DEFAULT_MAX_RETRY: usize = 1;
@@ -165,6 +169,7 @@ impl AgentChat {
             llms,
             tools,
             max_retry: DEFAULT_MAX_RETRY,
+            progress_index: Arc::new(RwLockSync::new(Index::new(StageName::Research))),
         }
     }
 
@@ -177,7 +182,6 @@ impl AgentChat {
     async fn retry_stage<F, Fut, T>(
         &self,
         retry_message: String,
-        progress: &Progress,
         operation: F,
     ) -> Result<T, OpenAIError>
     where
@@ -195,7 +199,7 @@ impl AgentChat {
                 Err(e) => {
                     if should_retry_on_error(&e) {
                         tracing::warn!("Error: {e}. Retrying operation.");
-                        progress.send_message(retry_message.as_str()).await;
+                        tracing::info!(target: "task_history", progress = %retry_message);
                         return Err(RetryError::transient(e));
                     }
                     Err(RetryError::Permanent(e))
@@ -210,9 +214,8 @@ impl AgentChat {
         research_model: &dyn Chat,
         prompt: &String,
         retry_message: String,
-        progress: &Progress,
     ) -> Result<Research, OpenAIError> {
-        self.retry_stage(retry_message, progress, || {
+        self.retry_stage(retry_message, || {
             self.generate_research_single(research_model, prompt)
         })
         .await
@@ -223,9 +226,8 @@ impl AgentChat {
         logical_planner_model: &dyn Chat,
         research: &Research,
         retry_message: String,
-        progress: &Progress,
     ) -> Result<LogicalPlan, OpenAIError> {
-        self.retry_stage(retry_message, progress, || {
+        self.retry_stage(retry_message, || {
             self.generate_logical_plan_single(logical_planner_model, research)
         })
         .await
@@ -237,14 +239,12 @@ impl AgentChat {
         physical_tool_planner_model: &dyn Chat,
         physical_prompt_planner_model: &dyn Chat,
         retry_message: String,
-        progress: &Progress,
     ) -> Result<PhysicalPlan, OpenAIError> {
-        self.retry_stage(retry_message, progress, || {
+        self.retry_stage(retry_message, || {
             self.generate_physical_plan_single(
                 plan,
                 physical_tool_planner_model,
                 physical_prompt_planner_model,
-                progress,
             )
         })
         .await
@@ -382,7 +382,6 @@ impl AgentChat {
         plan: &LogicalPlan,
         physical_tool_planner_model: &dyn Chat,
         physical_prompt_planner_model: &dyn Chat,
-        progress: &Progress,
     ) -> Result<PhysicalPlan, OpenAIError> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan", input = %serde_json::to_string(&plan).unwrap_or_default());
 
@@ -392,7 +391,6 @@ impl AgentChat {
                 physical_tool_planner_model,
                 physical_prompt_planner_model,
                 self.models.executor.clone(),
-                progress,
                 &self.tools,
             )
             .instrument(span.clone())
@@ -422,23 +420,27 @@ impl AgentChat {
     ) -> ChatCompletionResponseStream {
         let (tx, rx) =
             mpsc::channel::<Result<CreateChatCompletionStreamResponse, OpenAIError>>(100);
-        let id = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
 
         let models = Arc::clone(&self.llms);
 
-        let mut progress = Progress::new(pipeline.new_stage_index(), tx.clone());
         let (stream_ended, stream_ended_receiver) = tokio::sync::oneshot::channel::<()>();
 
         if let Ok(mut event_stream) = get_event_stream() {
-            let progress_clone = progress.clone();
             let mut main_stream_ended = Box::pin(stream::once(async move {
                 let _ = stream_ended_receiver.await;
             }));
+            let current_index = Arc::clone(&self.progress_index);
+            let tx = tx.clone();
             tokio::spawn(async move {
                 loop {
                     tokio::select! {
-                        Some(event) = event_stream.next() => {
-                            if !progress_clone.send_message(&event).await {
+                        Some(mut event) = event_stream.next() => {
+                            if !event.starts_with("!---jsonl") {
+                                // If the event isn't already formatted for JSONL, format it using the current index details.
+                                event = Index::log(&current_index, event);
+                            }
+                            let req = create_working_stream_payload(format!("{event}\n"));
+                            if tx.send(req).await.is_err() {
                                 // Stream is closed - stop waiting for new events
                                 return;
                             }
@@ -497,9 +499,8 @@ impl AgentChat {
                 };
 
                 let service = Arc::clone(&self);
-                let id = id.clone();
                 loop {
-                    progress.start_working_stage().await;
+                    progress::advance_stage(&self.progress_index, (&pipeline).into());
                     let retry_message = pipeline.retry_message();
                     match pipeline {
                         pipeline::AgenticStage::Research { prompt } => {
@@ -509,32 +510,23 @@ impl AgentChat {
                                         researcher_model.as_ref(),
                                         &prompt,
                                         retry_message,
-                                        &progress,
                                     )
                                     .await,
                                 tx
                             );
-                            if let Err(()) = evaluate_with_model(
+                            if let Err(e) = evaluate_with_model(
                                 self.models.research_artifact_eval.as_ref(),
                                 &models,
-                                &tx,
-                                &progress,
                                 prompt.clone(),
                                 format!("{research:?}"),
+                                Progress::new(ProgressType::Evaluation)
+                                    .parent_id(StageName::Research.id().to_string()),
                             )
                             .await
                             {
+                                tracing::error!(target: "task_history", progress = %e);
                                 return;
                             }
-                            try_send_err!(
-                                write_artifact("research/research_artifacts", &id, &research)
-                                    .map_err(|e| {
-                                        OpenAIError::InvalidArgument(format!(
-                                            "Error writing research artifacts: {e}"
-                                        ))
-                                    }),
-                                tx
-                            );
                             pipeline = pipeline::AgenticStage::LogicalPlan(research);
                         }
                         pipeline::AgenticStage::LogicalPlan(research) => {
@@ -544,33 +536,23 @@ impl AgentChat {
                                         logical_planner_model.as_ref(),
                                         &research,
                                         retry_message,
-                                        &progress,
                                     )
                                     .await,
                                 tx
                             );
-                            if let Err(()) = evaluate_with_model(
+                            if let Err(e) = evaluate_with_model(
                                 self.models.logical_plan_eval.as_ref(),
                                 &models,
-                                &tx,
-                                &progress,
                                 format!("{research:?}"),
                                 format!("{logical_plan:?}"),
+                                Progress::new(ProgressType::Evaluation)
+                                    .parent_id(StageName::LogicalPlan.id().to_string()),
                             )
                             .await
                             {
+                                tracing::error!(target: "task_history", progress = %e);
                                 return;
                             }
-                            try_send_err!(
-                                write_artifact("logical/logical_plan", &id, &logical_plan).map_err(
-                                    |e| {
-                                        OpenAIError::InvalidArgument(format!(
-                                            "Error writing logical plan: {e}"
-                                        ))
-                                    }
-                                ),
-                                tx
-                            );
                             pipeline = pipeline::AgenticStage::PhysicalPlan(logical_plan);
                         }
                         pipeline::AgenticStage::PhysicalPlan(logical_plan) => {
@@ -581,34 +563,24 @@ impl AgentChat {
                                         physical_tool_planner_model.as_ref(),
                                         physical_prompt_planner_model.as_ref(),
                                         retry_message,
-                                        &progress,
                                     )
                                     .await,
                                 tx
                             );
 
-                            if let Err(()) = evaluate_with_model(
+                            if let Err(e) = evaluate_with_model(
                                 self.models.physical_plan_eval.as_ref(),
                                 &models,
-                                &tx,
-                                &progress,
                                 format!("{logical_plan:?}"),
                                 format!("{physical_plan:?}"),
+                                Progress::new(ProgressType::Evaluation)
+                                    .parent_id(StageName::PhysicalPlan.id().to_string()),
                             )
                             .await
                             {
+                                tracing::error!(target: "task_history", progress = %e);
                                 return;
                             }
-
-                            try_send_err!(
-                                write_artifact("physical/physical_plan", &id, &physical_plan)
-                                    .map_err(|e| {
-                                        OpenAIError::InvalidArgument(format!(
-                                            "Error writing physical plan: {e}"
-                                        ))
-                                    }),
-                                tx
-                            );
 
                             pipeline = pipeline::AgenticStage::Execution(physical_plan);
                         }
@@ -620,7 +592,7 @@ impl AgentChat {
                                 self.models.verifier.clone(),
                             );
                             let output = try_send_err!(
-                                executor.execute(&progress).await.map_err(|e| {
+                                executor.execute().await.map_err(|e| {
                                     OpenAIError::InvalidArgument(format!(
                                         "Error executing physical plan: {e}"
                                     ))
@@ -631,23 +603,27 @@ impl AgentChat {
                             pipeline = pipeline::AgenticStage::Reporting(output);
                         }
                         pipeline::AgenticStage::Reporting(ref s) => {
-                            progress
-                                .with_working_ending(
-                                    format!("{}\n", pipeline.previous_stage_summary()).as_str(),
-                                )
-                                .await;
-                            progress.send_message(s.as_str()).await;
+                            let summary = pipeline.previous_stage_summary();
+                            let json_progress = Progress::new(ProgressType::Log)
+                                .parent_id(StageName::Reporting.id().to_string())
+                                .content(summary)
+                                .to_jsonl();
+                            tracing::info!(target: "task_history", progress = %json_progress);
+                            let req = create_working_stream_payload(format!("{s}\n"));
+                            let _ = tx.send(req).await;
                             break;
                         }
                     }
-                    progress
-                        .with_working_ending(
-                            format!("{}\n", pipeline.previous_stage_summary()).as_str(),
+                    let summary = pipeline.previous_stage_summary();
+                    let json_progress = Progress::new(ProgressType::Log)
+                        .parent_id(
+                            progress::current_stage(&self.progress_index)
+                                .id()
+                                .to_string(),
                         )
-                        .await;
-
-                    // Advance to the next stage (pipeline itself updated above).
-                    progress.new_stage((&pipeline).into());
+                        .content(summary)
+                        .to_jsonl();
+                    tracing::info!(target: "task_history", progress = %json_progress);
 
                     if matches!(advance_mode, pipeline::AdvanceMode::Stop) {
                         break;
@@ -665,53 +641,24 @@ impl AgentChat {
 async fn evaluate_with_model(
     eval_config: Option<&EvalModelConfig>,
     models: &HashMap<String, Box<dyn Chat>>,
-    tx: &mpsc::Sender<Result<CreateChatCompletionStreamResponse, OpenAIError>>,
-    progress: &Progress,
     input: String,
     actual: String,
-) -> Result<(), ()> {
+    progress: Progress,
+) -> Result<(), anyhow::Error> {
     if let Some(EvalModelConfig { ref model_name, .. }) = eval_config {
         let Some(model) = models.get(model_name) else {
-            let _ = tx
-                .send(Err(OpenAIError::InvalidArgument(format!(
-                    "Model {model_name} not found."
-                ))))
-                .await;
-            return Err(());
+            return Err(anyhow::anyhow!("Model {} not found.", model_name));
         };
 
-        let score = match score(model.as_ref(), input, actual).await {
-            Ok(score) => score,
-            Err(err) => {
-                let _ = tx.send(Err(err)).await;
-                return Err(());
-            }
-        };
+        let score = score(model.as_ref(), input, actual).await?;
 
-        progress.send_scoring_message(model_name, score).await;
+        let json_progress = progress
+            .tag("scorer", model_name.clone())
+            .tag("score", score.to_string())
+            .to_jsonl();
+        tracing::info!(target: "task_history", progress = %json_progress);
     }
 
-    Ok(())
-}
-
-fn write_artifact<T: ?Sized + Serialize>(
-    base_name: &str,
-    id: &str,
-    artifact: &T,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let artifact_json = serde_json::to_string_pretty(artifact)?;
-
-    tracing::debug!("{base_name}: {artifact_json}");
-
-    if let Some(base_dir) = PathBuf::from(format!("data/{base_name}")).parent() {
-        if !base_dir.exists() {
-            tracing::debug!("Creating directory(s) {base_dir:?}");
-            std::fs::create_dir_all(base_dir).boxed()?;
-        }
-    }
-
-    std::fs::write(format!("data/{base_name}_{id}.json"), &artifact_json).boxed()?;
-    std::fs::write(format!("data/{base_name}_latest.json"), &artifact_json).boxed()?;
     Ok(())
 }
 

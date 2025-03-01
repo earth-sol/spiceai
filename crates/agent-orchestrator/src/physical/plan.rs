@@ -17,7 +17,7 @@ use crate::{
         self,
         plan::{Action, LogicalPlan},
     },
-    progress::Progress,
+    progress::{Progress, ProgressType, StageName},
     validate_structured_output, ConversionError,
 };
 
@@ -320,6 +320,7 @@ impl PhysicalPlan {
 
     pub async fn plan_task(
         task: &logical::plan::Task,
+        task_idx: usize, // 0-indexed
         tool_planner: &dyn Chat,
         prompt_planner: &dyn Chat,
         executor: String,
@@ -333,7 +334,7 @@ impl PhysicalPlan {
             let tool_list = get_tools(tools).map_err(|e| OpenAIError::InvalidArgument(format!("Failed to get tools: {e}")))?;
             for (i, step) in task.steps.iter().enumerate() {
                 let step_span = tracing::span!(
-                    target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_step", // Yes
+                    target: "task_history", tracing::Level::INFO, "orchestrator::physical_plan_step",
                     input = %serde_json::to_string(&step).unwrap_or_default(),
                     step_number=i
                 );
@@ -372,12 +373,8 @@ impl PhysicalPlan {
                     .with_task_id(task.uuid);
 
                     tracing::info!(target: "task_history", parent: &step_span, captured_output = %serde_json::to_string(&result).unwrap_or_default());
-                    let s_progress = progress.with_new_step(i + 1);
-                    s_progress
-                        .send_complete_message(
-                            result.plan_step_summary().as_str(),
-                        )
-                        .await;
+                    let s_progress = progress.clone().tag("step", format!("{}", i + 1)).content(result.plan_step_summary()).to_jsonl();
+                    tracing::info!(target: "task_history", progress = %s_progress);
 
                     steps.push(result);
                     Ok(())
@@ -385,9 +382,9 @@ impl PhysicalPlan {
                 output?;
             }
 
-            progress
-                .send_complete_message(format!("Finished {} task.\n", progress.task_str()).as_str())
-                .await;
+            let task_str = format!("Finished {} task.\n", format_pos(task_idx + 1));
+            let s_progress = progress.content(task_str).to_jsonl();
+            tracing::info!(target: "task_history", progress = %s_progress);
 
             Ok(Task {
                 objective: task.objective.clone(),
@@ -414,17 +411,20 @@ impl PhysicalPlan {
         tool_planner: &dyn Chat,
         prompt_planner: &dyn Chat,
         executor: String,
-        progress: &Progress,
         tools: &HashMap<String, Arc<dyn SpiceModelTool>>,
     ) -> Result<Self, async_openai::error::OpenAIError> {
         // for each task, convert the list of steps from the logical plan based on their StepType
         let futs = logical_plan.tasks.iter().enumerate().map(|(i, t)| {
+            let progress = Progress::new(ProgressType::Log)
+                .parent_id(StageName::PhysicalPlan.id().to_string())
+                .tag("task", format!("{}", i + 1));
             Self::plan_task(
                 t,
+                i,
                 tool_planner,
                 prompt_planner,
                 executor.clone(),
-                progress.with_new_task(i + 1),
+                progress,
                 tools,
             )
             .instrument(Span::current())
@@ -434,5 +434,14 @@ impl PhysicalPlan {
             .await?;
 
         Ok(Self { tasks })
+    }
+}
+
+fn format_pos(i: usize) -> String {
+    match i {
+        1 => "1st".to_string(),
+        2 => "2nd".to_string(),
+        3 => "3rd".to_string(),
+        _ => format!("{i}th"),
     }
 }

@@ -1,4 +1,4 @@
-use std::{fmt::Display, time::SystemTime};
+use std::time::SystemTime;
 
 use async_openai::{
     error::OpenAIError,
@@ -10,8 +10,8 @@ use async_openai::{
 };
 
 use crate::{
-    logical_plan_complete_summary, progress::Index, research::Research, research_complete_msg,
-    LogicalPlan, PhysicalPlan,
+    logical_plan_complete_summary, research::Research, research_complete_msg, LogicalPlan,
+    PhysicalPlan,
 };
 
 /// Defines the pipeline stages that an agent request goes through. The values for each stage are the inputs for that stage.
@@ -29,37 +29,6 @@ pub enum AgenticStage {
     Reporting(String),
 }
 
-pub enum StageName {
-    Research,
-    LogicalPlan,
-    PhysicalPlan,
-    Execution,
-    Reporting,
-}
-
-impl From<&AgenticStage> for StageName {
-    fn from(stage: &AgenticStage) -> Self {
-        match stage {
-            AgenticStage::Research { .. } => Self::Research,
-            AgenticStage::LogicalPlan(_) => Self::LogicalPlan,
-            AgenticStage::PhysicalPlan(_) => Self::PhysicalPlan,
-            AgenticStage::Execution(_) => Self::Execution,
-            AgenticStage::Reporting(_) => Self::Reporting,
-        }
-    }
-}
-
-impl Display for StageName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Research => write!(f, "research"),
-            Self::LogicalPlan | Self::PhysicalPlan => write!(f, "planning"),
-            Self::Execution => write!(f, "execution"),
-            Self::Reporting => write!(f, "reporting"),
-        }
-    }
-}
-
 impl AgenticStage {
     pub(crate) fn previous_stage_summary(&self) -> String {
         match self {
@@ -68,14 +37,6 @@ impl AgenticStage {
             Self::PhysicalPlan(l) => logical_plan_complete_summary(l),
             Self::Execution(_) => PhysicalPlan::summary(),
             Self::Reporting(_) => "Execution complete".to_string(),
-        }
-    }
-
-    pub(crate) fn new_stage_index(&self) -> Index {
-        Index {
-            stage: self.into(),
-            task: None,
-            step: None,
         }
     }
 
