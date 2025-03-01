@@ -322,67 +322,68 @@ impl PhysicalJobExecutor {
         let mut messages = step_history.to_vec();
         messages.push(tool_output.clone());
         messages.push(ChatCompletionRequestMessage::User(
-            format!("# Goal
+            format!(
+                "# Verify Tool Call Success
 
-            The previous message was a tool call. Classify if the previous tool call was successful or not, based on the output of the previous tool call and the step's success criteria.
+                ## Success Criteria
+                {success_criteria}
 
-            Plan the steps you need to take to verify the success criteria, and execute the steps to verify the success criteria.
+                ## Guidelines
+                1. Non-zero status codes aren't always failures - examine the actual output
+                2. Background processes may run without returning status codes
+                3. Terminal commands need output verification beyond status codes
+                4. Stderr output doesn't always indicate failure
+                5. Use tools to verify success criteria if needed
+                6. Make additional tool calls if verification requires more data
+                7. Classify after thorough investigation
 
-            # Success Criteria
+                ## Expected Classification
+                - Succeeded: Success criteria met with evidence
+                - Failed: Evidence shows criteria not met
+                - Inconclusive: Need more information to determine
 
-            {success_criteria}
+                ## Example Successful Classification Process
+                1. Inspect the tool output. The tool output talks about a terminal command that completed with status code 4, with a method to access terminal logs based on a terminal ID.
+                2. Because the status code is non-zero, we need to inspect the terminal logs to determine if the command actually failed.
+                3. Make a tool call to retrieve the relevant terminal logs.
+                4. The terminal logs include no error messages, and the command output is as expected.
+                5. The tool call is classified as successful.
+                
+                ## Example Successful Classification Process
+                1. Inspect the tool output. The tool output shows that a background service `postgres` was started with a command that exited with status code 0.
+                2. Make a tool call to check if the daemon process is running with `ps -aux | grep postgres`.
+                3. The tool output confirms the daemon is running with PID 12345.
+                4. Make a tool call to retrieve the relevant terminal logs.
+                5. The logs show some error messages about configuration warnings, but the service is still running.
+                6. The tool call is classified as successful because the daemon is running as expected, despite the warnings in the logs.
+                7. The warning details are included in the reason section of the verification response.
 
-            # Guidelines
+                ## Example Failed Classification Process
+                1. Inspect the tool step. The tool step talks about removing some files.
+                2. Because the tool step talks about removing files, we need to inspect the filesystem to determine if the files were actually removed.
+                3. Make a tool call to retrieve the relevant filesystem information.
+                4. The filesystem information includes the list of files, and the files are still present.
+                5. The tool call is classified as failed.
 
-            1. A non-zero status code does not always mean the tool call failed - ensure you inspect the relevant tool output, or call additional tools if needed, to determine if the output actually indicates a failure.
-            2. If the tool call hangs without returning a status code, it could be a daemon process that continues running in the background:. A daemon showing error messages in its logs doesn't necessarily mean failure.
-            3. If the tool call message indicates a terminal command was executed, ensure you retrieve the relevant terminal output and classify based on the retrieved terminal output.
-            4. Ensure you consider that the existence of an Stderr output does not always mean the call failed - ensure you inspect the Stderr output, to determine if the output actually indicates a failure.
-            5. Use any of your available tools to verify the success criteria has been met.
-            6. If there is no evidence or confirmation from the tool output that the success criteria has been met, make tool calls to retrieve the relevant information to verify the success criteria has been met.
-            7. If additional tool calls are required to classify success, make them before classifying.
+                ## Example Inconclusive Classification Process
+                1. Inspect the tool step. The tool step talks about a terminal command that is still running.
+                2. Make a tool call to retrieve the relevant terminal logs.
+                3. The terminal logs include no error messages.
+                4. Because the process is still running, the tool call is classified as inconclusive.
 
-            # Example Successful Classification Process
+                In this situation, we should wait a few minutes and check again.
+                On the second check:
+                1. Make a tool call to retrieve the terminal logs.
+                2. The terminal logs include no error messages, and the terminal is idle.
+                3. The tool call is classified as successful.
 
-            1. Inspect the tool output. The tool output talks about a terminal command that completed with status code 4, with a method to access terminal logs based on a terminal ID.
-            2. Because the status code is non-zero, we need to inspect the terminal logs to determine if the command actually failed.
-            3. Make a tool call to retrieve the relevant terminal logs.
-            4. The terminal logs include no error messages, and the command output is as expected.
-            5. The tool call is classified as successful.
-            
-            # Example Successful Classification Process
-
-            1. Inspect the tool output. The tool output shows that a background service `postgres` was started with a command that exited with status code 0.
-            2. Make a tool call to check if the daemon process is running with `ps -aux | grep postgres`.
-            3. The tool output confirms the daemon is running with PID 12345.
-            4. Make a tool call to retrieve the relevant terminal logs.
-            5. The logs show some error messages about configuration warnings, but the service is still running.
-            6. The tool call is classified as successful because the daemon is running as expected, despite the warnings in the logs.
-            7. The warning details are included in the reason section of the verification response.
-
-            # Example Failed Classification Process
-
-            1. Inspect the tool step. The tool step talks about removing some files.
-            2. Because the tool step talks about removing files, we need to inspect the filesystem to determine if the files were actually removed.
-            3. Make a tool call to retrieve the relevant filesystem information.
-            4. The filesystem information includes the list of files, and the files are still present.
-            5. The tool call is classified as failed.
-
-            # Example Inconclusive Classification Process
-
-            1. Inspect the tool step. The tool step talks about a terminal command that is still running.
-            2. Make a tool call to retrieve the relevant terminal logs.
-            3. The terminal logs include no error messages.
-            4. Because the process is still running, the tool call is classified as inconclusive.
-
-            In this situation, we should wait a few minutes and check again.
-            On the second check:
-
-            1. Make a tool call to retrieve the terminal logs.
-            2. The terminal logs include no error messages, and the terminal is idle.
-            3. The tool call is classified as successful.
-            ",
-        ).into()));
+                ## Response Format
+                - Status: [Succeeded/Failed/Inconclusive]  
+                - Reasoning: Clear explanation of your classification
+                - Should we wait and retry later: [true/false]"
+            )
+            .into(),
+        ));
 
         if let Some(extra_message) = extra_message {
             messages.push(extra_message);
@@ -427,23 +428,36 @@ impl PhysicalJobExecutor {
 
                         messages.push(ChatCompletionRequestMessage::Assistant(message.into()));
 
-                        return Box::pin(self.tool_call_succeeded(
-                            step_history,
-                            tool_output,
-                            model_name,
-                            success_criteria,
-                            Some(iteration + 1),
-                            Some(ChatCompletionRequestMessage::User(
-                                format!("# Status
+                        return Box::pin(
+                            self.tool_call_succeeded(
+                                step_history,
+                                tool_output,
+                                model_name,
+                                success_criteria,
+                                Some(iteration + 1),
+                                Some(ChatCompletionRequestMessage::User(
+                                    format!(
+                                        "# Verification Check #{} Required
 
-                                You have already checked {} times if the previous tool call was successful or not, but you were unable to verify the result of the tool call.
-                                Last time, you thought waiting might be needed to verify the result of the previous tool call.
+                                        Previous attempts to verify the tool call were inconclusive, and you recommended waiting.
 
-                                # Next Steps
+                                        ## Instructions
+                                        1. The system state has likely changed during the waiting period
+                                        2. Use appropriate tools to gather fresh evidence:
+                                        - Check terminal logs
+                                        - Verify process status
+                                        - Examine file contents/permissions
+                                        - Confirm network connectivity
+                                        3. Make a definitive assessment based on the success criteria
+                                        4. Provide clear reasoning for your conclusion
 
-                                On the next success criteria check, call all neccessary tools to collect additional information as the state will have changed since the last check.", iteration+1).into()
-                            ))
-                        ))
+                                        Your goal is to reach a conclusive determination (Succeeded/Failed) after this waiting period.",
+                                        iteration + 1
+                                    )
+                                    .into(),
+                                )),
+                            ),
+                        )
                         .await;
                     }
 
@@ -464,12 +478,20 @@ impl PhysicalJobExecutor {
                             success_criteria,
                             Some(iteration + 1),
                             Some(ChatCompletionRequestMessage::System(
-                                format!("# Status
+                                format!(
+                                    "# Verification Attempt #{} - Need Decisive Assessment
 
-                                You have already checked {} times if the previous tool call was successful or not, but you came to an inconclusive result.
-                                On the next success criteria check, ensure you call all relevant tools to collect the additional verification you require.
+                                    Previous verification attempts were inconclusive. You MUST make a decisive determination now by:
+                                    - Collecting additional evidence through appropriate tool calls
+                                    - Checking updated terminal logs or process status
+                                    - Verifying file system changes or network status
+                                    - Examining any relevant metrics or state changes since last check
 
-                                This could include collecting updated terminal logs, as the state may have changed since the last check.", iteration+1).into()
+                                    Focus on gathering concrete evidence that directly addresses success criteria.
+                                    Be thorough but decisive - a conclusive verdict (Succeeded/Failed) is required.",
+                                    iteration + 1
+                                )
+                                .into()
                             ))
                         ))
                         .await;
@@ -487,7 +509,7 @@ impl PhysicalJobExecutor {
         model: &str,
         step_history: &[ChatCompletionRequestMessage],
     ) -> Result<Vec<ChatCompletionRequestMessage>, anyhow::Error> {
-        let mut messages: Vec<ChatCompletionRequestMessage> = vec![]; // step_history.to_vec();
+        let mut messages: Vec<ChatCompletionRequestMessage> = vec![];
 
         let content = step_history
             .iter()
@@ -496,18 +518,21 @@ impl PhysicalJobExecutor {
             .join("\n\n");
 
         messages.push(ChatCompletionRequestMessage::User(
-            format!("# Goal
+            format!(
+                "# Summarize Execution Steps
 
-            Summarize the steps below that have been executed previously.
-             - Only include main results, list of steps completed,
-             - Incldue learnings, hints and important details that could be useful to effectively execute further tasks.
+                Create a concise summary (100-200 words) of these execution steps focusing on:
+                1. Main results achieved
+                2. Completed steps
+                3. Important discoveries
+                4. Technical details relevant for future tasks
 
-            Summary must be concise, clear and short.
+                Omit process descriptions and unnecessary details.
 
-            **Steps**
-
-            {content}
-            ").into(),
+                ## Execution Steps
+                {content}"
+            )
+            .into(),
         ));
 
         let llms = &*self.llms.read().await;
@@ -527,7 +552,15 @@ impl PhysicalJobExecutor {
             return Err(anyhow::anyhow!("No message content found"));
         };
 
-        let message = ChatCompletionRequestUserMessageContent::Text(format!("Find information about previously executed tasks to help complete your next steps\n\n# Previous Steps\n\n{summary}"));
+        let message = ChatCompletionRequestUserMessageContent::Text(format!(
+            "# Task Execution Summary
+            {summary}
+            
+            ## Instructions
+            - Use this summary as context for subsequent tasks
+            - Reference key findings and outcomes when relevant
+            - Build upon these completed actions rather than repeating work"
+        ));
 
         Ok(vec![ChatCompletionRequestMessage::User(message.into())])
     }
@@ -537,7 +570,7 @@ impl PhysicalJobExecutor {
         model: &str,
         step_history: &[ChatCompletionRequestMessage],
     ) -> Result<String, anyhow::Error> {
-        let mut messages: Vec<ChatCompletionRequestMessage> = vec![]; // step_history.to_vec();
+        let mut messages: Vec<ChatCompletionRequestMessage> = vec![];
 
         let content = step_history
             .iter()
@@ -546,17 +579,25 @@ impl PhysicalJobExecutor {
             .join("\n\n");
 
         messages.push(ChatCompletionRequestMessage::User(
-            format!("# Goal
+            format!(
+                "# Generate Software Testing QA Report
 
-            Create a final summary of all executed steps and tasks.
-            Include a final note, with an emoji for check or cross, for whether the task was successful or not.
+                Create a professional report (max 500 words) with:
 
-            Collect information from tool calls if you need additional information to complete the summary.
+                1. **Executive Summary** (2-3 sentence overview)
+                2. **Test Objectives** (What was tested and why)
+                3. **Test Process** (Approach summary)
+                4. **Results Summary**
+                   - Key findings with success indicators (✅/❌)
+                   - Issues encountered
+                5. **Recommendations**
 
-            # Steps
+                Be concise, highlight success/failure points clearly, and provide actionable insights.
 
-            {content}
-            ").into(),
+                ## Execution Log
+                {content}"
+            )
+            .into(),
         ));
 
         let llms = &*self.llms.read().await;
