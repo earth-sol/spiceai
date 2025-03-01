@@ -82,8 +82,8 @@ impl AgenticStage {
     pub(crate) fn retry_message(&self) -> String {
         match self {
             Self::Research { .. } => "Retrying research".to_string(),
-            Self::LogicalPlan(_) => "Retrying logical plan".to_string(),
-            Self::PhysicalPlan(_) => "Retrying physical plan".to_string(),
+            Self::LogicalPlan(_) => "Retrying logical planning".to_string(),
+            Self::PhysicalPlan(_) => "Retrying execution planning".to_string(),
             Self::Execution(_) => "Retrying execution".to_string(),
             Self::Reporting(_) => "Retrying reporting".to_string(),
         }

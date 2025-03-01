@@ -338,9 +338,9 @@ impl PhysicalJobExecutor {
                 7. Classify after thorough investigation
 
                 ## Expected Classification
-                - Succeeded: Success criteria met with evidence
-                - Failed: Evidence shows criteria not met
-                - Inconclusive: Need more information to determine
+                - `succeeded`: Success criteria met with evidence
+                - `failed`: Evidence shows criteria not met
+                - `inconclusive`: Need more information to determine
 
                 ## Example Successful Classification Process
                 1. Inspect the tool output. The tool output talks about a terminal command that completed with status code 4, with a method to access terminal logs based on a terminal ID.
@@ -378,7 +378,7 @@ impl PhysicalJobExecutor {
                 3. The tool call is classified as successful.
 
                 ## Response Format
-                - Status: [Succeeded/Failed/Inconclusive]  
+                - Status: [`succeeded`,`failed`,`inconclusive`]
                 - Reasoning: Clear explanation of your classification
                 - Should we wait and retry later: [true/false]"
             )
@@ -451,7 +451,7 @@ impl PhysicalJobExecutor {
                                         3. Make a definitive assessment based on the success criteria
                                         4. Provide clear reasoning for your conclusion
 
-                                        Your goal is to reach a conclusive determination (Succeeded/Failed) after this waiting period.",
+                                        Your goal is to reach a conclusive determination `succeeded` or `failed` after this waiting period.",
                                         iteration + 1
                                     )
                                     .into(),
@@ -488,7 +488,7 @@ impl PhysicalJobExecutor {
                                     - Examining any relevant metrics or state changes since last check
 
                                     Focus on gathering concrete evidence that directly addresses success criteria.
-                                    Be thorough but decisive - a conclusive verdict (Succeeded/Failed) is required.",
+                                    Be thorough but decisive - a conclusive verdict `succeeded` or `failed` is required.",
                                     iteration + 1
                                 )
                                 .into()
@@ -582,7 +582,7 @@ impl PhysicalJobExecutor {
             format!(
                 "# Generate Software Testing QA Report
 
-                Create a professional report (max 500 words) with:
+                Create a professional report (max 500 words, Markdown format) with:
 
                 1. **Executive Summary** (2-3 sentence overview)
                 2. **Test Objectives** (What was tested and why)
@@ -693,9 +693,9 @@ impl Display for VerificationResponse {
 impl Display for VerificationStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            VerificationStatus::Succeeded => write!(f, "Succeeded"),
-            VerificationStatus::Failed => write!(f, "Failed"),
-            VerificationStatus::Inconclusive => write!(f, "Inconclusive"),
+            VerificationStatus::Succeeded => write!(f, "succeeded"),
+            VerificationStatus::Failed => write!(f, "failed"),
+            VerificationStatus::Inconclusive => write!(f, "inconclusive"),
         }
     }
 }

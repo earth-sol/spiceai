@@ -144,20 +144,21 @@ pub struct Index {
 impl Index {
     pub(crate) fn title(&self) -> String {
         match self.stage {
-            StageName::Research => "Research".to_string(),
-            StageName::LogicalPlan | StageName::PhysicalPlan => "Planning".to_string(),
-            StageName::Execution => "Execution".to_string(),
-            StageName::Reporting => "Report Generation".to_string(),
+            StageName::Research => "Researching".to_string(),
+            StageName::LogicalPlan => "Logical Planning".to_string(),
+            StageName::PhysicalPlan => "Execution Planning".to_string(),
+            StageName::Execution => "Executing".to_string(),
+            StageName::Reporting => "Generating Report".to_string(),
         }
     }
 
     pub(crate) fn starting_message(&self) -> String {
         match self.stage {
-            StageName::Research => "Starting research. ".to_string(),
-            StageName::LogicalPlan => "Creating logical plan. ".to_string(),
-            StageName::PhysicalPlan => "Creating physical plan. ".to_string(),
-            StageName::Execution => "Executing physical plan. ".to_string(),
-            StageName::Reporting => "Generating report. ".to_string(),
+            StageName::Research => "Starting research...".to_string(),
+            StageName::LogicalPlan => "Creating logical plan...".to_string(),
+            StageName::PhysicalPlan => "Creating execution plan...".to_string(),
+            StageName::Execution => "Executing...".to_string(),
+            StageName::Reporting => "Generating report...".to_string(),
         }
     }
 
