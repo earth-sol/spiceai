@@ -24,7 +24,7 @@ use pipeline::create_working_stream_payload;
 use progress::{Index, Progress, ProgressType, StageName};
 use research::{
     model::{parse_response, research_complete_msg},
-    Research,
+    Artifact, Research,
 };
 use score::score;
 use serde::de::DeserializeOwned;
@@ -281,6 +281,34 @@ impl AgentChat {
                 .collect::<Vec<String>>()
                 .join("\n\n");
 
+            let json_progress = Progress::new(ProgressType::Artifact)
+                .parent_id(StageName::Research.id().to_string())
+                .to_jsonl();
+            tracing::info!(target: "task_history", progress = %json_progress);
+
+            for artifact in &artifacts {
+                let json_progress = match artifact {
+                    Artifact::Document { path, content, url } => {
+                        let mut progress = Progress::new(ProgressType::Artifact)
+                            .parent_id(StageName::Research.id().to_string())
+                            .content(content.clone())
+                            .tag("path", path.clone());
+
+                        if let Some(url) = url {
+                            progress = progress.tag("url", url.clone());
+                        }
+
+                        progress.to_jsonl()
+                    }
+                    Artifact::TextSnippet(text) => Progress::new(ProgressType::Artifact)
+                        .parent_id(StageName::Research.id().to_string())
+                        .content(text.clone())
+                        .to_jsonl(),
+                };
+
+                tracing::info!(target: "task_history", progress = %json_progress);
+            }
+
             let logical_plan_prompt = format!("{artifacts_prompt}\n\n{prompt}");
             if logical_plan_prompt.len() > MAX_CONTENT_LENGTH {
                 return Err(OpenAIError::ApiError(async_openai::error::ApiError {
@@ -536,7 +564,7 @@ impl AgentChat {
                                 tx
                             );
                             if let Ok(logical_plan_json_str) = serde_json::to_string(&logical_plan) {
-                                let logical_plan_artifact = Progress::new(ProgressType::Log)
+                                let logical_plan_artifact = Progress::new(ProgressType::Artifact)
                                     .parent_id(StageName::LogicalPlan.id().to_string())
                                     .content(format!("Logical Plan:\n```json\n{logical_plan_json_str}\n```"))
                                     .tag("artifact", "logical_plan")
@@ -566,7 +594,7 @@ impl AgentChat {
                                 tx
                             );
                             if let Ok(physical_plan_json_str) = serde_json::to_string(&physical_plan) {
-                                let physical_plan_artifact = Progress::new(ProgressType::Log)
+                                let physical_plan_artifact = Progress::new(ProgressType::Artifact)
                                     .parent_id(StageName::PhysicalPlan.id().to_string())
                                     .content(format!("Execution Plan:\n```json\n{physical_plan_json_str}\n```"))
                                     .tag("artifact", "physical_plan")

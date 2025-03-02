@@ -62,6 +62,7 @@ pub enum ProgressType {
     Warning,
     /// A log message associated with a stage, task, or step.
     Log,
+    Artifact,
 }
 
 impl Display for ProgressType {
@@ -77,6 +78,7 @@ impl ProgressType {
             Self::Error => "err",
             Self::Warning => "warn",
             Self::Log => "log",
+            Self::Artifact => "artifact",
         }
     }
 }
