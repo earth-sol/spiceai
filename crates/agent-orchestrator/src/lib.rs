@@ -421,7 +421,7 @@ impl AgentChat {
         let (tx, rx) =
             mpsc::channel::<Result<CreateChatCompletionStreamResponse, OpenAIError>>(100);
 
-        let models = Arc::clone(&self.llms);
+        let llms = Arc::clone(&self.llms);
 
         let (stream_ended, stream_ended_receiver) = tokio::sync::oneshot::channel::<()>();
 
@@ -456,7 +456,7 @@ impl AgentChat {
 
         tokio::spawn(
             async move {
-                let models = models.read().await;
+                let models = llms.read().await;
                 let Some(researcher_model) = models.get(&self.models.researcher) else {
                     let _ = tx
                         .send(Err(OpenAIError::InvalidArgument(format!(
@@ -514,19 +514,14 @@ impl AgentChat {
                                     .await,
                                 tx
                             );
-                            if let Err(e) = evaluate_with_model(
+                            evaluate_with_model(
                                 self.models.research_artifact_eval.as_ref(),
-                                &models,
+                                Arc::clone(&llms),
                                 prompt.clone(),
                                 format!("{research:?}"),
                                 Progress::new(ProgressType::Evaluation)
                                     .parent_id(StageName::Research.id().to_string()),
-                            )
-                            .await
-                            {
-                                tracing::error!(target: "task_history", progress = %e);
-                                return;
-                            }
+                            );
                             pipeline = pipeline::AgenticStage::LogicalPlan(research);
                         }
                         pipeline::AgenticStage::LogicalPlan(research) => {
@@ -548,19 +543,14 @@ impl AgentChat {
                                     .to_jsonl();
                                 tracing::info!(target: "task_history", progress = %logical_plan_artifact);
                             };
-                            if let Err(e) = evaluate_with_model(
+                            evaluate_with_model(
                                 self.models.logical_plan_eval.as_ref(),
-                                &models,
+                                Arc::clone(&llms),
                                 format!("{research:?}"),
                                 format!("{logical_plan:?}"),
                                 Progress::new(ProgressType::Evaluation)
                                     .parent_id(StageName::LogicalPlan.id().to_string()),
-                            )
-                            .await
-                            {
-                                tracing::error!(target: "task_history", progress = %e);
-                                return;
-                            }
+                            );
                             pipeline = pipeline::AgenticStage::PhysicalPlan(logical_plan);
                         }
                         pipeline::AgenticStage::PhysicalPlan(logical_plan) => {
@@ -583,19 +573,14 @@ impl AgentChat {
                                     .to_jsonl();
                                 tracing::info!(target: "task_history", progress = %physical_plan_artifact);
                             };
-                            if let Err(e) = evaluate_with_model(
+                            evaluate_with_model(
                                 self.models.physical_plan_eval.as_ref(),
-                                &models,
+                                Arc::clone(&llms),
                                 format!("{logical_plan:?}"),
                                 format!("{physical_plan:?}"),
                                 Progress::new(ProgressType::Evaluation)
                                     .parent_id(StageName::PhysicalPlan.id().to_string()),
-                            )
-                            .await
-                            {
-                                tracing::error!(target: "task_history", progress = %e);
-                                return;
-                            }
+                            );
 
                             pipeline = pipeline::AgenticStage::Execution(physical_plan);
                         }
@@ -653,28 +638,36 @@ impl AgentChat {
     }
 }
 
-async fn evaluate_with_model(
+fn evaluate_with_model(
     eval_config: Option<&EvalModelConfig>,
-    models: &HashMap<String, Box<dyn Chat>>,
+    models: Arc<RwLock<HashMap<String, Box<dyn Chat>>>>,
     input: String,
     actual: String,
     progress: Progress,
-) -> Result<(), anyhow::Error> {
-    if let Some(EvalModelConfig { ref model_name, .. }) = eval_config {
-        let Some(model) = models.get(model_name) else {
-            return Err(anyhow::anyhow!("Model {} not found.", model_name));
+) {
+    let Some(EvalModelConfig { ref model_name, .. }) = eval_config else {
+        return;
+    };
+    let model_name = model_name.clone();
+
+    tokio::spawn(async move {
+        let models = models.read().await;
+        let Some(model) = models.get(&model_name) else {
+            return;
         };
 
-        let score = score(model.as_ref(), input, actual).await?;
+        let Ok(score) = score(model.as_ref(), input, actual).await.inspect_err(|e| {
+            tracing::error!(target: "task_history", progress = %e);
+        }) else {
+            return;
+        };
 
         let json_progress = progress
             .tag("scorer", model_name.clone())
             .tag("score", score.to_string())
             .to_jsonl();
         tracing::info!(target: "task_history", progress = %json_progress);
-    }
-
-    Ok(())
+    });
 }
 
 fn should_retry_on_error(e: &OpenAIError) -> bool {
