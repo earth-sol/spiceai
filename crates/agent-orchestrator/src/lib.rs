@@ -540,6 +540,14 @@ impl AgentChat {
                                     .await,
                                 tx
                             );
+                            if let Ok(logical_plan_json_str) = serde_json::to_string(&logical_plan) {
+                                let logical_plan_artifact = Progress::new(ProgressType::Log)
+                                    .parent_id(StageName::LogicalPlan.id().to_string())
+                                    .content(format!("Logical Plan:\n```json\n{logical_plan_json_str}\n```"))
+                                    .tag("artifact", "logical_plan")
+                                    .to_jsonl();
+                                tracing::info!(target: "task_history", progress = %logical_plan_artifact);
+                            };
                             if let Err(e) = evaluate_with_model(
                                 self.models.logical_plan_eval.as_ref(),
                                 &models,
@@ -567,7 +575,14 @@ impl AgentChat {
                                     .await,
                                 tx
                             );
-
+                            if let Ok(physical_plan_json_str) = serde_json::to_string(&physical_plan) {
+                                let physical_plan_artifact = Progress::new(ProgressType::Log)
+                                    .parent_id(StageName::PhysicalPlan.id().to_string())
+                                    .content(format!("Execution Plan:\n```json\n{physical_plan_json_str}\n```"))
+                                    .tag("artifact", "physical_plan")
+                                    .to_jsonl();
+                                tracing::info!(target: "task_history", progress = %physical_plan_artifact);
+                            };
                             if let Err(e) = evaluate_with_model(
                                 self.models.physical_plan_eval.as_ref(),
                                 &models,

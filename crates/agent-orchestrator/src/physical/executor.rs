@@ -112,6 +112,7 @@ impl PhysicalJobExecutor {
                 let step_history: Vec<ChatCompletionRequestMessage> = async {
                     let t_progress = progress.clone().tag("task", format!("{}", t + 1));
                     tracing::info!("Executing task: {}", task.objective);
+                    tracing::info!(target: "task_history", progress = %t_progress.clone().content(format!("Executing task: {}", task.objective)).to_jsonl());
 
                     tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
                     for (i, step) in task.steps.iter().enumerate() {
@@ -193,10 +194,7 @@ impl PhysicalJobExecutor {
                 .execute_tool(step_history, tool_step, progress)
                 .await
                 .map_err(|e| anyhow::anyhow!("Error executing tool: {e}")),
-            Step::Prompt(prompt_step) => {
-                self.execute_prompt(step_history, prompt_step, progress)
-                    .await
-            }
+            Step::Prompt(prompt_step) => self.execute_prompt(step_history, prompt_step).await,
         }
     }
 
@@ -204,7 +202,6 @@ impl PhysicalJobExecutor {
         &self,
         step_history: &mut Vec<ChatCompletionRequestMessage>,
         step: &PromptStep,
-        progress: Progress,
     ) -> Result<ChatCompletionRequestMessage, anyhow::Error> {
         let prompt = step.prompt.clone();
         let llms = &*self.llms.read().await;
@@ -230,8 +227,6 @@ impl PhysicalJobExecutor {
         };
 
         trace_execution_progress(&Step::Prompt(step.clone()), &message);
-        let p_progress = progress.clone().content(message.clone()).to_jsonl();
-        tracing::info!(target: "task_history", progress = %p_progress);
 
         let tool_message = ChatCompletionRequestUserMessageArgs::default()
             .content(ChatCompletionRequestUserMessageContent::Text(message))
