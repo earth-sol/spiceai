@@ -706,7 +706,7 @@ impl Display for VerificationResponse {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "# Tool Call Result\n\n{}\n\n# Reasoning\n\n{}",
+            "Tool Call Result: {}\n### Reasoning\n{}",
             self.status, self.reason
         )
     }
