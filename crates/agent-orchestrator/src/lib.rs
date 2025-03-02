@@ -650,24 +650,29 @@ fn evaluate_with_model(
     };
     let model_name = model_name.clone();
 
-    tokio::spawn(async move {
-        let models = models.read().await;
-        let Some(model) = models.get(&model_name) else {
-            return;
-        };
+    let span = tracing::Span::current();
 
-        let Ok(score) = score(model.as_ref(), input, actual).await.inspect_err(|e| {
-            tracing::error!(target: "task_history", progress = %e);
-        }) else {
-            return;
-        };
+    tokio::spawn(
+        async move {
+            let models = models.read().await;
+            let Some(model) = models.get(&model_name) else {
+                return;
+            };
 
-        let json_progress = progress
-            .tag("scorer", model_name.clone())
-            .tag("score", score.to_string())
-            .to_jsonl();
-        tracing::info!(target: "task_history", progress = %json_progress);
-    });
+            let Ok(score) = score(model.as_ref(), input, actual).await.inspect_err(|e| {
+                tracing::error!(target: "task_history", progress = %e);
+            }) else {
+                return;
+            };
+
+            let json_progress = progress
+                .tag("scorer", model_name.clone())
+                .tag("score", score.to_string())
+                .to_jsonl();
+            tracing::info!(target: "task_history", progress = %json_progress);
+        }
+        .instrument(span),
+    );
 }
 
 fn should_retry_on_error(e: &OpenAIError) -> bool {
