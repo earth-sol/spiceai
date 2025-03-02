@@ -604,17 +604,24 @@ impl PhysicalJobExecutor {
             format!(
                 "# Generate Software Testing QA Report
 
-                Create a professional report (max 500 words, Markdown format) with:
+                Create a professional report (Markdown format) with:
 
-                1. **Executive Summary** (2-3 sentence overview)
-                2. **Test Objectives** (What was tested and why)
-                3. **Test Process** (Approach summary)
-                4. **Results Summary**
-                   - Key findings with success indicators (✅/❌)
-                   - Issues encountered
-                5. **Recommendations**
+                1. **Executive Summary** (1-2 sentence overview)
+                2. **Test Objectives** (What was tested and why, max 3 points)
+                3. **Test Process** (Approach summary, max 3 points)
+                4. **Results Summary** (~300 words)
+                   - Key tests with success indicators (✅/❌)
+                   - Issues, warnings, and info with indicators (⚠️/ℹ️)
+                5. **Data & Evidence**
+                   - Include relevant data, logs, and evidence
+                   - Use Markdown code blocks for clarity
+                5. **Learnings and Recommendations** (brief, max 3 points)
+                6. **Next Steps** (brief, max 3 points)
 
                 Be concise, highlight success/failure points clearly, and provide actionable insights.
+
+                ## Guidelines
+                - Wrap URLs, code, constants, and filenames in backticks
 
                 ## Execution Log
                 {content}"

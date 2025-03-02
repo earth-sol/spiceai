@@ -25,20 +25,42 @@ pub(crate) fn parse_response(
 
 pub(crate) fn research_complete_msg(r: &Research) -> String {
     let Research { artifacts, .. } = r;
-    let artifact_paths = artifacts
-        .iter()
-        .filter_map(|a| match a {
-            Artifact::Document { path, .. } => Some(path.clone()),
-            Artifact::TextSnippet(_) => None,
-        })
-        .collect::<Vec<_>>();
-    let num_snippets = artifacts
-        .iter()
-        .filter(|a| matches!(a, Artifact::TextSnippet(_)))
-        .count();
+
+    // Count different artifact types in a single pass
+    let mut document_artifacts = Vec::new();
+    let mut num_snippets = 0;
+
+    for artifact in artifacts {
+        match artifact {
+            Artifact::Document { path, .. } => document_artifacts.push(path.clone()),
+            Artifact::TextSnippet(_) => num_snippets += 1,
+        }
+    }
+
     let total_artifacts = artifacts.len();
-    format!(
-        "Research completed.\n- Total artifacts: {total_artifacts}\n- Including {num_snippets} text snippets.\n- Including the following documents: {}",
-        artifact_paths.join(", ")
-    )
+
+    // Build summary message
+    let mut message = "✅ Research completed\n\n📊 Summary:".to_string();
+
+    // Only add total artifacts if there are any
+    if total_artifacts > 0 {
+        message.push_str(&format!("\n• Total artifacts: {total_artifacts}"));
+
+        // Add snippet count only if there are any snippets
+        if num_snippets > 0 {
+            message.push_str(&format!("\n• Text snippets: {num_snippets}"));
+        }
+
+        // Add document information only if there are documents
+        if !document_artifacts.is_empty() {
+            message.push_str(&format!("\n• Documents: {}", document_artifacts.len()));
+
+            // List documents with better formatting
+            for path in &document_artifacts {
+                message.push_str(&format!("\n  - `{path}`"));
+            }
+        }
+    }
+
+    message
 }
