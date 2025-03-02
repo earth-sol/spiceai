@@ -566,7 +566,7 @@ impl AgentChat {
                             if let Ok(logical_plan_json_str) = serde_json::to_string(&logical_plan) {
                                 let logical_plan_artifact = Progress::new(ProgressType::Artifact)
                                     .parent_id(StageName::LogicalPlan.id().to_string())
-                                    .content(format!("Logical Plan:\n```json\n{logical_plan_json_str}\n```"))
+                                    .content(logical_plan_json_str)
                                     .tag("artifact", "logical_plan")
                                     .to_jsonl();
                                 tracing::info!(target: "task_history", progress = %logical_plan_artifact);
@@ -596,7 +596,7 @@ impl AgentChat {
                             if let Ok(physical_plan_json_str) = serde_json::to_string(&physical_plan) {
                                 let physical_plan_artifact = Progress::new(ProgressType::Artifact)
                                     .parent_id(StageName::PhysicalPlan.id().to_string())
-                                    .content(format!("Execution Plan:\n```json\n{physical_plan_json_str}\n```"))
+                                    .content(physical_plan_json_str)
                                     .tag("artifact", "physical_plan")
                                     .to_jsonl();
                                 tracing::info!(target: "task_history", progress = %physical_plan_artifact);
