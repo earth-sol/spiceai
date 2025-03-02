@@ -111,8 +111,7 @@ impl PhysicalJobExecutor {
 
                 let step_history: Vec<ChatCompletionRequestMessage> = async {
                     let t_progress = progress.clone().tag("task", format!("{}", t + 1));
-                    tracing::info!("Executing task: {}", task.objective);
-                    tracing::info!(target: "task_history", progress = %t_progress.clone().content(format!("Executing task: {}", task.objective)).to_jsonl());
+                    tracing::info!(target: "task_history", progress = %t_progress.clone().title(task.objective.clone()).content(format!("Executing task: {}", task.objective)).to_jsonl());
 
                     tracing::info!("Previous steps summary: {steps:?}", steps = step_history);
                     for (i, step) in task.steps.iter().enumerate() {
