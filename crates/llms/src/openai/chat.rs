@@ -80,10 +80,22 @@ impl<C: Config + Send + Sync> Chat for Openai<C> {
         }
 
         if let Err(e) = self.chat_request(req).instrument(span.clone()).await {
-            tracing::error!(target: "task_history", parent: &span, "{e}");
-            return Err(crate::chat::Error::HealthCheckError {
-                source: Box::new(e),
-            });
+            match e {
+                OpenAIError::ApiError(ref api_err) => {
+                    if api_err.message.as_str() != "Could not finish the message because max_tokens was reached. Please try again with higher max_tokens." {
+                        tracing::error!(target: "task_history", parent: &span, "{e}");
+                        return Err(crate::chat::Error::HealthCheckError {
+                            source: Box::new(e),
+                        });
+                    }
+                }
+                _ => {
+                    tracing::error!(target: "task_history", parent: &span, "{e}");
+                    return Err(crate::chat::Error::HealthCheckError {
+                        source: Box::new(e),
+                    });
+                }
+            }
         }
         Ok(())
     }
@@ -97,6 +109,7 @@ impl<C: Config + Send + Sync> Chat for Openai<C> {
         inner_req.model.clone_from(&self.model);
         let mut resp = self.client.chat().create(inner_req).await?;
 
+        println!("{:?}", resp.choices);
         resp.model = outer_model;
         Ok(resp)
     }
