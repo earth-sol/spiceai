@@ -17,6 +17,7 @@ limitations under the License.
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -83,7 +84,15 @@ func doRuntimeApiRequest[T interface{}](rtcontext *context.RuntimeContext, metho
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
-		return *new(T), fmt.Errorf("Not found")
+		bodyBytes, err := io.ReadAll(resp.Body)
+		bodyString := ""
+		if err == nil {
+			bodyString = string(bodyBytes)
+		}
+
+		resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+		return *new(T), fmt.Errorf("Not found: %s", bodyString)
 	}
 
 	var result T
