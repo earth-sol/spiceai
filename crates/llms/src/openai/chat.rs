@@ -80,21 +80,18 @@ impl<C: Config + Send + Sync> Chat for Openai<C> {
         }
 
         if let Err(e) = self.chat_request(req).instrument(span.clone()).await {
-            match e {
-                OpenAIError::ApiError(ref api_err) => {
-                    if api_err.message.as_str() != "Could not finish the message because max_tokens was reached. Please try again with higher max_tokens." {
-                        tracing::error!(target: "task_history", parent: &span, "{e}");
-                        return Err(crate::chat::Error::HealthCheckError {
-                            source: Box::new(e),
-                        });
-                    }
-                }
-                _ => {
-                    tracing::error!(target: "task_history", parent: &span, "{e}");
-                    return Err(crate::chat::Error::HealthCheckError {
-                        source: Box::new(e),
-                    });
-                }
+            if let OpenAIError::ApiError(ref api_err) = e {
+                if api_err.message.as_str() != "Could not finish the message because max_tokens was reached. Please try again with higher max_tokens." {
+                  tracing::error!(target: "task_history", parent: &span, "{e}");
+                  return Err(crate::chat::Error::HealthCheckError {
+                      source: Box::new(e),
+                  });
+              }
+            } else {
+                tracing::error!(target: "task_history", parent: &span, "{e}");
+                return Err(crate::chat::Error::HealthCheckError {
+                    source: Box::new(e),
+                });
             }
         }
         Ok(())
