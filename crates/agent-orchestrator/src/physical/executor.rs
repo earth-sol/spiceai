@@ -671,10 +671,18 @@ fn reset_execution_log() {
     let _ = std::fs::remove_file(log_path);
 }
 
+// TODO: This should really be a tracing call with a new subscriber for logging to a file
 fn log_execution_update(update_message: &str) {
     tracing::debug!(update_message);
 
     let log_path = "data/physical/physical_plan_execution.log";
+
+    // Create directories if they don't exist
+    if let Err(e) = std::fs::create_dir_all("data/physical") {
+        tracing::error!("Failed to create log directory: {e}");
+        return;
+    }
+
     let mut options = std::fs::OpenOptions::new();
     options.create(true).append(true);
 
