@@ -600,14 +600,8 @@ impl Runtime {
         });
 
         // Wait for all tasks to complete
-        let load_result = tokio::try_join!(
-            task_history,
-            results_cache,
-            datasets,
-            catalogs,
-            models,
-            // eval_scorer
-        );
+        let load_result =
+            tokio::try_join!(task_history, results_cache, datasets, catalogs, models,);
 
         if let Err(err) = load_result {
             tracing::error!("Could not start the Spice runtime: {err}");
