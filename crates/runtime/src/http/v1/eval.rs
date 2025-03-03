@@ -103,6 +103,7 @@ pub(crate) async fn post(
 
     let evals = rt.evals.read().await;
     let Some(eval) = evals.iter().find(|e| e.name == eval_name) else {
+        tracing::error!("eval '{eval_name}' not found");
         return (
             StatusCode::NOT_FOUND,
             format!("eval '{eval_name}' not found"),
@@ -111,6 +112,7 @@ pub(crate) async fn post(
     };
 
     if !llms.read().await.contains_key(&model) {
+        tracing::error!("model '{model}' not found");
         return (StatusCode::NOT_FOUND, format!("model '{model}' not found")).into_response();
     };
 
@@ -118,6 +120,7 @@ pub(crate) async fn post(
         .has_table(&TableReference::parse_str(eval.dataset.as_str()))
         .await
     {
+        tracing::error!("dataset '{}' not found", eval.dataset);
         return (
             StatusCode::NOT_FOUND,
             format!("dataset '{}' not found", eval.dataset),
