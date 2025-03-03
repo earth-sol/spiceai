@@ -14,6 +14,7 @@ use async_openai::{
 };
 
 use async_trait::async_trait;
+use error::{RETRY_CODES, STRING_ABOVE_MAX_LENGTH};
 use event_stream::get_event_stream;
 use futures::stream;
 use futures_util::TryStreamExt;
@@ -41,6 +42,7 @@ use tools::SpiceModelTool;
 use tracing::{Instrument, Span};
 use util::{fibonacci_backoff::FibonacciBackoffBuilder, retry, RetryError};
 
+mod error;
 pub mod logical;
 pub mod physical;
 pub mod pipeline;
@@ -320,7 +322,7 @@ impl AgentChat {
                     .to_string(),
                     r#type: None,
                     param: None,
-                    code: Some("string_above_max_length".to_string()),
+                    code: Some(STRING_ABOVE_MAX_LENGTH.to_string()),
                 }));
             }
 
@@ -706,7 +708,7 @@ fn evaluate_with_model(
 fn should_retry_on_error(e: &OpenAIError) -> bool {
     if let OpenAIError::ApiError(api_error) = e {
         if let Some(code) = &api_error.code {
-            return code == "string_above_max_length";
+            return RETRY_CODES.contains(&code.as_str());
         }
     }
     false

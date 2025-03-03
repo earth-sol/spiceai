@@ -1,5 +1,10 @@
-use async_openai::{error::OpenAIError, types::CreateChatCompletionResponse};
+use async_openai::{
+    error::{ApiError, OpenAIError},
+    types::CreateChatCompletionResponse,
+};
 use serde::{Deserialize, Serialize};
+
+use crate::error::FAILED_TO_PARSE_STRUCTURED_OUTPUT;
 
 use super::{Artifact, Research};
 
@@ -17,8 +22,14 @@ pub(crate) fn parse_response(
         .and_then(|c| c.message.content.clone())
         .unwrap_or_default();
 
-    let artifacts: ArtifactResponse = serde_json::from_str(raw.as_str())
-        .map_err(|e| OpenAIError::InvalidArgument(e.to_string()))?;
+    let artifacts: ArtifactResponse = serde_json::from_str(raw.as_str()).map_err(|e| {
+        OpenAIError::ApiError(ApiError {
+            message: e.to_string(),
+            r#type: None,
+            param: None,
+            code: Some(FAILED_TO_PARSE_STRUCTURED_OUTPUT.to_string()),
+        })
+    })?;
 
     Ok(artifacts.steps)
 }
