@@ -82,6 +82,10 @@ func doRuntimeApiRequest[T interface{}](rtcontext *context.RuntimeContext, metho
 		return *new(T), fmt.Errorf("Unauthorized")
 	}
 
+	if resp.StatusCode == http.StatusNotFound {
+		return *new(T), fmt.Errorf("Not found")
+	}
+
 	var result T
 	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return *new(T), fmt.Errorf("error decoding response: %w", err)
