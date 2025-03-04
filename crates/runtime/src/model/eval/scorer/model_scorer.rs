@@ -41,7 +41,7 @@ impl Scorer for LLMScorer {
     ) -> f32 {
         let store = self.llm_store.read().await;
         let scorer = store.get(&self.name).expect("Failed to get scorer");
-        let prompt = "YO".to_string();
+        let prompt = String::new();
         let req = CreateChatCompletionRequestArgs::default()
             .messages(vec![ChatCompletionRequestUserMessageArgs::default()
                 .content(prompt)
