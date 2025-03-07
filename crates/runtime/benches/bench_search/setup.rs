@@ -264,6 +264,11 @@ async fn add_benchmark_dataset(
             super::datasets::add_mtep_quora_retrieval_dataset(app_builder, acceleration, chunking)
                 .await
         }
+        "spicecookbook" => Ok(super::datasets::add_spice_cookbook_dataset(
+            app_builder,
+            acceleration,
+            chunking,
+        )),
         _ => Err(format!("Unknown benchmark dataset: {dataset}")),
     }
 }

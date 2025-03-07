@@ -19,6 +19,7 @@ use hf_hub::{api::tokio::ApiBuilder, Repo, RepoType};
 use spicepod::component::{
     dataset::{acceleration::Acceleration, Dataset},
     embeddings::{ColumnEmbeddingConfig, EmbeddingChunkConfig},
+    params::Params,
 };
 
 /// The `QuoraRetrieval` MTEB dataset is a benchmark dataset used for evaluating retrieval models.
@@ -82,4 +83,32 @@ pub(crate) async fn add_mtep_quora_retrieval_dataset(
 
 fn make_local_file_dataset(path: &str, name: &str) -> Dataset {
     Dataset::new(format!("file:{path}"), name.to_string())
+}
+
+pub(crate) fn add_spice_cookbook_dataset(
+    app_builder: AppBuilder,
+    acceleration: Option<Acceleration>,
+    chunking: Option<EmbeddingChunkConfig>,
+) -> AppBuilder {
+    let mut ds = Dataset::new(
+        "spice.ai:spiceai/docs/datasets/spiceai.cookbook",
+        "cookbook",
+    );
+    ds.params = Some(Params::from_string_map(
+        vec![(
+            "spiceai_api_key".to_string(),
+            std::env::var("SPICEAI_API_KEY").unwrap_or_default(),
+        )]
+        .into_iter()
+        .collect(),
+    ));
+    ds.acceleration = acceleration;
+    ds.embeddings = vec![ColumnEmbeddingConfig {
+        column: "content".to_string(),
+        model: "test_model".to_string(),
+        primary_keys: None,
+        chunking,
+    }];
+
+    app_builder.with_dataset(ds)
 }

@@ -76,6 +76,17 @@ async fn main() -> Result<(), String> {
     Box::pin(request_context.scope(vector_search_benchmarks(upload_results_dataset.as_ref()))).await
 }
 
+struct QueryWithKeywords {
+    pub query: Query,
+    pub keywords: Vec<String>,
+}
+
+impl QueryWithKeywords {
+    pub fn new(query: Query, keywords: Vec<String>) -> Self {
+        Self { query, keywords }
+    }
+}
+
 // add default configuration for benchmark test
 pub struct SearchBenchmarkConfiguration {
     pub name: &'static str,
@@ -83,6 +94,7 @@ pub struct SearchBenchmarkConfiguration {
     pub embeddings_model: &'static str,
     pub acceleration: Option<Acceleration>,
     pub chunking: Option<EmbeddingChunkConfig>,
+    pub(crate) queries: Option<Vec<QueryWithKeywords>>,
 }
 
 impl SearchBenchmarkConfiguration {
@@ -98,6 +110,7 @@ impl SearchBenchmarkConfiguration {
             embeddings_model,
             acceleration: None,
             chunking: None,
+            queries: None,
         }
     }
     #[must_use]
@@ -108,6 +121,11 @@ impl SearchBenchmarkConfiguration {
     #[must_use]
     fn with_chunking(mut self, chunking: EmbeddingChunkConfig) -> Self {
         self.chunking = Some(chunking);
+        self
+    }
+    #[must_use]
+    fn with_queries(mut self, queries: Vec<QueryWithKeywords>) -> Self {
+        self.queries = Some(queries);
         self
     }
 }
@@ -156,6 +174,21 @@ fn benchmark_configurations() -> Vec<SearchBenchmarkConfiguration> {
             enabled: true,
             engine: Some("duckdb".into()),
             mode: acceleration::Mode::File,
+            ..Default::default()
+        })
+        .with_chunking(EmbeddingChunkConfig {
+            enabled: true,
+            target_chunk_size: 512,
+            overlap_size: 128,
+            trim_whitespace: false,
+        }),
+        SearchBenchmarkConfiguration::new(
+            "spiceai_no_keywords_openai-text-embedding-3-small_arrow",
+            "SpiceCookbook",
+            "openai:text-embedding-3-small",
+        )
+        .with_acceleration(Acceleration {
+            enabled: true,
             ..Default::default()
         })
         .with_chunking(EmbeddingChunkConfig {
