@@ -9903,6 +9903,7 @@ dependencies = [
  "hyper-util",
  "iceberg",
  "iceberg-catalog-rest",
+ "iceberg-datafusion",
  "indexmap 2.7.0",
  "insta",
  "itertools 0.13.0",
