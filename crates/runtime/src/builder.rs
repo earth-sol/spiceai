@@ -189,6 +189,7 @@ impl RuntimeBuilder {
             rate_limits: self.rate_limits.unwrap_or_default(),
             status,
             workers: Arc::new(RwLock::new(WorkerRegistry::new())),
+            server_components: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let mut extensions: HashMap<String, Arc<dyn Extension>> = HashMap::new();

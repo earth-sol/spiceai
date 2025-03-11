@@ -54,6 +54,7 @@ use datafusion_federation::FederatedTableProviderAdaptor;
 use error::find_datafusion_root;
 use itertools::Itertools;
 use query::QueryBuilder;
+use schema::ensure_schema_exists;
 use snafu::prelude::*;
 use tokio::spawn;
 use tokio::sync::oneshot;
@@ -1134,6 +1135,7 @@ impl DataFusion {
         if table_exists {
             return TableAlreadyExistsSnafu.fail();
         }
+        ensure_schema_exists(&self.ctx, SPICE_DEFAULT_CATALOG, &table)?;
 
         let statements = DFParser::parse_sql_with_dialect(view.as_str(), &PostgreSqlDialect {})
             .context(UnableToParseSqlSnafu)?;
@@ -1280,6 +1282,22 @@ impl DataFusion {
     pub fn query_builder<'a>(self: &Arc<Self>, sql: &'a str) -> QueryBuilder<'a> {
         QueryBuilder::new(sql, Arc::clone(self))
     }
+
+    /// Performs `DataFusion` cleanup during shutdown.
+    /// Currently performs cleanup of accelerated tables only.
+    pub async fn shutdown(&self) {
+        // Don't block self.accelerated_tables as it needs to be modified during table removal
+        // and will be cleaned up authomatically by removing accelerated tables.
+        tracing::debug!("Datafusion shutdown started");
+
+        let accelerated_tables = self.accelerated_tables.read().await.clone();
+
+        for table in &accelerated_tables {
+            if let Err(err) = self.remove_table(table).await {
+                tracing::error!("Failed to clean up '{table}' during shutdown: {err}");
+            }
+        }
+    }
 }
 
 #[must_use]
@@ -1297,4 +1315,10 @@ pub fn is_spice_internal_schema(catalog: &str, schema: &str) -> bool {
         && (schema == SPICE_RUNTIME_SCHEMA
             || schema == SPICE_METADATA_SCHEMA
             || schema == SPICE_EVAL_SCHEMA)
+}
+
+impl Drop for DataFusion {
+    fn drop(&mut self) {
+        tracing::debug!("DataFusion resources cleanup");
+    }
 }

@@ -237,7 +237,7 @@ pub async fn run(args: Args) -> Result<()> {
     .context(UnableToInitializeTracingSnafu)?;
 
     if let Some(metrics_registry) = prometheus_registry {
-        init_metrics(rt.datafusion(), metrics_registry).context(UnableToInitializeMetricsSnafu)?;
+        init_metrics(&rt.datafusion(), metrics_registry).context(UnableToInitializeMetricsSnafu)?;
     }
 
     let tls_config = tls::load_tls_config(&args, spicepod_tls_config.as_ref(), rt.secrets())
@@ -265,12 +265,13 @@ pub async fn run(args: Args) -> Result<()> {
         },
     };
 
+    let rt_clone = Arc::clone(&rt);
+
     if components_loaded {
         tokio::spawn({
             async move {
-                let rt = Arc::clone(&rt);
                 loop {
-                    if rt.status().is_ready() {
+                    if rt_clone.status().is_ready() {
                         tracing::info!("All components are loaded. Spice runtime is ready!");
                         break;
                     }
@@ -281,16 +282,20 @@ pub async fn run(args: Args) -> Result<()> {
         });
     }
 
-    match server_thread.await {
+    let result = match server_thread.await {
         Ok(ok) => ok.context(UnableToStartServersSnafu),
         Err(_) => Err(Error::GenericError {
             reason: "Unable to start spiced".into(),
         }),
-    }
+    };
+
+    rt.shutdown().await;
+
+    result
 }
 
 fn init_metrics(
-    df: Arc<DataFusion>,
+    df: &Arc<DataFusion>,
     registry: prometheus::Registry,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let resource = Resource::default();
