@@ -14,10 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use arrow::array::{Array, ArrayRef, FixedSizeListArray, ListArray, StructArray};
+use arrow::array::{Array, ArrayRef, FixedSizeListArray, ListArray, RecordBatch, StructArray};
 use arrow::buffer::OffsetBuffer;
 use arrow::compute::concat;
+use arrow_cast::display::{ArrayFormatter, FormatOptions};
 use arrow_schema::{ArrowError, DataType, Field};
+use std::io::Write;
 use std::sync::Arc;
 
 /// Operations to apply to [`ArrayRef`] or [`RecordBatch`] data so as to prepare it for display.
@@ -254,4 +256,107 @@ fn truncate_list_array(list_array: &ListArray, max_len: usize) -> Result<ListArr
         new_child_array,
         nulls,
     )
+}
+
+/// Creates a visual representation of record batches using markdown document format.
+///
+/// # Errors
+///
+/// Returns an `ArrowError` if the record batch cannot be formatted or content column is not found.
+pub fn to_markdown_documents(
+    results: &[RecordBatch],
+    content_column: &str,
+) -> Result<String, ArrowError> {
+    let options: FormatOptions = FormatOptions::default();
+    let mut buffer = Vec::new();
+
+    for batch in results {
+        let formatters = batch
+            .columns()
+            .iter()
+            .map(|c| ArrayFormatter::try_new(c.as_ref(), &options))
+            .collect::<Result<Vec<_>, ArrowError>>()?;
+
+        let Some(idx_content) = batch
+            .schema()
+            .fields()
+            .iter()
+            .position(|f| f.name() == content_column)
+        else {
+            return Err(ArrowError::InvalidArgumentError(format!(
+                "Column '{content_column}' not found in schema"
+            )));
+        };
+
+        for row in 0..batch.num_rows() {
+            // write document header / attributes
+            writeln!(&mut buffer, "---")?;
+            for (i, (field, formatter)) in
+                batch.schema().fields().iter().zip(&formatters).enumerate()
+            {
+                if i != idx_content {
+                    writeln!(buffer, "{}: {}", field.name(), formatter.value(row))?;
+                }
+            }
+            writeln!(&mut buffer, "---")?;
+
+            // write main document content
+            writeln!(buffer, "{}\n", formatters[idx_content].value(row))?;
+        }
+    }
+
+    String::from_utf8(buffer).map_err(|e| {
+        ArrowError::from_external_error(format!("Failed to convert byte array to utf8: {e}").into())
+    })
+}
+#[cfg(test)]
+mod tests {
+    use arrow::array::{Float32Array, RecordBatch, StringArray};
+    use arrow_schema::{DataType, Field, Schema};
+    use std::sync::Arc;
+
+    use crate::format::to_markdown_documents;
+
+    #[test]
+    fn test_pretty_format_markdown() -> Result<(), Box<dyn std::error::Error>> {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("content_chunk", DataType::Utf8, true),
+            Field::new("location", DataType::Utf8, true),
+            Field::new("dist", DataType::Float32, true),
+        ]));
+
+        let content_chunk = StringArray::from(vec![
+            Some(
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+
+Sed do eiusmod tempor aliqua. 
+
+reprehenderit nulla pariatur.",
+            ),
+            Some(
+                "Lorem ipsum dolor adipiscing elit. 
+Cras venenatis euismod malesuada.",
+            ),
+        ]);
+
+        let location = StringArray::from(vec![
+            Some("path/to/folder/file_12345.txt"),
+            Some("path/to/folder/file_67890.txt"),
+        ]);
+
+        let dist = Float32Array::from(vec![Some(0.376_276), Some(0.123_456)]);
+
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![Arc::new(content_chunk), Arc::new(location), Arc::new(dist)],
+        )?;
+
+        let formatted = to_markdown_documents(&[batch], "content_chunk")
+            .expect("format record batch")
+            .to_string();
+
+        insta::assert_snapshot!(formatted);
+
+        Ok(())
+    }
 }
