@@ -65,7 +65,7 @@ async fn file_connector_datatypes() -> Result<(), anyhow::Error> {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err(anyhow::anyhow!("Timed out waiting for datasets to load"));
                 }
-                () = rt.load_components() => {}
+                () = Arc::new(rt.clone()).load_components() => {}
             }
 
             let queries: QueryTests = vec![(

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use arrow::array::RecordBatch;
 use datafusion::sql::TableReference;
@@ -81,7 +81,7 @@ pub(crate) async fn setup_benchmark(
         () = tokio::time::sleep(std::time::Duration::from_secs(5 * 60)) => {
             panic!("Timed out waiting for datasets to load in setup_benchmark()");
         }
-        () = rt.load_components() => {}
+        () = Arc::new(rt.clone()).load_components() => {}
     }
 
     Ok((rt, benchmark_result))

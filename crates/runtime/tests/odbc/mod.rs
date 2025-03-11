@@ -93,7 +93,7 @@ async fn databricks_odbc() -> Result<(), String> {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
-                () = rt.load_components() => {}
+                () = Arc::new(rt.clone()).load_components() => {}
             }
 
             let query_result = rt
@@ -152,7 +152,7 @@ async fn databricks_odbc_with_acceleration() -> Result<(), String> {
                     () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                         return Err("Timed out waiting for datasets to load".to_string());
                     }
-                    () = rt.load_components() => {}
+                    () = Arc::new(rt.clone()).load_components() => {}
                 }
 
                 assert!(

@@ -109,7 +109,7 @@ async fn mysql_federation_push_down() -> Result<(), String> {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
-                () = rt.load_components() => {}
+                () = Arc::new(rt.clone()).load_components() => {}
             }
 
             let queries: QueryTests = vec![
@@ -214,7 +214,7 @@ async fn mysql_federation_inner_join_with_acc() -> Result<(), String> {
             () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                 return Err("Timed out waiting for datasets to load".to_string());
             }
-            () = rt.load_components() => {}
+            () = Arc::new(rt.clone()).load_components() => {}
         }
 
         runtime_ready_check(&rt).await;

@@ -56,7 +56,7 @@ async fn spiceai_integration_test_catalog() -> Result<(), anyhow::Error> {
                 () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                     panic!("Timeout waiting for components to load");
                 }
-                () = rt.load_components() => {}
+                () = Arc::new(rt.clone()).load_components() => {}
             }
 
             let mut result = rt
@@ -111,16 +111,16 @@ async fn spiceai_integration_test_catalog_include() -> Result<(), anyhow::Error>
                 () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                     panic!("Timeout waiting for components to load");
                 }
-                () = rt.load_components() => {}
+                () = Arc::new(rt.clone()).load_components() => {}
             }
 
             let mut result = rt
                 .datafusion()
                 .query_builder(
-                    "SELECT table_catalog, table_schema, table_name, table_type 
-             FROM information_schema.tables 
-             WHERE table_schema != 'information_schema' 
-               AND table_catalog = 'spc' 
+                    "SELECT table_catalog, table_schema, table_name, table_type
+             FROM information_schema.tables
+             WHERE table_schema != 'information_schema'
+               AND table_catalog = 'spc'
              ORDER BY table_name",
                 )
                 .build()

@@ -57,7 +57,7 @@ async fn databricks_delta_lake_integration_test_catalog() -> Result<(), anyhow::
                 () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                     panic!("Timeout waiting for components to load");
                 }
-                () = rt.load_components() => {}
+                () = Arc::new(rt.clone()).load_components() => {}
             }
 
             runtime_ready_check(&rt).await;

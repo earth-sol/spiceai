@@ -176,7 +176,7 @@ pub(crate) async fn post(
         let Some(Tooling::Tool(tool)) = tools.get(&tool_name) else {
             return not_found(format!("Tool {tool_name} not found").as_str());
         };
-        Arc::clone(&tool)
+        Arc::clone(tool)
     };
 
     match tool.call(body.as_str()).await {
