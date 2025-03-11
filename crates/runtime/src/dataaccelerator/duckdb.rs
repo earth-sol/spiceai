@@ -158,6 +158,7 @@ impl Default for DuckDBAccelerator {
 const PARAMETERS: &[ParameterSpec] = &[
     ParameterSpec::accelerator("file"),
     ParameterSpec::runtime("file_watcher"),
+    ParameterSpec::accelerator("memory_limit"),
 ];
 
 #[async_trait]
