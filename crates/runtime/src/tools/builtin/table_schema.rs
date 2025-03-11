@@ -237,10 +237,7 @@ impl SpiceModelTool for TableSchemaTool {
         parameters::<TableSchemaToolParams>()
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let req: TableSchemaToolParams = serde_json::from_str(arg)?;
         self.get_schema(&req).await
     }
