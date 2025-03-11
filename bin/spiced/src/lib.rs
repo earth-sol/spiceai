@@ -265,12 +265,13 @@ pub async fn run(args: Args) -> Result<()> {
         },
     };
 
+    let rt_clone = Arc::clone(&rt);
+
     if components_loaded {
         tokio::spawn({
             async move {
-                let rt = Arc::clone(&rt);
                 loop {
-                    if rt.status().is_ready() {
+                    if rt_clone.status().is_ready() {
                         tracing::info!("All components are loaded. Spice runtime is ready!");
                         break;
                     }

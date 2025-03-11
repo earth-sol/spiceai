@@ -94,14 +94,13 @@ impl TableSchemaTool {
 
     pub async fn get_schema(
         &self,
-        rt: Arc<Runtime>,
         req: &TableSchemaToolParams,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::table_schema", tool = self.name().to_string(), input = serde_json::to_string(&req).boxed()?);
         let TableSchemaToolParams { tables, output } = req;
 
         // Precompute extra column details only if needed (for `full` output).
-        let column_info = match (output, rt.app.read().await.clone()) {
+        let column_info = match (output, self.rt.app.read().await.clone()) {
             (OutputType::Full, Some(app)) => tables
                 .iter()
                 .map(|t| {
@@ -241,9 +240,8 @@ impl SpiceModelTool for TableSchemaTool {
     async fn call(
         &self,
         arg: &str,
-        rt: Arc<Runtime>,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let req: TableSchemaToolParams = serde_json::from_str(arg)?;
-        self.get_schema(rt, &req).await
+        self.get_schema(&req).await
     }
 }
