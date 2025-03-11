@@ -76,8 +76,8 @@ keyring = { version = "3.6.2", features = [
 ], optional = true }
 llms = { path = "../llms" }
 logos = "0.15.0"
-mcp-client = { git = "https://github.com/spiceai/goose.git", rev = "5bacbba75925d76cbda53421115151d9097bed17", package = "mcp-client", optional = true }
-mcp-core = { git = "https://github.com/spiceai/goose.git", rev = "5bacbba75925d76cbda53421115151d9097bed17", package = "mcp-core", optional = true }
+mcp-client = { git = "https://github.com/Jeadie/mcp-rust-sdk.git", rev = "060cdd2d9e23d129894160e26c66cc82b3fe37eb", package = "mcp-client", optional = true }
+mcp-core = { git = "https://github.com/Jeadie/mcp-rust-sdk.git", rev = "060cdd2d9e23d129894160e26c66cc82b3fe37eb", package = "mcp-core", optional = true }
 mediatype = "0.19.18"
 model_components = { path = "../model_components" }
 mysql_async = { workspace = true, optional = true }
@@ -120,7 +120,6 @@ ssh2 = { workspace = true, optional = true }
 suppaftp = { workspace = true, optional = true }
 telemetry = { path = "../telemetry" }
 tiberius = { workspace = true, optional = true }
-tools = { path = "../tools" }
 tokio.workspace = true
 tokio-rusqlite = { workspace = true, optional = true }
 tokio-rustls = "0.26.0"
@@ -128,6 +127,7 @@ tokio-stream.workspace = true
 tokio-util.workspace = true
 tonic.workspace = true
 tonic-health.workspace = true
+tools = { path = "../tools" }
 tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true

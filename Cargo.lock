@@ -7083,8 +7083,8 @@ dependencies = [
 
 [[package]]
 name = "mcp-client"
-version = "0.1.0"
-source = "git+https://github.com/spiceai/goose.git?rev=5bacbba75925d76cbda53421115151d9097bed17#5bacbba75925d76cbda53421115151d9097bed17"
+version = "1.0.7"
+source = "git+https://github.com/Jeadie/mcp-rust-sdk.git?rev=060cdd2d9e23d129894160e26c66cc82b3fe37eb#060cdd2d9e23d129894160e26c66cc82b3fe37eb"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7106,8 +7106,8 @@ dependencies = [
 
 [[package]]
 name = "mcp-core"
-version = "0.1.0"
-source = "git+https://github.com/spiceai/goose.git?rev=5bacbba75925d76cbda53421115151d9097bed17#5bacbba75925d76cbda53421115151d9097bed17"
+version = "1.0.7"
+source = "git+https://github.com/Jeadie/mcp-rust-sdk.git?rev=060cdd2d9e23d129894160e26c66cc82b3fe37eb#060cdd2d9e23d129894160e26c66cc82b3fe37eb"
 dependencies = [
  "anyhow",
  "async-trait",
