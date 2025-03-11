@@ -16,12 +16,16 @@ limitations under the License.
 use async_trait::async_trait;
 use secrecy::SecretString;
 use spicepod::component::tool::Tool;
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock},
+};
+use tokio::sync::Mutex;
 
 use crate::Runtime;
 
 #[cfg(feature = "mcp")]
 use super::mcp::factory::McpCatalogFactory;
-use std::{collections::HashMap, sync::Arc};
 
 use super::{
     builtin::catalog::BuiltinToolCatalog, catalog::SpiceToolCatalog,
@@ -79,6 +83,9 @@ pub trait ToolCatalogFactory: Send + Sync {
         params_with_secrets: HashMap<String, SecretString>,
     ) -> Result<Arc<dyn SpiceToolCatalog>, Box<dyn std::error::Error + Send + Sync>>;
 }
+
+static TOOL_SHED_FACTORY: LazyLock<Mutex<HashMap<String, ToolFactory>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub async fn register_all_factories(rt: Arc<Runtime>) {
     let tool_factories = rt.tool_factories();

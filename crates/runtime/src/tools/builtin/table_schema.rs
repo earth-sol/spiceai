@@ -94,6 +94,7 @@ impl TableSchemaTool {
 
     pub async fn get_schema(
         &self,
+        rt: Arc<Runtime>,
         req: &TableSchemaToolParams,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let span = tracing::span!(target: "task_history", tracing::Level::INFO, "tool_use::table_schema", tool = self.name().to_string(), input = serde_json::to_string(&req).boxed()?);
@@ -237,8 +238,12 @@ impl SpiceModelTool for TableSchemaTool {
         parameters::<TableSchemaToolParams>()
     }
 
-    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(
+        &self,
+        arg: &str,
+        rt: Arc<Runtime>,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let req: TableSchemaToolParams = serde_json::from_str(arg)?;
-        self.get_schema(&req).await
+        self.get_schema(rt, &req).await
     }
 }

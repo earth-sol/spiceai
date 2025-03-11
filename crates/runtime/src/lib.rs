@@ -50,9 +50,8 @@ use status::ComponentStatus;
 use tls::TlsConfig;
 use tokio::sync::Mutex;
 use tokio::sync::{oneshot::error::RecvError, RwLock};
-use tools::factory::{default_available_catalogs, ToolFactory};
 use tokio_util::sync::CancellationToken;
-use tools::factory::default_available_catalogs;
+use tools::factory::{default_available_catalogs, ToolFactory};
 use tools::{catalog::SpiceToolCatalog, Tooling};
 pub use util::shutdown_signal;
 use workers::WorkerRegistry;
@@ -662,7 +661,7 @@ impl Runtime {
     pub fn workers(&self) -> Arc<RwLock<WorkerRegistry>> {
         Arc::clone(&self.workers)
     }
-    
+
     // Closes and deallocates all resources (including the static registries)
     pub async fn shutdown(&self) {
         if self.status.is_shutdown() {
