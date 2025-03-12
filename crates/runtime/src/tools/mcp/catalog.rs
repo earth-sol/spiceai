@@ -50,7 +50,7 @@ pub(crate) struct McpToolCatalog {
 impl Drop for McpToolCatalog {
     fn drop(&mut self) {
         if let Some(heartbeat) = self.heartbeat_task.take() {
-            tokio::spawn(heartbeat.cancel(Duration::from_secs(15)));
+            heartbeat.cancel_without_wait();
         } else {
             tracing::debug!(
                 "Failed to cancel heartbeat task for MCP tool catalog {}",

@@ -36,6 +36,16 @@ pub(crate) struct CancellableTaskHandle {
 }
 
 impl CancellableTaskHandle {
+    pub fn cancel_without_wait(mut self) {
+        let Some(token) = self.cancellation_token.take() else {
+            // The task does not support graceful cancellation, so we abort it.
+            // The error is expected if the receiver has already been deallocated, indicating the task has completed or aborted.
+            self.notify_abort_task.send(()).ok();
+            return;
+        };
+        token.cancel();
+    }
+
     pub async fn cancel(mut self, timeout: Duration) {
         let Some(token) = self.cancellation_token.take() else {
             // The task does not support graceful cancellation, so we abort it.
