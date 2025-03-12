@@ -21,12 +21,13 @@ use crate::{
 };
 use std::time::Duration;
 use test_framework::{
-    anyhow,
+    anyhow::{self, Context},
     app::App,
-    arrow::util::pretty::print_batches,
+    arrow::{self, array::AsArray, util::pretty::print_batches},
     flight::put_batches,
+    futures::TryStreamExt,
     metrics::{MetricCollector, NoExtendedMetrics, QueryMetrics},
-    queries::{QueryOverrides, QuerySet},
+    queries::{QueryOverrides, QuerySet, TableWithRowCount},
     spiced::SpicedInstance,
     spicepod::component::dataset::acceleration::RefreshMode,
     spicetest::{append::NotStarted, SpiceTest},
@@ -51,8 +52,6 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
             .with_end_duration(Duration::from_secs(60 * 60))
             .with_tempdir_path(start_request.get_tempdir_path()),
     )
-    .with_explain_plan_snapshot()
-    .with_results_snapshot(snapshot_predicate)
     .with_progress_bars(false)
     .with_api_key(if args.common.upload_results_dataset.is_some() {
         Some(TEST_RESULTS_API_KEY.to_string())
@@ -76,6 +75,13 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
     let metrics: QueryMetrics<_, NoExtendedMetrics> = test.collect(TestType::Benchmark)?;
     let mut spiced_instance = test.end()?;
 
+    check_table_counts(
+        &spiced_instance,
+        query_set,
+        args.scale_factor.unwrap_or(1.0),
+    )
+    .await?;
+
     let records = metrics.build_records()?;
     print_batches(&records)?;
 
@@ -88,13 +94,9 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
     }
 
     spiced_instance.show_memory_usage()?;
+
     spiced_instance.stop()?;
     Ok(())
-}
-
-/// Only snapshot the official TPCH and TPCDS queries, not the "simple" extensions as they don't return consistent results
-fn snapshot_predicate(query_name: &str) -> bool {
-    query_name.starts_with("tpch_q") || query_name.starts_with("tpcds_q")
 }
 
 fn check_app_is_appendable(app: &App) -> anyhow::Result<()> {
@@ -118,6 +120,53 @@ fn check_app_is_appendable(app: &App) -> anyhow::Result<()> {
                 dataset.name
             ));
         }
+    }
+
+    Ok(())
+}
+
+async fn check_table_counts(
+    spiced: &SpicedInstance,
+    query_set: QuerySet,
+    scale_factor: f64,
+) -> anyhow::Result<()> {
+    let flight = spiced.flight_client(None).await?;
+
+    let mut any_count_mismatch = false;
+    for TableWithRowCount {
+        name,
+        count: expected_count,
+    } in query_set.row_counts()
+    {
+        let expected_count = f64::from(expected_count) * scale_factor;
+        let sql = format!("SELECT COUNT(*) FROM {name}");
+        let batches = flight.query(&sql).await?.try_collect::<Vec<_>>().await?;
+        if batches.len() != 1 {
+            return Err(anyhow::anyhow!(
+                "Expected 1 batch, got {} batches",
+                batches.len()
+            ));
+        }
+        let count = batches[0]
+            .column(0)
+            .as_primitive_opt::<arrow::datatypes::Int64Type>()
+            .context("Failed to get count as a Int64Type")?
+            .value(0);
+
+        let count = f64::from(u32::try_from(count)?);
+        // Allow a 0.01% margin of error
+        let upper_bound = expected_count * 1.0001;
+        let lower_bound = expected_count * 0.9999;
+        if !(count <= upper_bound && count >= lower_bound) {
+            println!("Table {name} has {count} rows, expected {expected_count}");
+            any_count_mismatch = true;
+        }
+    }
+
+    if any_count_mismatch {
+        return Err(anyhow::anyhow!(
+            "Table row counts do not match expected values"
+        ));
     }
 
     Ok(())
