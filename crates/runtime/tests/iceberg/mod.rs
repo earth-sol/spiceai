@@ -64,7 +64,7 @@ async fn iceberg_integration_test_dataset() -> Result<(), anyhow::Error> {
                 () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                     panic!("Timeout waiting for components to load");
                 }
-                () = rt.load_components() => {}
+                () = Arc::new(rt.clone()).load_components() => {}
             }
 
             let mut result = rt
