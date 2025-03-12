@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use crate::{spawn_cancellable_task, CancellableTaskHandle};
 use async_openai::types::{ChatCompletionTool, ChatCompletionToolType, FunctionObject};
 use async_trait::async_trait;
 use mcp_client::{
@@ -41,12 +42,21 @@ pub(crate) struct McpToolCatalog {
 
     /// User defined name & description, not from underlying MCP.
     name: String,
-    heartbeat_task: tokio::task::JoinHandle<()>,
+
+    // Must be `Option` to allow taking a mutable reference to the `heartbeat_task` field in the `Drop` implementation.
+    heartbeat_task: Option<CancellableTaskHandle>,
 }
 
 impl Drop for McpToolCatalog {
     fn drop(&mut self) {
-        self.heartbeat_task.abort();
+        if let Some(heartbeat) = self.heartbeat_task.take() {
+            tokio::spawn(heartbeat.cancel(Duration::from_secs(15)));
+        } else {
+            tracing::debug!(
+                "Failed to cancel heartbeat task for MCP tool catalog {}",
+                self.name
+            );
+        }
     }
 }
 
@@ -74,7 +84,7 @@ impl McpToolCatalog {
         let cfg_clone = cfg.clone();
         let name_clone = name.to_string();
 
-        let heartbeat_task = tokio::spawn(async move {
+        let (future, heartbeat_task) = spawn_cancellable_task(None, async move {
             let mut interval = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECONDS));
             interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
@@ -112,10 +122,12 @@ impl McpToolCatalog {
             }
         });
 
+        tokio::spawn(future);
+
         Ok(Self {
             client,
             name: name.to_string(),
-            heartbeat_task,
+            heartbeat_task: Some(heartbeat_task),
         })
     }
 
