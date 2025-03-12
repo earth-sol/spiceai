@@ -36,6 +36,7 @@ pub(crate) struct CancellableTaskHandle {
 }
 
 impl CancellableTaskHandle {
+    #[allow(dead_code)] // This function is only used in `feature = "mcp"`.
     pub fn cancel_without_wait(mut self) {
         let Some(token) = self.cancellation_token.take() else {
             // The task does not support graceful cancellation, so we abort it.
