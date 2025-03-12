@@ -78,7 +78,6 @@ llms = { path = "../llms" }
 logos = "0.15.0"
 mcp-client = { git = "https://github.com/Jeadie/mcp-rust-sdk.git", rev = "060cdd2d9e23d129894160e26c66cc82b3fe37eb", package = "mcp-client", optional = true }
 mcp-core = { git = "https://github.com/Jeadie/mcp-rust-sdk.git", rev = "060cdd2d9e23d129894160e26c66cc82b3fe37eb", package = "mcp-core", optional = true }
-mcp-server = { git = "https://github.com/Jeadie/mcp-rust-sdk.git", rev = "060cdd2d9e23d129894160e26c66cc82b3fe37eb", package = "mcp-server", optional = true }
 mediatype = "0.19.18"
 model_components = { path = "../model_components" }
 mysql_async = { workspace = true, optional = true }
@@ -180,7 +179,7 @@ clickhouse = [
 cuda = ["llms/cuda"]
 databricks = ["data_components/databricks"]
 debezium = ["data_components/debezium"]
-default = ["keyring-secret-store", "aws-secrets-manager", "sharepoint", "mcp"]
+default = ["keyring-secret-store", "aws-secrets-manager", "sharepoint"]
 delta_lake = ["data_components/delta_lake"]
 dev = ["openapi", "otel-arrow/dev", "mcp"]
 dremio = []
@@ -190,7 +189,7 @@ flightsql = ["data_components/flightsql"]
 ftp = ["dep:suppaftp", "dep:ssh2"]
 imap = ["data_components/imap", "dep:imap"]
 keyring-secret-store = ["dep:keyring"]
-mcp = ["dep:mcp-client", "dep:mcp-core", "dep:mcp-server"]
+mcp = ["dep:mcp-client", "dep:mcp-core"]
 metal = ["llms/metal"]
 models = ["model_components/full"]
 mssql = ["dep:tiberius", "data_components/mssql"]

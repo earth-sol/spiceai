@@ -2743,15 +2743,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
-name = "convert_case"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
-dependencies = [
- "unicode-segmentation",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7130,45 +7121,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mcp-macros"
-version = "1.0.7"
-source = "git+https://github.com/Jeadie/mcp-rust-sdk.git?rev=060cdd2d9e23d129894160e26c66cc82b3fe37eb#060cdd2d9e23d129894160e26c66cc82b3fe37eb"
-dependencies = [
- "async-trait",
- "convert_case",
- "mcp-core",
- "proc-macro2",
- "quote",
- "schemars",
- "serde",
- "serde_json",
- "syn 2.0.98",
-]
-
-[[package]]
-name = "mcp-server"
-version = "1.0.7"
-source = "git+https://github.com/Jeadie/mcp-rust-sdk.git?rev=060cdd2d9e23d129894160e26c66cc82b3fe37eb#060cdd2d9e23d129894160e26c66cc82b3fe37eb"
-dependencies = [
- "anyhow",
- "async-trait",
- "futures",
- "mcp-core",
- "mcp-macros",
- "pin-project",
- "schemars",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tower 0.4.13",
- "tower-service",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "md-5"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10318,7 +10270,6 @@ dependencies = [
  "logos",
  "mcp-client",
  "mcp-core",
- "mcp-server",
  "mediatype",
  "model_components",
  "mysql_async",
@@ -12594,18 +12545,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-appender"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3566e8ce28cc0a3fe42519fc80e6b4c943cc4c8cef275620eb8dac2d3d4e06cf"
-dependencies = [
- "crossbeam-channel",
- "thiserror 1.0.69",
- "time",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "tracing-attributes"
 version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12915,7 +12854,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
  "cfg-if",
- "rand 0.7.3",
+ "rand 0.8.5",
  "static_assertions",
 ]
 

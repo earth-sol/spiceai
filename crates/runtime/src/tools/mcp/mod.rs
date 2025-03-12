@@ -16,7 +16,6 @@ limitations under the License.
 
 pub mod catalog;
 pub mod factory;
-pub mod server;
 pub mod tool;
 
 use std::{collections::HashMap, str::FromStr};
