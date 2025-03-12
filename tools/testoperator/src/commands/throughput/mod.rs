@@ -66,13 +66,19 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
     let spiced_instance = test.end()?;
 
     // throughput test
+    let query_set_count = match app.name.clone().as_str() {
+        "s3_sf5" => 30,
+        "s3_sf5_arrow" | "s3_sf5_cache_ttl" | "s3_sf5_arrow_cache_ttl" => 60,
+        _ => 300,
+    };
+
     println!("Running throughput test");
     let throughput_test = SpiceTest::new(
         app.name.clone(),
         NotStarted::new()
             .with_parallel_count(args.common.concurrency)
             .with_query_set(queries.clone())
-            .with_end_condition(EndCondition::QuerySetCompleted(2)),
+            .with_end_condition(EndCondition::QuerySetCompleted(query_set_count)),
     )
     .with_spiced_instance(spiced_instance)
     .with_progress_bars(!args.common.disable_progress_bars)

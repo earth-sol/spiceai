@@ -1,0 +1,6 @@
+tests:
+  throughput:
+    spicepod_path: ./test/spicepods/tpch/accelerated/s3_sf5_duckdb_memory.yaml
+    query_set: tpch
+    runner_type: spiceai-large-runners
+    ready_wait: 120
