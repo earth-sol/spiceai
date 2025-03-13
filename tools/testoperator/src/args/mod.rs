@@ -51,7 +51,9 @@ pub enum TestCommands {
     HttpConsistency(HttpConsistencyTestArgs),
     HttpOverhead(HttpOverheadTestArgs),
     Evals(EvalsTestArgs),
+    #[cfg(feature = "append")]
     Append(DatasetTestArgs),
+    VectorSearch(CommonArgs),
 }
 
 /// Arguments Common to all [`TestCommands`].
