@@ -165,11 +165,23 @@ jobs:
           DREMIO_PASSWORD: ${{ secrets.SPICE_DREMIO_PASSWORD}}
           INSTA_UPDATE: ${{ github.event.inputs.update_snapshots}}
       
+      - name: Install GH CLI
+        if: github.event.inputs.update_snapshots == 'always'
+        run: |
+          (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y)) \
+          && sudo mkdir -p -m 755 /etc/apt/keyrings \
+          && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+          && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+          && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+          && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+          && sudo apt update \
+          && sudo apt install gh -y
+
       - name: Upload benchmark snapshots to branch
         if: github.event.inputs.update_snapshots == 'always'
         run: |
           # if the spiced commit is set, use that as the branch ID
-          if ${{ github.event.inputs.spiced_commit }} != ''; then
+          if ${{ github.event.inputs.spiced_commit }}; then
             BRANCH_ID=${{ github.event.inputs.spiced_commit }}
           else
             BRANCH_ID=${{ github.run_id }}
