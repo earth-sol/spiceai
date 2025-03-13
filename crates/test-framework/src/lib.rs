@@ -39,6 +39,7 @@ pub use octocrab;
 pub use rustls;
 pub use serde_yaml;
 pub use spicepod;
+pub use tokio_util;
 
 #[derive(Debug, Clone, Copy)]
 pub enum TestType {

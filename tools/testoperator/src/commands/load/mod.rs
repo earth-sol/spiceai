@@ -27,6 +27,8 @@ use test_framework::{
         datasets::{EndCondition, NotStarted},
         SpiceTest,
     },
+    tokio_util::sync::CancellationToken,
+    utils::max_observed_memory,
     TestType,
 };
 
@@ -44,7 +46,8 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
 
     let (app, start_request) = get_app_and_start_request(&args.common)?;
     let mut spiced_instance = SpicedInstance::start(start_request).await?;
-    let spiced_process = spiced_instance.process().start_watching();
+    let memory_token = CancellationToken::new();
+    let memory_readings = spiced_instance.process().watch_memory(&memory_token);
 
     spiced_instance
         .wait_for_ready(Duration::from_secs(args.common.ready_wait))
@@ -95,10 +98,24 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
     .start()
     .await?;
 
-    let test = throughput_test.wait().await?;
+    let test = match throughput_test.wait().await {
+        Ok(test) => test,
+        Err(e) => {
+            memory_token.cancel();
+            let memory_readings = memory_readings.await??;
+            let memory_usage = max_observed_memory(&memory_readings);
+            println!("Max observed memory: {memory_usage:.2} GB");
+            return Err(e);
+        }
+    };
     let test_durations = test.get_query_durations().statistical_set()?;
     let metrics: QueryMetrics<_, NoExtendedMetrics> = test.collect(TestType::Load)?;
     let mut spiced_instance = test.end()?;
+
+    memory_token.cancel();
+    let memory_readings = memory_readings.await??;
+    let memory_usage = max_observed_memory(&memory_readings);
+    println!("Max observed memory: {memory_usage:.2} GB");
 
     println!("Baseline metrics:");
     let baseline_records = baseline_metrics.build_records()?;
@@ -108,9 +125,6 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
     let records = metrics.build_records()?;
     print_batches(&records)?;
 
-    let spiced_process = spiced_process.stop_watching().await?;
-    let memory_usage = spiced_process.max_observed_memory()?;
-    println!("Max observed memory: {memory_usage:.2} GB");
     spiced_instance.stop()?;
 
     let mut test_passed = true;

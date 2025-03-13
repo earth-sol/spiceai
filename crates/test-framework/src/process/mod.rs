@@ -31,48 +31,43 @@ use std::{
 };
 use sysinfo::{Pid, ProcessesToUpdate, System};
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
 pub struct MemoryReading {
-    timestamp: Instant,
-    memory_usage: f64,
+    _timestamp: Instant,
+    pub(crate) memory_usage: f64,
 }
 
 pub struct Process {
     pid: Pid,
-    memory_readings: Option<Vec<MemoryReading>>,
-    abort_channel: Option<Sender<()>>,
-    reading_handle: Option<JoinHandle<Result<Vec<MemoryReading>>>>,
 }
 
 impl Process {
     #[must_use]
     pub fn new(pid: Pid) -> Self {
-        Self {
-            pid,
-            memory_readings: None,
-            abort_channel: None,
-            reading_handle: None,
-        }
+        Self { pid }
     }
 
     #[must_use]
-    pub fn start_watching(mut self) -> Self {
-        let (tx, rx) = futures::channel::mpsc::channel(100);
-        self.abort_channel = Some(tx);
-
-        self.reading_handle = Some(tokio::spawn(async move {
+    pub fn watch_memory(
+        &self,
+        token: &CancellationToken,
+    ) -> JoinHandle<Result<Vec<MemoryReading>>> {
+        let token = token.clone();
+        let pid = self.pid;
+        tokio::spawn(async move {
             let mut readings = Vec::new();
             loop {
-                if rx.is_terminated() {
+                if token.is_cancelled() {
                     break;
                 }
 
-                let memory_usage = Self::memory_usage(self.pid)?;
+                let memory_usage = Self::memory_usage(pid)?;
                 let memory_usage_gb =
                     f64::from(u32::try_from(memory_usage / 1024 / 1024)?) / 1024.0;
                 let reading = MemoryReading {
-                    timestamp: Instant::now(),
+                    _timestamp: Instant::now(),
                     memory_usage: memory_usage_gb,
                 };
 
@@ -81,33 +76,7 @@ impl Process {
             }
 
             Ok(readings)
-        }));
-
-        self
-    }
-
-    #[must_use]
-    pub async fn stop_watching(mut self) -> Result<Self> {
-        self.abort_channel = None; // drop the channel to stop the task
-        let results = self
-            .reading_handle
-            .context("No reading handle is available")?
-            .await??;
-        self.memory_readings = Some(results);
-        self.reading_handle = None;
-        Ok(self)
-    }
-
-    pub fn max_observed_memory(&self) -> Result<f64> {
-        Ok(self
-            .memory_readings
-            .iter()
-            .next()
-            .cloned()
-            .context("No memory readings are available")?
-            .iter()
-            .map(|reading| reading.memory_usage)
-            .fold(0.0, f64::max))
+        })
     }
 
     /// Returns the memory usage in bytes for the process

@@ -25,6 +25,8 @@ use std::{
 };
 use sysinfo::{Pid, ProcessesToUpdate, System};
 
+use crate::process::MemoryReading;
+
 pub async fn wait_until_true<F, Fut>(max_wait: Duration, mut f: F) -> bool
 where
     F: FnMut() -> Fut,
@@ -100,4 +102,11 @@ pub fn scan_directory_for_yamls(path: &PathBuf) -> anyhow::Result<Vec<PathBuf>> 
     }
 
     Ok(files)
+}
+
+pub fn max_observed_memory(readings: &[MemoryReading]) -> f64 {
+    readings
+        .iter()
+        .map(|reading| reading.memory_usage)
+        .fold(0.0, f64::max)
 }
