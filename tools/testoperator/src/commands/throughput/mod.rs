@@ -92,7 +92,16 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
         .collect(TestType::Throughput)?
         .with_run_metric(ThroughputMetrics::new(throughput_metric));
 
-    let mut spiced_instance = test.end()?;
+    let mut spiced_instance = match test.end() {
+        Ok(instance) => instance,
+        Err(e) => {
+            let spiced_process = spiced_process.stop_watching().await?;
+            let memory_usage = spiced_process.max_observed_memory()?;
+            println!("Max observed memory: {memory_usage:.2} GB");
+            return Err(e);
+        }
+    };
+
     let spiced_process = spiced_process.stop_watching().await?;
     let memory_usage = spiced_process.max_observed_memory()?;
     println!("Max observed memory: {memory_usage:.2} GB");
