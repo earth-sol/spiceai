@@ -20,6 +20,8 @@ datasets:
       enabled: true
       engine: duckdb
       mode: memory
+      params:
+        duckdb_memory_limit: 16gb
   - from: s3://benchmarks/tpch_sf5/lineitem/
     name: lineitem
     params: *s3_params
