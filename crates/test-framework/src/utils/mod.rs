@@ -110,3 +110,18 @@ pub fn max_observed_memory(readings: &[MemoryReading]) -> f64 {
         .map(|reading| reading.memory_usage)
         .fold(0.0, f64::max)
 }
+
+pub fn median_observed_memory(readings: &[MemoryReading]) -> anyhow::Result<f64> {
+    let mut memory_usages: Vec<f64> = readings
+        .iter()
+        .map(|reading| reading.memory_usage)
+        .collect();
+    memory_usages.sort_by(f64::total_cmp);
+
+    let len = memory_usages.len();
+    if len % 2 == 0 {
+        Ok((memory_usages[len / 2] + memory_usages[len / 2 - 1]) / 2.0)
+    } else {
+        Ok(memory_usages[len / 2])
+    }
+}

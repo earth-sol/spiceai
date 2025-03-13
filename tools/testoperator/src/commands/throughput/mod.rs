@@ -28,7 +28,7 @@ use test_framework::{
         SpiceTest,
     },
     tokio_util::sync::CancellationToken,
-    utils::max_observed_memory,
+    utils::{max_observed_memory, median_observed_memory},
     TestType,
 };
 
@@ -96,6 +96,8 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
             let memory_readings = memory_readings.await??;
             let memory_usage = max_observed_memory(&memory_readings);
             println!("Max observed memory: {memory_usage:.2} GB");
+            let memory_usage = median_observed_memory(&memory_readings);
+            println!("Median observed memory: {memory_usage:.2} GB");
             return Err(e);
         }
     };
@@ -111,6 +113,8 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
     let memory_readings = memory_readings.await??;
     let memory_usage = max_observed_memory(&memory_readings);
     println!("Max observed memory: {memory_usage:.2} GB");
+    let memory_usage = median_observed_memory(&memory_readings);
+    println!("Median observed memory: {memory_usage:.2} GB");
 
     let records = metrics.build_records()?;
     print_batches(&records)?;
