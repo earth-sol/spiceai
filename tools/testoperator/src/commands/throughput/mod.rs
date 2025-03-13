@@ -67,9 +67,9 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
 
     // throughput test
     let query_set_count = match app.name.clone().as_str() {
-        "s3_sf5" => 30,
-        "s3_sf5_arrow" | "s3_sf5_cache_ttl" | "s3_sf5_arrow_cache_ttl" => 120,
-        _ => 600,
+        "s3_sf5" => 60,
+        "s3_sf5_arrow" | "s3_sf5_cache_ttl" | "s3_sf5_arrow_cache_ttl" => 300,
+        _ => 1200,
     };
 
     println!("Running throughput test");

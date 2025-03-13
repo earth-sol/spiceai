@@ -151,7 +151,7 @@ pub async fn dispatch(args: DispatchArgs) -> Result<()> {
 
         // sleep to space out runs
         println!("Waiting for next run...");
-        tokio::time::sleep(std::time::Duration::from_secs(60 * 5)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(60 * 10)).await;
     }
 
     Ok(())
