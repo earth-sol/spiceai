@@ -44,6 +44,7 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
 
     let (app, start_request) = get_app_and_start_request(&args.common)?;
     let mut spiced_instance = SpicedInstance::start(start_request).await?;
+    let spiced_process = spiced_instance.process().start_watching();
 
     spiced_instance
         .wait_for_ready(Duration::from_secs(args.common.ready_wait))
@@ -107,7 +108,9 @@ pub(crate) async fn run(args: &DatasetTestArgs) -> anyhow::Result<()> {
     let records = metrics.build_records()?;
     print_batches(&records)?;
 
-    spiced_instance.show_memory_usage()?;
+    let spiced_process = spiced_process.stop_watching().await?;
+    let memory_usage = spiced_process.max_observed_memory()?;
+    println!("Max observed memory: {memory_usage:.2} GB");
     spiced_instance.stop()?;
 
     let mut test_passed = true;

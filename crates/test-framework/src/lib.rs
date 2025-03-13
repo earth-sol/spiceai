@@ -20,6 +20,7 @@ pub mod flight;
 pub mod gh_utils;
 pub mod git;
 pub mod metrics;
+pub mod process;
 pub mod queries;
 pub mod snapshot;
 pub mod spiced;

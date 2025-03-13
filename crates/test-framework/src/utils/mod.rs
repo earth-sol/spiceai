@@ -23,6 +23,7 @@ use std::{
     sync::LazyLock,
     time::Duration,
 };
+use sysinfo::{Pid, ProcessesToUpdate, System};
 
 pub async fn wait_until_true<F, Fut>(max_wait: Duration, mut f: F) -> bool
 where
