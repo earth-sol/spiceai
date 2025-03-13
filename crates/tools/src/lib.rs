@@ -20,7 +20,7 @@ limitations under the License.
 
 use async_trait::async_trait;
 use serde_json::Value;
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 /// Tools that implement the [`SpiceModelTool`] trait can automatically be used by LLMs in the runtime.
 #[async_trait]
@@ -32,4 +32,41 @@ pub trait SpiceModelTool: Sync + Send {
     }
     fn parameters(&self) -> Option<Value>;
     async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>>;
+}
+
+/// Recreate a tool with a new name.
+///
+/// Underlying tool is not modified.
+pub fn with_name(tool: &Arc<dyn SpiceModelTool>, name: &str) -> Arc<dyn SpiceModelTool> {
+    Arc::new(RenamedTool {
+        name: name.into(),
+        tool: Arc::clone(tool),
+    })
+}
+
+/// Wraps [`SpiceModelTool`]s to enable renaming them.
+///
+/// Not intended for broad use, solely [`with_name`].
+struct RenamedTool {
+    name: String,
+    tool: Arc<dyn SpiceModelTool>,
+}
+
+#[async_trait]
+impl SpiceModelTool for RenamedTool {
+    fn name(&self) -> Cow<'_, str> {
+        Cow::Borrowed(&self.name)
+    }
+
+    fn description(&self) -> Option<Cow<'_, str>> {
+        self.tool.description()
+    }
+
+    fn parameters(&self) -> Option<Value> {
+        self.tool.parameters()
+    }
+
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        self.tool.call(arg).await
+    }
 }
