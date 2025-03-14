@@ -257,7 +257,7 @@ pub async fn run(args: Args) -> Result<()> {
     });
 
     tokio::select! {
-        () = Arc::clone(&rt).load_components() => {},
+        () = rt.load_components() => {},
         () = runtime::shutdown_signal() => {
             tracing::debug!("Cancelling runtime initializing!");
         },
