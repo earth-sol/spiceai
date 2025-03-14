@@ -82,7 +82,7 @@ pub(crate) async fn setup_benchmark(
         () = tokio::time::sleep(std::time::Duration::from_secs(20 * 60)) => { // Databricks can take awhile to start up
             panic!("Timed out waiting for datasets to load in setup_benchmark()");
         }
-        () = Arc::clone(&rt).load_components() => {}
+        () = rt.load_components() => {}
     }
 
     let wait_time = match bench_name {

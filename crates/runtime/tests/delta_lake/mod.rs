@@ -92,7 +92,7 @@ async fn run_delta_lake_test(
         () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
             return Err("Timed out waiting for datasets to load".to_string());
         }
-        () = Arc::clone(&rt).load_components() => {}
+        () = rt.load_components() => {}
     }
 
     let query_result = rt

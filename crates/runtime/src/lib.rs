@@ -580,7 +580,7 @@ impl Runtime {
     ///
     /// The future returned by this function will not resolve until all components have been loaded and marked as ready.
     /// This includes waiting for the first refresh of any accelerated tables to complete.
-    pub async fn load_components(self: Arc<Self>) {
+    pub async fn load_components(self: &Arc<Self>) {
         Arc::clone(&self).set_components_initializing().await;
 
         self.start_extensions().await;

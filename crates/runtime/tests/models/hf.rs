@@ -123,7 +123,7 @@ mod nsql {
                     () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
                         return Err(anyhow::anyhow!("Timed out waiting for components to load"));
                     }
-                    () = Arc::clone(&rt).load_components() => {}
+                    () = rt.load_components() => {}
                 }
 
                 drop(llm_init_lock);
@@ -253,7 +253,7 @@ mod search {
                     () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                         return Err(anyhow::anyhow!("Timed out waiting for components to load"));
                     }
-                    () = Arc::clone(&rt).load_components() => {}
+                    () = rt.load_components() => {}
                 }
 
                 runtime_ready_check(&rt).await;
@@ -450,7 +450,7 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
             () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
                 return Err(anyhow::anyhow!("Timed out waiting for components to load"));
             }
-            () = Arc::clone(&rt).load_components() => {}
+            () = rt.load_components() => {}
         }
 
         drop(llm_init_lock);
@@ -506,7 +506,7 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
             () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
                 return Err(anyhow::anyhow!("Timed out waiting for components to load"));
             }
-            () = Arc::clone(&rt).load_components() => {}
+            () = rt.load_components() => {}
         }
 
         drop(llm_init_lock);

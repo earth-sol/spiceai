@@ -86,7 +86,7 @@ async fn databricks_delta_lake_integration_test() -> Result<(), anyhow::Error> {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err(anyhow::anyhow!("Timed out waiting for datasets to load"));
                 }
-                () = Arc::clone(&rt).load_components() => {}
+                () = rt.load_components() => {}
             }
 
             let queries: QueryTests = vec![(
