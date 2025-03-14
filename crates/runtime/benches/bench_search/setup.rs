@@ -72,7 +72,7 @@ pub(crate) async fn setup_benchmark(
         None => app_builder.build(),
     };
 
-    let rt = Runtime::builder().with_app(app).build().await;
+    let rt = Arc::new(Runtime::builder().with_app(app).build().await);
 
     // include embeddings initial loading time to indexing time
     benchmark_result.start_index();
@@ -81,7 +81,7 @@ pub(crate) async fn setup_benchmark(
         () = tokio::time::sleep(std::time::Duration::from_secs(5 * 60)) => {
             panic!("Timed out waiting for datasets to load in setup_benchmark()");
         }
-        () = Arc::new(rt.clone()).load_components() => {}
+        () = Arc::clone(&rt).load_components() => {}
     }
 
     Ok((rt, benchmark_result))

@@ -66,18 +66,20 @@ async fn s3_federation() -> Result<(), anyhow::Error> {
             let status = status::RuntimeStatus::new();
             let df = get_test_datafusion(Arc::clone(&status));
 
-            let rt = Runtime::builder()
-                .with_datafusion(df)
-                .with_app(app)
-                .build()
-                .await;
+            let rt = Arc::new(
+                Runtime::builder()
+                    .with_datafusion(df)
+                    .with_app(app)
+                    .build()
+                    .await,
+            );
 
             // Set a timeout for the test
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err(anyhow::anyhow!("Timed out waiting for datasets to load"));
                 }
-                () = Arc::new(rt.clone()).load_components() => {}
+                () = Arc::clone(&rt).load_components() => {}
             }
 
             let mut query_result = rt
@@ -114,18 +116,20 @@ async fn s3_hive_partitioning() -> Result<(), anyhow::Error> {
             let status = status::RuntimeStatus::new();
             let df = get_test_datafusion(Arc::clone(&status));
 
-            let rt = Runtime::builder()
-                .with_app(app)
-                .with_datafusion(df)
-                .build()
-                .await;
+            let rt = Arc::new(
+                Runtime::builder()
+                    .with_app(app)
+                    .with_datafusion(df)
+                    .build()
+                    .await,
+            );
 
             // Set a timeout for the test
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err(anyhow::anyhow!("Timed out waiting for datasets to load"));
                 }
-                () = Arc::new(rt.clone()).load_components() => {}
+                () = Arc::clone(&rt).load_components() => {}
             }
 
             let mut query_result = rt

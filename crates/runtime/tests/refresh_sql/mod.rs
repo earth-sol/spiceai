@@ -61,18 +61,20 @@ async fn spiceai_integration_test_refresh_sql_override_append() -> Result<(), an
             let status = status::RuntimeStatus::new();
             let df = get_test_datafusion(Arc::clone(&status));
 
-            let rt = Runtime::builder()
-                .with_app(app)
-                .with_datafusion(df)
-                .with_runtime_status(status)
-                .build()
-                .await;
+            let rt = Arc::new(
+                Runtime::builder()
+                    .with_app(app)
+                    .with_datafusion(df)
+                    .with_runtime_status(status)
+                    .build()
+                    .await,
+            );
 
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                     panic!("Timeout waiting for components to load");
                 }
-                () = Arc::new(rt.clone()).load_components() => {}
+                () = Arc::clone(&rt).load_components() => {}
             }
 
             runtime_ready_check(&rt).await;

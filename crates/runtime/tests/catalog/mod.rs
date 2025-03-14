@@ -45,18 +45,20 @@ async fn spiceai_integration_test_catalog() -> Result<(), anyhow::Error> {
             let status = status::RuntimeStatus::new();
             let df = get_test_datafusion(Arc::clone(&status));
 
-            let rt = Runtime::builder()
-                .with_app(app)
-                .with_datafusion(df)
-                .with_runtime_status(status)
-                .build()
-                .await;
+            let rt = Arc::new(
+                Runtime::builder()
+                    .with_app(app)
+                    .with_datafusion(df)
+                    .with_runtime_status(status)
+                    .build()
+                    .await,
+            );
 
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                     panic!("Timeout waiting for components to load");
                 }
-                () = Arc::new(rt.clone()).load_components() => {}
+                () = Arc::clone(&rt).load_components() => {}
             }
 
             let mut result = rt
@@ -97,21 +99,23 @@ async fn spiceai_integration_test_catalog_include() -> Result<(), anyhow::Error>
             let status = status::RuntimeStatus::new();
             let df = get_test_datafusion(Arc::clone(&status));
 
-            let rt = Runtime::builder()
-                .with_app(app)
-                .with_datafusion(df)
-                .with_autoload_extensions(HashMap::from([(
-                    "spice_cloud".to_string(),
-                    Box::new(SpiceExtensionFactory::default()) as Box<dyn ExtensionFactory>,
-                )]))
-                .build()
-                .await;
+            let rt = Arc::new(
+                Runtime::builder()
+                    .with_app(app)
+                    .with_datafusion(df)
+                    .with_autoload_extensions(HashMap::from([(
+                        "spice_cloud".to_string(),
+                        Box::new(SpiceExtensionFactory::default()) as Box<dyn ExtensionFactory>,
+                    )]))
+                    .build()
+                    .await,
+            );
 
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                     panic!("Timeout waiting for components to load");
                 }
-                () = Arc::new(rt.clone()).load_components() => {}
+                () = Arc::clone(&rt).load_components() => {}
             }
 
             let mut result = rt

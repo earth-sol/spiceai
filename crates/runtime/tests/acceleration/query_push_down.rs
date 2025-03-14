@@ -134,19 +134,19 @@ async fn acceleration_with_and_without_federation() -> Result<(), anyhow::Error>
                 .with_dataset(non_federated_acc)
                 .build();
 
-            let rt = Runtime::builder()
+            let rt = Arc::new(Runtime::builder()
                 .with_app(app)
                 .with_datafusion(df)
                 .with_runtime_status(status)
                 .build()
-                .await;
+                .await);
 
             // Set a timeout for the test
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err(anyhow::anyhow!("Timed out waiting for datasets to load"));
                 }
-                () = Arc::new(rt.clone()).load_components() => {}
+                () = Arc::clone(&rt).load_components() => {}
             }
 
             assert!(

@@ -70,14 +70,14 @@ async fn test_tls_endpoints() -> Result<(), anyhow::Error> {
 
         let registry = prometheus::Registry::new();
 
-        let rt = Runtime::builder()
+        let rt = Arc::new(Runtime::builder()
             .with_metrics_server(SocketAddr::new(LOCALHOST, metrics_port), registry)
             .build()
-            .await;
+            .await);
 
         // Start the servers
         tokio::spawn(async move {
-            Box::pin(Arc::new(rt).start_servers(
+            Box::pin(Arc::clone(&rt).start_servers(
                 api_config,
                 Some(Arc::new(tls_config)),
                 EndpointAuth::no_auth(),

@@ -423,7 +423,7 @@ async fn start_spice_test_app(
         rt_builder = rt_builder.with_rate_limits(rate_limits);
     }
 
-    let rt = rt_builder.build().await;
+    let rt = Arc::new(rt_builder.build().await);
 
     let df = rt.datafusion();
 
@@ -443,7 +443,9 @@ async fn start_spice_test_app(
     }
 
     // Start the servers
-    tokio::spawn(async move { Box::pin(Arc::new(rt).start_servers(api_config, None, auth)).await });
+    tokio::spawn(
+        async move { Box::pin(Arc::clone(&rt).start_servers(api_config, None, auth)).await },
+    );
 
     // Wait for the servers to start
     tracing::info!("Waiting for servers to start...");

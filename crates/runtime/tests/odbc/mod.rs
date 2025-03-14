@@ -82,18 +82,18 @@ async fn databricks_odbc() -> Result<(), String> {
             let status = runtime::status::RuntimeStatus::new();
             let df = crate::get_test_datafusion(Arc::clone(&status));
 
-            let rt = Runtime::builder()
+            let rt = Arc::new(Runtime::builder()
                 .with_app(app)
                 .with_datafusion(df)
                 .build()
-                .await;
+                .await);
 
             // Set a timeout for the test
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
-                () = Arc::new(rt.clone()).load_components() => {}
+                () = Arc::clone(&rt).load_components() => {}
             }
 
             let query_result = rt
@@ -141,18 +141,18 @@ async fn databricks_odbc_with_acceleration() -> Result<(), String> {
                     .build();
                 let status = runtime::status::RuntimeStatus::new();
                 let df = crate::get_test_datafusion(Arc::clone(&status));
-                let rt = Runtime::builder()
+                let rt = Arc::new(Runtime::builder()
                     .with_app(app)
                     .with_datafusion(df)
                     .build()
-                    .await;
+                    .await);
 
                 // Set a timeout for the test
                 tokio::select! {
                     () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
                         return Err("Timed out waiting for datasets to load".to_string());
                     }
-                    () = Arc::new(rt.clone()).load_components() => {}
+                    () = Arc::clone(&rt).load_components() => {}
                 }
 
                 assert!(

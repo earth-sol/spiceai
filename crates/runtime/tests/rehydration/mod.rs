@@ -278,7 +278,7 @@ async fn init_spice_app(
     acceleration_engine: &str,
     db_file_path: Option<&str>,
     with_pk_and_indexes: bool,
-) -> Result<Runtime, anyhow::Error> {
+) -> Result<Arc<Runtime>, anyhow::Error> {
     let ds = create_test_dataset(acceleration_engine, db_file_path, with_pk_and_indexes);
 
     let app = AppBuilder::new("spiceapp").with_dataset(ds).build();
@@ -286,18 +286,20 @@ async fn init_spice_app(
     let status = status::RuntimeStatus::new();
     let df = get_test_datafusion(Arc::clone(&status));
 
-    let rt = Runtime::builder()
-        .with_app(app)
-        .with_datafusion(df)
-        .with_runtime_status(status)
-        .build()
-        .await;
+    let rt = Arc::new(
+        Runtime::builder()
+            .with_app(app)
+            .with_datafusion(df)
+            .with_runtime_status(status)
+            .build()
+            .await,
+    );
 
     tokio::select! {
         () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
             return Err(anyhow::anyhow!("Timed out waiting for datasets to load"));
         }
-        () = Arc::new(rt.clone()).load_components() => {}
+        () = Arc::clone(&rt).load_components() => {}
     }
 
     Ok(rt)
