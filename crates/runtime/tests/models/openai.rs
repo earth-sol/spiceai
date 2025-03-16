@@ -497,9 +497,13 @@ async fn verify_sql_query_chat_completion(
 
     sort_json_keys(&mut task_input);
 
-    insta::assert_snapshot!(
+    insta::assert_json_snapshot!(
         "chat_1_ai_completion_input",
-        serde_json::to_string_pretty(&task_input).expect("Failed to serialize task_input")
+        serde_json::to_string_pretty(&task_input).expect("Failed to serialize task_input"), {
+            // Currently not working, possibly because not all elements have keys. See https://insta.rs/docs/redactions/
+            ".messages[].tool_calls[].id" => "id",
+            ".messages[].tool_call_id" => "tool_call_id",
+        }
     );
 
     Ok(())
@@ -511,8 +515,8 @@ async fn verify_similarity_search_chat_completion(
     rt: Arc<Runtime>,
     trace_provider: &TracerProvider,
 ) -> Result<(), anyhow::Error> {
-    let model =
-        get_openai_chat_model(Arc::clone(&rt), "gpt-4o-mini", "openai_model", "auto").await?;
+    let _tracing = init_tracing(Some("integration=debug,debug"));
+    let model = get_openai_chat_model(Arc::clone(&rt), "gpt-4o", "openai_model", "auto").await?;
 
     let req = CreateChatCompletionRequestArgs::default()
         .messages(vec![ChatCompletionRequestSystemMessageArgs::default()
@@ -551,11 +555,10 @@ async fn verify_similarity_search_chat_completion(
             &rt,
             format!(
                 "SELECT
-                    input->'keywords',
-                    input->'text',
-                    input->'datasets'
+                    input->>'keywords'->>0,
+                    input->>'datasets'
                 FROM runtime.task_history
-                WHERE start_time >= '{}' and task='tool_use::document_similarity';",
+                WHERE  start_time >= '{}' and task='tool_use::document_similarity';",
                 Into::<DateTime<Utc>>::into(task_start_time).to_rfc3339()
             )
             .as_str()

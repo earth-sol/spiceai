@@ -6201,6 +6201,8 @@ dependencies = [
  "console",
  "linked-hash-map",
  "once_cell",
+ "pest",
+ "pest_derive",
  "pin-project",
  "regex",
  "serde",
