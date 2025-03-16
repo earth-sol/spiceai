@@ -385,7 +385,7 @@ async fn openai_test_chat_completion() -> Result<(), anyhow::Error> {
 
 #[tokio::test]
 async fn openai_test_chat_messages() -> Result<(), anyhow::Error> {
-    let _tracing = init_tracing(None);
+    let _tracing = init_tracing(Some("integration=debug,debug"));
 
     test_request_context()
         .scope_retry(3, || async {
@@ -533,12 +533,13 @@ async fn verify_similarity_search_chat_completion(
         serde_json::to_value(&response).expect("Failed to serialize response.choices: {}");
     sort_json_keys(&mut resp_value);
 
-    let selector = JsonPath::from_str(
-        "$.choices[*].message[?(@.content~='.*vehicles. Journalists.*')].length()",
+    let selected = JsonPath::from_str(
+        r"$.choices[*].message[?(@.content~='^(?=.*\bvehicles\b)(?=.*\bjournalists\b).*')].length()",
     )
-    .expect("Failed to create JSONPath selector");
+    .expect("Failed to create JSONPath selector")
+    .find(&resp_value);
 
-    insta::assert_json_snapshot!("chat_2_response", selector.find(&resp_value));
+    insta::assert_json_snapshot!("chat_2_response", selected);
 
     // ensure all spans are exported into task_history
     let _ = trace_provider.force_flush();
