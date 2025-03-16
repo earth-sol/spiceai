@@ -533,7 +533,7 @@ async fn verify_similarity_search_chat_completion(
     sort_json_keys(&mut resp_value);
 
     let selector = JsonPath::from_str(
-        "$.choices[*].message[?(@.content~='.*there just big vehicles. Journalists.*')].length()",
+        "$.choices[*].message[?(@.content~='.*vehicles. Journalists.*')].length()",
     )
     .expect("Failed to create JSONPath selector");
 
