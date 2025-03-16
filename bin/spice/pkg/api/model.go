@@ -20,6 +20,7 @@ type Model struct {
 	Id      string `json:"id,omitempty" csv:"id" yaml:"id,omitempty"`
 	Object  string `json:"object,omitempty" csv:"object" yaml:"object,omitempty"`
 	OwnedBy string `json:"owned_by,omitempty" csv:"owned_by" yaml:"owned_by,omitempty"`
+	Dataset string `json:"dataset,omitempty" csv:"dataset" yaml:"dataset,omitempty"`
 	Status  string `json:"status,omitempty" csv:"status,omitempty" yaml:"status,omitempty"`
 }
 
