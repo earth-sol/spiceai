@@ -526,6 +526,7 @@ async fn verify_similarity_search_chat_completion(
 
     let task_start_time = std::time::SystemTime::now();
     let response = model.chat_request(req).await?;
+    tracing::debug!("Response from similarity search: {response:?}");
 
     // Verify Response
     let mut resp_value =
