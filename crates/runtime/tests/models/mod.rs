@@ -262,7 +262,7 @@ fn normalize_embeddings_response(mut json: Value) -> String {
 }
 
 /// Normalizes chat completion response for consistent snapshot testing by replacing dynamic values
-fn normalize_chat_completion_response(mut json: Value, normalize_message_content: bool) -> String {
+fn normalize_chat_completion_response(mut json: Value, normalize_message_content: bool) -> Value {
     // Replace `content`
     if normalize_message_content {
         if let Some(choices) = json.get_mut("choices").and_then(|c| c.as_array_mut()) {
@@ -309,7 +309,7 @@ fn normalize_chat_completion_response(mut json: Value, normalize_message_content
 
     sort_json_keys(&mut json);
 
-    serde_json::to_string_pretty(&json).unwrap_or_default()
+    json
 }
 
 /// Sorts the keys of a JSON object in place for consistent snapshot testing

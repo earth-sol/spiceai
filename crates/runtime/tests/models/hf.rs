@@ -484,7 +484,7 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
 
         // Message content verification is disabled due to issue below: model does not use tools and can't provide the expected response.
         // https://github.com/spiceai/spiceai/issues/3426
-        insta::assert_snapshot!(
+        insta::assert_json_snapshot!(
             "chat_completion",
             normalize_chat_completion_response(response, true)
         );

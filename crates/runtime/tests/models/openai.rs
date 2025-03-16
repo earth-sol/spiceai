@@ -374,7 +374,7 @@ async fn openai_test_chat_completion() -> Result<(), anyhow::Error> {
             false,
         ).await?;
 
-        insta::assert_snapshot!(
+        insta::assert_json_snapshot!(
             "chat_completion",
             normalize_chat_completion_response(response, false)
         );
@@ -538,11 +538,7 @@ async fn verify_similarity_search_chat_completion(
     )
     .expect("Failed to create JSONPath selector");
 
-    insta::assert_snapshot!(
-        "chat_2_response",
-        serde_json::to_string_pretty(&selector.find(&resp_value))
-            .expect("Failed to serialize response.choices")
-    );
+    insta::assert_json_snapshot!("chat_2_response", selector.find(&resp_value));
 
     // ensure all spans are exported into task_history
     let _ = trace_provider.force_flush();
@@ -553,7 +549,10 @@ async fn verify_similarity_search_chat_completion(
         sql_to_display(
             &rt,
             format!(
-                "SELECT input
+                "SELECT
+                    input->'keywords',
+                    input->'text',
+                    input->'datasets'
                 FROM runtime.task_history
                 WHERE start_time >= '{}' and task='tool_use::document_similarity';",
                 Into::<DateTime<Utc>>::into(task_start_time).to_rfc3339()
