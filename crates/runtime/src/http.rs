@@ -17,15 +17,19 @@ limitations under the License.
 use std::{borrow::Cow, fmt::Debug, sync::Arc};
 
 use axum::Router;
+use futures::pin_mut;
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use hyper_util::server::conn::auto::Builder;
+use hyper_util::server::conn::auto::{Builder, Connection};
+use hyper_util::server::graceful::GracefulShutdown;
 use hyper_util::service::TowerToHyperService;
 use runtime_auth::{layer::http::AuthLayer, HttpAuth};
 use snafu::prelude::*;
 use spicepod::component::runtime::CorsConfig;
 use tokio::net::TcpStream;
 use tokio::net::{TcpListener, ToSocketAddrs};
+use tokio::sync::watch::{self, Receiver};
 use tokio_rustls::TlsAcceptor;
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     config,
@@ -60,6 +64,7 @@ pub(crate) async fn start<A>(
     config: Arc<config::Config>,
     tls_config: Option<Arc<TlsConfig>>,
     auth_provider: Option<Arc<dyn HttpAuth + Send + Sync>>,
+    shutdown_signal: Option<CancellationToken>,
 ) -> Result<()>
 where
     A: ToSocketAddrs + Debug,
@@ -90,33 +95,73 @@ where
 
     runtime_metrics::spiced_runtime::HTTP_SERVER_START.add(1, &[]);
 
-    loop {
-        let stream = match listener.accept().await {
-            Ok((stream, _)) => stream,
-            Err(e) => {
-                tracing::debug!("Error accepting connection to serve HTTP request: {e}");
-                continue;
-            }
-        };
+    let shutdown_signal = shutdown_signal.unwrap_or_else(CancellationToken::new);
+    // GracefulShutdown is used to watch for all active connections and notify them to shutdown
+    // when the shutdown signal is received: https://github.com/hyperium/hyper-util/blob/master/examples/server_graceful.rs
+    // let graceful_shutdown = GracefulShutdown::new();
 
-        match tls_config {
-            Some(ref config) => {
-                let acceptor = TlsAcceptor::from(Arc::clone(&config.server_config));
-                process_tls_tcp_stream(stream, acceptor, routes.clone());
+    let (close_tx, close_rx) = watch::channel(());
+
+    loop {
+        tokio::select! {
+            conn = listener.accept() => {
+                let stream = match conn {
+                    Ok((stream, _)) => stream,
+                    Err(e) => {
+                        tracing::debug!("Error accepting connection to serve HTTP request: {e}");
+                        continue;
+                    }
+                };
+        
+                match tls_config {
+                    Some(ref config) => {
+                        let acceptor = TlsAcceptor::from(Arc::clone(&config.server_config));
+                        process_tls_tcp_stream(stream, acceptor, routes.clone(), close_rx.clone())
+                    }
+                    None => {
+                        // process_tcp_stream(stream, routes.clone(), &graceful_shutdown);
+                        process_tls_tcp_stream(stream, acceptor, routes.clone(), close_rx.clone())
+                    }
+                };
+            },
+            _ = shutdown_signal.cancelled() => {
+                tracing::debug!("Received shutdown signal, shutting down HTTP server");
+                drop(listener); // stop accepting new connections while shutting down
+                graceful_shutdown.shutdown().await;
+                break;
             }
-            None => {
-                process_tcp_stream(stream, routes.clone());
-            }
-        };
-    }
+        }
+    };
+
+    tracing::debug!("Spice Runtime HTTP stopped");
+
+    Ok(())
 }
 
-fn process_tls_tcp_stream(stream: TcpStream, acceptor: TlsAcceptor, routes: Router) {
+async fn process_tls_tcp_stream(stream: TcpStream, acceptor: TlsAcceptor, routes: Router, mut shurdown_rx: Receiver<()>) {
     tokio::spawn(async move {
         let stream = acceptor.accept(stream).await;
         match stream {
             Ok(stream) => {
-                serve_connection(stream, routes).await;
+                let conn = serve_connection(stream, routes);
+                pin_mut!(conn);
+
+                // let shutdown_signal = shurdown_rx.changed();
+                // pin_mut!(shutdown_signal);
+
+                tokio::select! {
+                    result = conn.as_mut() => {
+                        if let Err(err) = result {
+                            tracing::debug!(error = ?err, "Error serving TLS connection.");
+                        }
+                    }
+                    _ = shurdown_rx.changed() => {
+                        conn.as_mut().graceful_shutdown();
+                        let _ = conn.as_mut().await;
+                    }
+                }
+
+                drop(shurdown_rx);
             }
             Err(e) => {
                 tracing::debug!("Error accepting TLS connection: {e}");
@@ -125,19 +170,25 @@ fn process_tls_tcp_stream(stream: TcpStream, acceptor: TlsAcceptor, routes: Rout
     });
 }
 
-fn process_tcp_stream(stream: TcpStream, routes: Router) {
-    tokio::spawn(serve_connection(stream, routes));
-}
-
-async fn serve_connection<S>(stream: S, service: Router)
+fn serve_connection<S>(stream: S, service: Router) -> Connection<'static, TokioIo<S>, TowerToHyperService<Router>, TokioExecutor>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
     let hyper_service = TowerToHyperService::new(service);
-    if let Err(err) = Builder::new(TokioExecutor::new())
-        .serve_connection(TokioIo::new(stream), hyper_service)
-        .await
-    {
-        tracing::debug!(error = ?err, "Error serving HTTP connection.");
-    }
+    Builder::new(TokioExecutor::new())
+        .serve_connection(TokioIo::new(stream), hyper_service).into_owned()
+}
+
+
+
+fn process_tcp_stream(stream: TcpStream, routes: Router, graceful_shutdown: &GracefulShutdown) {
+    let conn = serve_connection(stream, routes);
+    let conn = graceful_shutdown.watch(conn);
+
+    tokio::spawn(async move {
+        if let Err(err) = conn.await
+        {
+            tracing::debug!(error = ?err, "Error serving HTTP connection.");
+        }
+    });
 }
