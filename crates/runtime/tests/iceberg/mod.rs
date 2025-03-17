@@ -45,7 +45,7 @@ async fn iceberg_integration_test_dataset() -> Result<(), anyhow::Error> {
 
             let _ = run_iceberg_test(
                 "iceberg_dataset_test",
-                dataset,
+                vec![dataset],
                 "SELECT * FROM customer LIMIT 10",
                 "iceberg_integration_test_dataset",
             )
@@ -74,7 +74,7 @@ async fn iceberg_integration_test_duckdb_acceleration() -> Result<(), anyhow::Er
 
             let _ = run_iceberg_test(
                 "iceberg_dataset_test",
-                dataset,
+                vec![dataset],
                 "SELECT * FROM customer LIMIT 10",
                 "iceberg_integration_test_duckdb_acceleration",
             )
@@ -85,13 +85,56 @@ async fn iceberg_integration_test_duckdb_acceleration() -> Result<(), anyhow::Er
         .await
 }
 
+#[tokio::test]
+async fn iceberg_integration_test_multiple_duckdb_acceleration() -> Result<(), anyhow::Error> {
+    let _ = rustls::crypto::CryptoProvider::install_default(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    );
+    let _tracing = init_tracing(None);
+    test_request_context()
+        .scope(async {
+            let mut datasets = Vec::new();
+
+            for database_num in 1..=2 {
+                for table_num in 1..=100 {
+                    let database = format!("testdb_{}", format!("{:03}", database_num));
+                    let table = format!("iceberg_table_{}", format!("{:03}", table_num));
+                    let name = format!("{}_{}", database, table);
+                    let mut dataset =
+                        make_iceberg_dataset(database.as_str(), table.as_str(), name.as_str())?;
+                    dataset.acceleration = Some(Acceleration {
+                        enabled: true,
+                        engine: Some("duckdb".to_string()),
+                        mode: Mode::File,
+                        ..Default::default()
+                    });
+                    datasets.push(dataset);
+                }
+            }
+
+            let _ = run_iceberg_test(
+                "iceberg_dataset_test",
+                datasets,
+                "SHOW TABLES",
+                "iceberg_integration_test_multiple_duckdb_acceleration",
+            )
+            .await?;
+
+            Ok(())
+        })
+        .await
+}
+
 async fn run_iceberg_test(
     app_name: &str,
-    dataset: Dataset,
+    datasets: Vec<Dataset>,
     query: &str,
     snapshot_name: &str,
 ) -> Result<Runtime, anyhow::Error> {
-    let app = AppBuilder::new(app_name).with_dataset(dataset).build();
+    let app_builder = AppBuilder::new(app_name);
+
+    let mut app = app_builder.build();
+    app.datasets = datasets;
 
     let status = status::RuntimeStatus::new();
     let df = get_test_datafusion(Arc::clone(&status));
@@ -104,7 +147,7 @@ async fn run_iceberg_test(
         .await;
 
     tokio::select! {
-        () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
+        () = tokio::time::sleep(std::time::Duration::from_secs(600)) => {
             panic!("Timeout waiting for components to load");
         }
         () = rt.load_components() => {}
