@@ -18,6 +18,10 @@ use crate::{
     get_test_datafusion, init_tracing,
     utils::{runtime_ready_check, test_request_context},
 };
+use crate::{
+    get_test_datafusion, init_tracing,
+    utils::{runtime_ready_check, test_request_context},
+};
 use anyhow::Context;
 use app::AppBuilder;
 use arrow::array::RecordBatch;
@@ -153,6 +157,9 @@ async fn run_iceberg_test(
         () = rt.load_components() => {}
     }
 
+    runtime_ready_check(&rt).await;
+
+    let mut result = rt.datafusion().query_builder(query).build().run().await?;
     runtime_ready_check(&rt).await;
 
     let mut result = rt.datafusion().query_builder(query).build().run().await?;
