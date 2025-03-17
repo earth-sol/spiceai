@@ -21,7 +21,6 @@ use crate::{
 use anyhow::Context;
 use app::AppBuilder;
 use arrow::array::RecordBatch;
-use datafusion::assert_batches_eq;
 use futures::StreamExt;
 use runtime::{status, Runtime};
 use spicepod::component::{
@@ -33,7 +32,6 @@ use spicepod::component::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use test_framework::snapshot;
 
 #[tokio::test]
 async fn iceberg_integration_test_dataset() -> Result<(), anyhow::Error> {
