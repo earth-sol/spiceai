@@ -18,7 +18,8 @@ use async_trait::async_trait;
 use catalog::SpiceToolCatalog;
 use serde_json::Value;
 use std::{borrow::Cow, sync::Arc};
-use tools::SpiceModelTool;
+
+use crate::Runtime;
 
 pub mod builtin;
 pub mod catalog;
