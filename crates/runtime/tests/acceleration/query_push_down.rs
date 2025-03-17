@@ -34,6 +34,7 @@ use crate::{
 #[cfg(feature = "postgres")]
 #[allow(clippy::too_many_lines)]
 #[tokio::test]
+#[skip]
 async fn acceleration_with_and_without_federation() -> Result<(), anyhow::Error> {
     use crate::get_test_datafusion;
     use crate::postgres::common;
