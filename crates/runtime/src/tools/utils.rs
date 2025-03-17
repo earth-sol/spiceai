@@ -22,11 +22,16 @@ use async_openai::{
     },
 };
 use schemars::{schema_for, JsonSchema};
+use secrecy::SecretString;
 use serde::Serialize;
 use serde_json::Value;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::RwLock;
 
-use crate::Runtime;
+use crate::{
+    secrets::{self, ParamStr},
+    Runtime,
+};
 
 use super::{options::SpiceToolsOptions, SpiceModelTool, Tooling};
 
@@ -118,4 +123,54 @@ pub async fn get_tools(rt: Arc<Runtime>, opts: &SpiceToolsOptions) -> Vec<Arc<dy
     }
 
     tools
+}
+
+pub(crate) fn downgrade_values_to_strings(
+    params: &HashMap<String, serde_json::Value>,
+) -> HashMap<String, String> {
+    params
+        .iter()
+        .map(|(k, v)| {
+            (
+                k.clone(),
+                match v {
+                    serde_json::Value::String(s) => s.to_string(),
+                    _ => v.to_string(),
+                },
+            )
+        })
+        .collect()
+}
+
+pub(crate) async fn get_secret_string(
+    key: &str,
+    params: &HashMap<String, Value>,
+    secrets: &Arc<RwLock<secrets::Secrets>>,
+) -> Option<SecretString> {
+    if let Some(Value::String(value)) = params.get(key) {
+        let secret_lock = secrets.read().await;
+        let s = secret_lock.inject_secrets(key, ParamStr(value)).await;
+        Some(s)
+    } else {
+        None
+    }
+}
+
+pub(crate) async fn get_secret_map(
+    key: &str,
+    params: &HashMap<String, Value>,
+    secrets: &Arc<RwLock<secrets::Secrets>>,
+) -> Option<HashMap<String, SecretString>> {
+    let Some(Value::Object(value)) = params.get(key) else {
+        return None;
+    };
+    let mut result = HashMap::new();
+    let secret_lock = secrets.read().await;
+    for (k, v) in value {
+        if let Value::String(v) = v {
+            let s = secret_lock.inject_secrets(k, ParamStr(v)).await;
+            result.insert(k.clone(), s);
+        }
+    }
+    Some(result)
 }

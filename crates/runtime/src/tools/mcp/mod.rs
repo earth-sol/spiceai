@@ -19,12 +19,18 @@ pub mod factory;
 pub mod server;
 pub mod tool;
 
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use mcp_client::{transport::Error as TransportError, Error as McpError};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use snafu::Snafu;
+use tokio::sync::RwLock;
+
+use crate::secrets;
+
+use super::utils::{get_secret_map, get_secret_string};
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -77,28 +83,43 @@ impl FromStr for MCPType {
 pub(crate) enum MCPConfig {
     Stdio {
         command: String,
-        args: Option<Vec<String>>,
+        args: Vec<String>,
+        env: HashMap<String, String>,
     },
     Https {
         url: url::Url,
     },
 }
 impl MCPConfig {
-    fn from_type(mcp_type: &MCPType, params: &HashMap<String, SecretString>) -> Self {
+    async fn from_type(
+        mcp_type: &MCPType,
+        params: &HashMap<String, Value>,
+        secrets: &Arc<RwLock<secrets::Secrets>>,
+    ) -> Self {
         match mcp_type {
-            MCPType::Stdio(command) => match params.get("mcp_args") {
-                Some(args) => {
-                    let args = ExposeSecret::expose_secret(args);
-                    Self::Stdio {
-                        command: command.clone(),
-                        args: Some(args.split_whitespace().map(ToString::to_string).collect()),
-                    }
-                }
-                None => Self::Stdio {
+            MCPType::Stdio(command) => {
+                let args: Vec<String> = get_secret_string("mcp_args", params, secrets)
+                    .await
+                    .map(|s| s.expose_secret().to_string())
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .map(ToString::to_string)
+                    .collect();
+
+                let env = match get_secret_map("mcp_env", params, secrets).await {
+                    Some(envs) => envs
+                        .iter()
+                        .map(|(k, v)| (k.clone(), ExposeSecret::expose_secret(v).to_string()))
+                        .collect(),
+                    None => HashMap::new(),
+                };
+
+                Self::Stdio {
                     command: command.clone(),
-                    args: None,
-                },
-            },
+                    args,
+                    env,
+                }
+            }
             MCPType::Https(url) => Self::Https { url: url.clone() },
         }
     }

@@ -14,15 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
-    get_params_with_secrets, metrics, status,
+    metrics, status,
     tools::{self, factory::default_available_catalogs, Tooling},
     Runtime, SpiceToolCatalog, UnableToInitializeLlmToolSnafu,
 };
 use opentelemetry::KeyValue;
-use secrecy::SecretString;
 use snafu::ResultExt;
 use spicepod::component::tool::Tool;
 
@@ -74,10 +73,8 @@ impl Runtime {
     async fn load_tool(&self, tool: &Tool) {
         self.status
             .update_tool(&tool.name, status::ComponentStatus::Initializing);
-        let params_with_secrets: HashMap<String, SecretString> =
-            get_params_with_secrets(self.secrets(), &tool.params).await;
 
-        match tools::factory::forge(tool, params_with_secrets)
+        match tools::factory::forge(tool, self.secrets())
             .await
             .context(UnableToInitializeLlmToolSnafu)
         {

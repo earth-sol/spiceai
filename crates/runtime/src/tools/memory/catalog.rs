@@ -15,13 +15,16 @@ limitations under the License.
 */
 
 use async_trait::async_trait;
-use secrecy::SecretString;
 use spicepod::component::tool::Tool;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-use crate::tools::{
-    catalog::SpiceToolCatalog, factory::IndividualToolFactory, memory::store::StoreMemoryTool,
-    SpiceModelTool,
+use crate::{
+    secrets,
+    tools::{
+        catalog::SpiceToolCatalog, factory::IndividualToolFactory, memory::store::StoreMemoryTool,
+        SpiceModelTool,
+    },
 };
 
 use super::load::LoadMemoryTool;
@@ -43,11 +46,12 @@ impl MemoryToolCatalog {
     }
 }
 
+#[async_trait]
 impl IndividualToolFactory for MemoryToolCatalog {
-    fn construct(
+    async fn construct(
         &self,
         component: &Tool,
-        _params_with_secrets: HashMap<String, SecretString>,
+        _secrets: Arc<RwLock<secrets::Secrets>>,
     ) -> Result<Arc<dyn SpiceModelTool>, Box<dyn std::error::Error + Send + Sync>> {
         let Some(("memory", id)) = component.from.split_once(':') else {
             return Err(format!(
@@ -56,7 +60,6 @@ impl IndividualToolFactory for MemoryToolCatalog {
             )
             .into());
         };
-
         Self::get_tool(
             id,
             Some(component.name.as_str()),

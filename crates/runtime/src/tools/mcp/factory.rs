@@ -15,13 +15,16 @@ limitations under the License.
 */
 
 use async_trait::async_trait;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc};
+use tokio::sync::RwLock;
 
-use secrecy::SecretString;
 use snafu::ResultExt;
 use spicepod::component::tool::Tool;
 
-use crate::tools::{catalog::SpiceToolCatalog, factory::ToolCatalogFactory};
+use crate::{
+    secrets,
+    tools::{catalog::SpiceToolCatalog, factory::ToolCatalogFactory},
+};
 
 use super::{catalog::McpToolCatalog, MCPConfig, MCPType};
 
@@ -32,7 +35,7 @@ impl ToolCatalogFactory for McpCatalogFactory {
     async fn construct(
         &self,
         component: &Tool,
-        params_with_secrets: HashMap<String, SecretString>,
+        secrets: Arc<RwLock<secrets::Secrets>>,
     ) -> Result<Arc<dyn SpiceToolCatalog>, Box<dyn std::error::Error + Send + Sync>> {
         let Some(("mcp", id)) = component.from.split_once(':') else {
             return Err(format!(
@@ -43,7 +46,7 @@ impl ToolCatalogFactory for McpCatalogFactory {
         };
 
         let mcp_type = MCPType::from_str(id)?;
-        let cfg = MCPConfig::from_type(&mcp_type, &params_with_secrets);
+        let cfg = MCPConfig::from_type(&mcp_type, &component.params, &secrets).await;
 
         let ctlg = McpToolCatalog::try_new(cfg, component.name.as_str())
             .await

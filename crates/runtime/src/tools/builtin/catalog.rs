@@ -19,9 +19,14 @@ use secrecy::{ExposeSecret, SecretString};
 use snafu::{ResultExt, Snafu};
 use spicepod::component::tool::Tool;
 use std::{collections::HashMap, sync::Arc};
+use tokio::sync::RwLock;
 
-use crate::tools::{
-    catalog::SpiceToolCatalog, factory::IndividualToolFactory, options::SpiceToolsOptions,
+use crate::{
+    get_params_with_secrets, secrets,
+    tools::{
+        catalog::SpiceToolCatalog, factory::IndividualToolFactory, options::SpiceToolsOptions,
+        utils::downgrade_values_to_strings,
+    },
 };
 
 use super::{
@@ -94,16 +99,20 @@ impl BuiltinToolCatalog {
     }
 }
 
+#[async_trait]
 impl IndividualToolFactory for BuiltinToolCatalog {
-    fn construct(
+    async fn construct(
         &self,
         component: &Tool,
-        params_with_secrets: HashMap<String, SecretString>,
+        secrets: Arc<RwLock<secrets::Secrets>>,
     ) -> Result<Arc<dyn SpiceModelTool>, Box<dyn std::error::Error + Send + Sync>> {
         let id = component
             .from
             .split_once(':')
             .map_or(component.from.as_str(), |(_, id)| id);
+
+        let params = downgrade_values_to_strings(&component.params);
+        let params_with_secrets = get_params_with_secrets(secrets, &params).await;
 
         Self::construct_builtin(
             id,

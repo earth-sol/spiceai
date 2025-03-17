@@ -14,13 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 use async_trait::async_trait;
-use secrecy::SecretString;
 use spicepod::component::tool::Tool;
 use std::{
     collections::HashMap,
     sync::{Arc, LazyLock},
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
+
+use crate::secrets;
 
 #[cfg(feature = "mcp")]
 use super::mcp::factory::McpCatalogFactory;
@@ -39,14 +40,11 @@ impl ToolFactory {
     async fn construct(
         &self,
         component: &Tool,
-        params_with_secrets: HashMap<String, SecretString>,
+        secrets: Arc<RwLock<secrets::Secrets>>,
     ) -> Result<Tooling, Box<dyn std::error::Error + Send + Sync>> {
         match self {
-            ToolFactory::Catalog(c) => c
-                .construct(component, params_with_secrets)
-                .await
-                .map(Into::into),
-            ToolFactory::Tool(t) => t.construct(component, params_with_secrets).map(Into::into),
+            ToolFactory::Catalog(c) => c.construct(component, secrets).await.map(Into::into),
+            ToolFactory::Tool(t) => t.construct(component, secrets).await.map(Into::into),
         }
     }
 }
@@ -64,11 +62,12 @@ impl From<Arc<dyn IndividualToolFactory>> for ToolFactory {
 }
 
 /// A factory that can create individual [`SpiceModelTool`]s from a spicepod [`Tool`] component.
+#[async_trait]
 pub trait IndividualToolFactory: Send + Sync {
-    fn construct(
+    async fn construct(
         &self,
         component: &Tool,
-        params_with_secrets: HashMap<String, SecretString>,
+        secrets: Arc<RwLock<secrets::Secrets>>,
     ) -> Result<Arc<dyn SpiceModelTool>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
@@ -78,7 +77,7 @@ pub trait ToolCatalogFactory: Send + Sync {
     async fn construct(
         &self,
         component: &Tool,
-        params_with_secrets: HashMap<String, SecretString>,
+        secrets: Arc<RwLock<secrets::Secrets>>,
     ) -> Result<Arc<dyn SpiceToolCatalog>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
@@ -120,7 +119,7 @@ pub fn default_available_catalogs() -> Vec<Arc<dyn SpiceToolCatalog>> {
 #[allow(clippy::implicit_hasher)]
 pub async fn forge(
     component: &Tool,
-    secrets: HashMap<String, SecretString>,
+    secrets: Arc<RwLock<secrets::Secrets>>,
 ) -> Result<Tooling, Box<dyn std::error::Error + Send + Sync>> {
     let from_source = component
         .from
