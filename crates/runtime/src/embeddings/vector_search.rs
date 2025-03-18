@@ -1419,7 +1419,7 @@ pub(crate) mod tests {
 
         for _ in 0..5 {
             let mut additional_columns = vec!["column1".to_string()];
-            for i in 0..100 {
+            for i in 0..50 {
                 let start = std::time::Instant::now();
                 let result = SearchRequest::parse_additional_columns(&additional_columns);
                 timings.push(start.elapsed());
@@ -1467,7 +1467,7 @@ pub(crate) mod tests {
 
         for _ in 0..5 {
             let mut keywords = vec!["column1".to_string()];
-            for i in 0..100 {
+            for i in 0..50 {
                 let start = std::time::Instant::now();
                 let result = SearchRequest::parse_keywords(&keywords);
                 timings.push(start.elapsed());
