@@ -24,7 +24,7 @@ use axum::{
 };
 use futures::StreamExt;
 use serde_json::json;
-use tools::{ListToolElement, SpiceModelTool};
+use tools::ListToolElement;
 
 use crate::Runtime;
 
@@ -53,6 +53,7 @@ pub(crate) async fn list(Extension(rt): Extension<Arc<Runtime>>) -> Response {
             name: tool.name().to_string(),
             description: tool.description().map(|d| d.to_string()),
             parameters: tool.parameters(),
+            is_catalog: false,
         })
         .collect::<Vec<_>>()
         .await;

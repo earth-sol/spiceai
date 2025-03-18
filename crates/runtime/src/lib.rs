@@ -15,6 +15,7 @@ limitations under the License.
 */
 #![allow(clippy::missing_errors_doc)]
 
+use ::tools::SpiceModelTool;
 use async_stream::stream;
 use std::collections::HashSet;
 use std::future::Future;
@@ -56,7 +57,7 @@ use tokio::sync::Mutex;
 use tokio::sync::{oneshot::error::RecvError, RwLock};
 use tokio_util::sync::CancellationToken;
 use tools::factory::{default_available_catalogs, ToolFactory};
-use tools::{catalog::SpiceToolCatalog, SpiceModelTool, Tooling};
+use tools::{catalog::SpiceToolCatalog, Tooling};
 pub use util::shutdown_signal;
 use workers::WorkerRegistry;
 
@@ -747,7 +748,7 @@ impl Runtime {
     ///
     /// For tools from catalog, the name is prefixed with the catalog name. e.g. `catalog_name/tool_name`.
     fn list_all_tools(self: &Arc<Self>) -> impl Stream<Item = Arc<dyn SpiceModelTool>> {
-        let default_catalogs = default_available_catalogs();
+        let default_catalogs = default_available_catalogs(Arc::clone(self));
         let stream_self = Arc::clone(self);
         stream! {
             let tool_lock = stream_self.tools.read().await;
