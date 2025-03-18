@@ -28,7 +28,6 @@ use iceberg_catalog_rest::{RestCatalog as IcebergRestCatalog, RestCatalogConfig}
 #[derive(Debug)]
 pub struct RestCatalog {
     inner: IcebergRestCatalog,
-    pub(crate) catalog_config: RestCatalogConfig,
 }
 
 impl RestCatalog {
@@ -36,8 +35,7 @@ impl RestCatalog {
     #[allow(clippy::missing_panics_doc)]
     pub fn new(catalog_config: RestCatalogConfig) -> Self {
         Self {
-            inner: IcebergRestCatalog::new(catalog_config.clone()),
-            catalog_config,
+            inner: IcebergRestCatalog::new(catalog_config),
         }
     }
 }
