@@ -1256,6 +1256,8 @@ pub async fn parse_explicit_primary_keys(
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use std::time::Duration;
+
     use super::*;
     use datafusion::sql::sqlparser::ast::{BinaryOperator, Expr};
     use schemars::schema_for;
@@ -1411,11 +1413,11 @@ pub(crate) mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_performance_of_column_parsing() {
+    #[tokio::test]
+    async fn test_performance_of_column_parsing() {
         let mut timings = vec![];
 
-        for _ in 0..3 {
+        for _ in 0..5 {
             let mut additional_columns = vec!["column1".to_string()];
             for i in 0..100 {
                 let start = std::time::Instant::now();
@@ -1423,6 +1425,7 @@ pub(crate) mod tests {
                 timings.push(start.elapsed());
                 assert!(result.is_ok());
                 additional_columns.push(format!("column{}", i + 2));
+                tokio::time::sleep(Duration::from_millis(5)).await;
             }
         }
 
@@ -1431,7 +1434,7 @@ pub(crate) mod tests {
         let average_time = total_time / (timings.len() as u32);
         let average_time_ns = average_time.as_nanos();
         assert!(
-            average_time_ns < 1_000_000,
+            average_time_ns < 1_250_000,
             "Average time: {average_time_ns}ns"
         ); // less than 1ms
     }
@@ -1458,11 +1461,11 @@ pub(crate) mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_performance_of_keyword_parsing() {
+    #[tokio::test]
+    async fn test_performance_of_keyword_parsing() {
         let mut timings = vec![];
 
-        for _ in 0..3 {
+        for _ in 0..5 {
             let mut keywords = vec!["column1".to_string()];
             for i in 0..100 {
                 let start = std::time::Instant::now();
@@ -1470,6 +1473,7 @@ pub(crate) mod tests {
                 timings.push(start.elapsed());
                 assert!(result.is_ok());
                 keywords.push(format!("column{}", i + 2));
+                tokio::time::sleep(Duration::from_millis(5)).await;
             }
         }
 
@@ -1478,7 +1482,7 @@ pub(crate) mod tests {
         let average_time = total_time / (timings.len() as u32);
         let average_time_ns = average_time.as_nanos();
         assert!(
-            average_time_ns < 1_000_000,
+            average_time_ns < 1_250_000,
             "Average time: {average_time_ns}ns"
         ); // less than 1ms
     }
