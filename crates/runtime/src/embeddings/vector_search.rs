@@ -1423,8 +1423,8 @@ pub(crate) mod tests {
             for i in 0..50 {
                 let start = std::time::Instant::now();
                 let result = SearchRequest::parse_additional_columns(&additional_columns);
-                timings.push(start.elapsed());
                 assert!(result.is_ok());
+                timings.push(start.elapsed());
                 additional_columns.push(format!("column{}", i + 2));
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
@@ -1466,8 +1466,8 @@ pub(crate) mod tests {
             for i in 0..50 {
                 let start = std::time::Instant::now();
                 let result = SearchRequest::parse_keywords(&keywords);
-                timings.push(start.elapsed());
                 assert!(result.is_ok());
+                timings.push(start.elapsed());
                 keywords.push(format!("column{}", i + 2));
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
