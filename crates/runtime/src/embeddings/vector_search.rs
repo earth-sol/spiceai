@@ -1262,6 +1262,7 @@ pub(crate) mod tests {
     use datafusion::sql::sqlparser::ast::{BinaryOperator, Expr};
     use schemars::schema_for;
     use snafu::ResultExt;
+    use test_framework::metrics::StatisticsCollector;
 
     #[tokio::test]
     async fn test_search_request_schema() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -1429,14 +1430,9 @@ pub(crate) mod tests {
             }
         }
 
-        let total_time: std::time::Duration = timings.iter().sum();
-        #[allow(clippy::cast_possible_truncation)]
-        let average_time = total_time / (timings.len() as u32);
-        let average_time_ns = average_time.as_nanos();
-        assert!(
-            average_time_ns < 1_250_000,
-            "Average time: {average_time_ns}ns"
-        ); // less than 1ms
+        let p90_time = timings.percentile(90.0).expect("To get 90th percentile");
+        let p90_time_ns = p90_time.as_nanos();
+        assert!(p90_time_ns < 1_000_000, "p90 time: {p90_time_ns}ns"); // less than 1ms
     }
 
     #[test]
@@ -1477,13 +1473,8 @@ pub(crate) mod tests {
             }
         }
 
-        let total_time: std::time::Duration = timings.iter().sum();
-        #[allow(clippy::cast_possible_truncation)]
-        let average_time = total_time / (timings.len() as u32);
-        let average_time_ns = average_time.as_nanos();
-        assert!(
-            average_time_ns < 1_250_000,
-            "Average time: {average_time_ns}ns"
-        ); // less than 1ms
+        let p90_time = timings.percentile(90.0).expect("To get 90th percentile");
+        let p90_time_ns = p90_time.as_nanos();
+        assert!(p90_time_ns < 1_000_000, "p90 time: {p90_time_ns}ns"); // less than 1ms
     }
 }
