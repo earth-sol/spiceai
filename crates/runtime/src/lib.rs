@@ -43,7 +43,7 @@ use futures::Stream;
 pub use http::get_api_doc;
 use model::{EmbeddingModelStore, EvalScorerRegistry, LLMModelStore};
 
-use crate::tools::{with_name, SpiceModelTool};
+use crate::tools::with_name;
 use model_components::model::Model;
 pub use notify::Error as NotifyError;
 use secrecy::SecretString;
@@ -56,7 +56,7 @@ use tokio::sync::Mutex;
 use tokio::sync::{oneshot::error::RecvError, RwLock};
 use tokio_util::sync::CancellationToken;
 use tools::factory::{default_available_catalogs, ToolFactory};
-use tools::{catalog::SpiceToolCatalog, Tooling};
+use tools::{catalog::SpiceToolCatalog, SpiceModelTool, Tooling};
 pub use util::shutdown_signal;
 use workers::WorkerRegistry;
 

@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use async_trait::async_trait;
 use catalog::SpiceToolCatalog;
+use serde_json::Value;
 use std::{borrow::Cow, sync::Arc};
 use tools::SpiceModelTool;
 
@@ -97,11 +99,7 @@ impl SpiceModelTool for RenamedTool {
         self.tool.parameters()
     }
 
-    async fn call(
-        &self,
-        arg: &str,
-        rt: Arc<Runtime>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        self.tool.call(arg, rt).await
+    async fn call(&self, arg: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        self.tool.call(arg).await
     }
 }
