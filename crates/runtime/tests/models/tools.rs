@@ -104,11 +104,13 @@ params:
             Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth())).await
         });
 
+        let cloned_rt = Arc::clone(&rt);
+
         tokio::select! {
             () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                 return Err(anyhow::anyhow!("Timed out waiting for components to load"));
             }
-            () = rt.load_components() => {}
+            () = cloned_rt.load_components() => {}
         }
 
         runtime_ready_check(&rt).await;
