@@ -14,12 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{
-    collections::{HashMap, HashSet},
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-};
+use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
 
 use crate::{
     accelerated_table::AcceleratedTable,
@@ -152,26 +147,6 @@ impl Runtime {
 
         // After all datasets have loaded, load the views.
         self.load_views(app);
-
-        let view_names: HashSet<TableReference> = Self::get_valid_views(app, LogErrors(true))
-            .iter()
-            .map(|v| v.name.clone())
-            .collect();
-
-        let evals = self.evals.read().await;
-        for eval in evals.iter() {
-            if !self.df.table_exists(eval.dataset.as_str().into())
-                && !view_names.contains(&eval.dataset.as_str().into())
-            {
-                tracing::error!(
-                    "Failed to load eval '{}': The dataset '{}' was not found. \
-                        Verify the dataset exists, and try again.",
-                    eval.name,
-                    eval.dataset,
-                );
-                break;
-            }
-        }
     }
 
     /// Returns a list of valid datasets from the given App, skipping any that fail to parse and logging an error for them.
