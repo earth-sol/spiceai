@@ -260,11 +260,11 @@ impl RefreshTask {
                     if let Some(batch) = stream.next().await {
                         match batch {
                             Ok(batch) => {
-                                tracing::trace!(
-                                    "[refresh] Received {} rows for dataset: {}",
-                                    batch.num_rows(),
-                                    ds_name
-                                );
+                                // tracing::trace!(
+                                //     "[refresh] Received {} rows for dataset: {}",
+                                //     batch.num_rows(),
+                                //     ds_name
+                                // );
                                 stat.num_rows += batch.num_rows();
                                 stat.memory_size += batch.get_array_memory_size();
                                 Some((
