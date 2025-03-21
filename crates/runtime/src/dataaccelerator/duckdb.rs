@@ -159,6 +159,7 @@ const PARAMETERS: &[ParameterSpec] = &[
     ParameterSpec::component("file"),
     ParameterSpec::runtime("file_watcher"),
     ParameterSpec::component("memory_limit"),
+    ParameterSpec::component("write_mode"),
 ];
 
 #[async_trait]
