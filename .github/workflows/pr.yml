@@ -24,7 +24,7 @@ jobs:
   # `on.pull_requests.paths-ignore`. Instead, we conditionally run the jobs (which report 
   # a sucess when skipped).
   check_changes:
-    runs-on: spiceai-runners
+    runs-on: spiceai-macos
     outputs:
       relevant_changes: ${{ steps.check_changes.outputs.relevant_changes }}
     steps:
@@ -55,7 +55,7 @@ jobs:
 
   lint:
     name: Run Go & Rust Linters
-    runs-on: spiceai-runners
+    runs-on: spiceai-macos
     env:
       GOVER: 1.23.4
     needs: check_changes
@@ -136,7 +136,7 @@ jobs:
 
   build:
     name: Build Go & Rust
-    runs-on: spiceai-runners
+    runs-on: spiceai-macos
     env:
       GOVER: 1.23.4
     needs: check_changes
