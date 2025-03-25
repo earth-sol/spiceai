@@ -114,7 +114,11 @@ spice search --cloud
 
 		line := liner.NewLiner()
 		line.SetCtrlCAborts(true)
-		defer line.Close()
+		defer func() {
+			if err := line.Close(); err != nil {
+				slog.Error("closing line", "error", err)
+			}
+		}()
 		for {
 			message, err := line.Prompt("search> ")
 			if err == liner.ErrPromptAborted {
@@ -169,7 +173,7 @@ spice search --cloud
 				continue
 			}
 
-			var searchResponse SearchResponse = SearchResponse{}
+			var searchResponse = SearchResponse{}
 			err = json.Unmarshal([]byte(raw), &searchResponse)
 			if err != nil {
 				slog.Error("parsing response from spiced", "error", err)

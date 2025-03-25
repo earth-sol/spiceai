@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -76,7 +77,11 @@ func doRuntimeApiRequest[T interface{}](rtcontext *context.RuntimeContext, metho
 		}
 		return *new(T), fmt.Errorf("error performing request to %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("closing response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return *new(T), fmt.Errorf("Unauthorized")

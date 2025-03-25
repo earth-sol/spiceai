@@ -187,11 +187,15 @@ spice chat --model <model> --cloud
 			rtcontext.SetHttpEndpoint(httpEndpoint)
 		}
 
-		var messages []Message = []Message{}
+		var messages = []Message{}
 
 		line := liner.NewLiner()
 		line.SetCtrlCAborts(true)
-		defer line.Close()
+		defer func() {
+			if err := line.Close(); err != nil {
+				slog.Error("closing line", "error", err)
+			}
+		}()
 		for {
 			message, err := line.Prompt("chat> ")
 			if err == liner.ErrPromptAborted {
@@ -254,7 +258,7 @@ spice chat --model <model> --cloud
 				}
 				chunk = strings.TrimPrefix(chunk, "data: ")
 
-				var chatResponse ChatCompletion = ChatCompletion{}
+				var chatResponse = ChatCompletion{}
 				err = json.Unmarshal([]byte(chunk), &chatResponse)
 				if err != nil {
 					slog.Error("failed to unmarshal chat response", "error", err)
@@ -359,7 +363,7 @@ func maybeErrorEvent(chunk string, scanner *bufio.Scanner) (*OpenAIError, error)
 		errorMessage := scanner.Text()
 		errorMessage = strings.TrimPrefix(errorMessage, "data: ")
 
-		var errorResponse OpenAIErrorResponse = OpenAIErrorResponse{}
+		var errorResponse = OpenAIErrorResponse{}
 		err := json.Unmarshal([]byte(errorMessage), &errorResponse)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal: %w", err)
