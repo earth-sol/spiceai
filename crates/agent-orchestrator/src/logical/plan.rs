@@ -30,6 +30,7 @@ pub struct Step {
     #[serde(default)]
     pub uuid: Option<Uuid>,
     pub description: String,
+    pub directory: Option<String>,
     #[serde(default)]
     pub tags: Option<Vec<String>>,
     pub action: Action,

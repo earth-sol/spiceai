@@ -27,6 +27,9 @@ json_schema:
                   description:
                     description: A description of the step to be taken
                     type: string
+                  directory:
+                    description: The directory where current task should be executed in
+                    type: string
                   tags:
                     description: Optional tags to categorize or label this step
                     type: array
