@@ -1263,6 +1263,7 @@ pub(crate) mod tests {
     use schemars::schema_for;
     use snafu::ResultExt;
     use test_framework::metrics::StatisticsCollector;
+    use test_framework::sysinfo::System;
 
     #[tokio::test]
     async fn test_search_request_schema() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -1414,25 +1415,47 @@ pub(crate) mod tests {
         assert!(result.is_err());
     }
 
-    #[tokio::test]
-    async fn test_performance_of_column_parsing() {
+    async fn vector_parsing_timing_test<F: Fn(&[String]) -> Result<Vec<String>, Error>>(
+        test_fn: F,
+    ) {
+        let mut loads = vec![];
         let mut timings = vec![];
 
         for _ in 0..5 {
-            let mut additional_columns = vec!["column1".to_string()];
+            let mut values = vec!["parsing1".to_string()];
+            let load = System::load_average();
+            loads.push(load.one);
             for i in 0..50 {
                 let start = std::time::Instant::now();
-                let result = SearchRequest::parse_additional_columns(&additional_columns);
+                let result = test_fn(&values);
                 assert!(result.is_ok());
                 timings.push(start.elapsed());
-                additional_columns.push(format!("column{}", i + 2));
+                values.push(format!("parsing{}", i + 2));
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
         }
 
-        let p90_time = timings.percentile(90.0).expect("To get 90th percentile");
+        // Validate the performance of parsing, dynamically modifying assertion threshold based on system load
+        // to account for variations in performance.
+        let load_median = loads[loads.len() / 2];
+        let load_modifier = load_median.min(1.0); // make the load modifier at least 1 - we don't want the threshold decreasing
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let assert_threshold = (1_250_000.0 * load_modifier) as u128;
+
+        // drop outliers in timing measurements
+        let statistical_timings = timings
+            .statistical_set()
+            .expect("To get statistical set of measurements");
+        let p90_time = statistical_timings
+            .percentile(90.0)
+            .expect("To get 90th percentile");
         let p90_time_ns = p90_time.as_nanos();
-        assert!(p90_time_ns < 1_000_000, "p90 time: {p90_time_ns}ns"); // less than 1ms
+        assert!(p90_time_ns < assert_threshold, "p90 time: {p90_time_ns}ns"); // less than 1ms
+    }
+
+    #[tokio::test]
+    async fn test_performance_of_column_parsing() {
+        vector_parsing_timing_test(SearchRequest::parse_additional_columns).await;
     }
 
     #[test]
@@ -1459,22 +1482,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn test_performance_of_keyword_parsing() {
-        let mut timings = vec![];
-
-        for _ in 0..5 {
-            let mut keywords = vec!["column1".to_string()];
-            for i in 0..50 {
-                let start = std::time::Instant::now();
-                let result = SearchRequest::parse_keywords(&keywords);
-                assert!(result.is_ok());
-                timings.push(start.elapsed());
-                keywords.push(format!("column{}", i + 2));
-                tokio::time::sleep(Duration::from_millis(5)).await;
-            }
-        }
-
-        let p90_time = timings.percentile(90.0).expect("To get 90th percentile");
-        let p90_time_ns = p90_time.as_nanos();
-        assert!(p90_time_ns < 1_000_000, "p90 time: {p90_time_ns}ns"); // less than 1ms
+        vector_parsing_timing_test(SearchRequest::parse_keywords).await;
     }
 }
