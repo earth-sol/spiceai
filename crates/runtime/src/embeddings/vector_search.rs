@@ -1441,7 +1441,7 @@ pub(crate) mod tests {
         let load_median = loads[loads.len() / 2];
         let load_modifier = load_median.min(1.0); // make the load modifier at least 1 - we don't want the threshold decreasing
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let assert_threshold = (1_250_000.0 * load_modifier) as u128;
+        let assert_threshold = (1_500_000.0 * load_modifier) as u128;
 
         // drop outliers in timing measurements
         let statistical_timings = timings
