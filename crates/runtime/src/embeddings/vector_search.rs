@@ -1437,6 +1437,7 @@ pub(crate) mod tests {
 
         // Validate the performance of parsing, dynamically modifying assertion threshold based on system load
         // to account for variations in performance.
+        loads.sort_by(|a, b| a.total_cmp(b));
         let load_median = loads[loads.len() / 2];
         let load_modifier = load_median.min(1.0); // make the load modifier at least 1 - we don't want the threshold decreasing
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
