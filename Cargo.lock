@@ -3530,7 +3530,7 @@ dependencies = [
 [[package]]
 name = "datafusion-table-providers"
 version = "0.1.0"
-source = "git+https://github.com/datafusion-contrib/datafusion-table-providers.git?rev=760ece6ac52b7d180d697f347642af403c2e711c#760ece6ac52b7d180d697f347642af403c2e711c"
+source = "git+https://github.com/datafusion-contrib/datafusion-table-providers.git?rev=bc989fd2d9bf90ca0b536a99cf7e86d52290fe88#bc989fd2d9bf90ca0b536a99cf7e86d52290fe88"
 dependencies = [
  "arrow",
  "arrow-json",
@@ -3562,7 +3562,7 @@ dependencies = [
  "rand 0.8.5",
  "rusqlite",
  "sea-query",
- "secrecy 0.10.3",
+ "secrecy 0.8.0",
  "serde",
  "serde_json",
  "snafu",
