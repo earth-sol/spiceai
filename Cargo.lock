@@ -3562,7 +3562,7 @@ dependencies = [
  "rand 0.8.5",
  "rusqlite",
  "sea-query",
- "secrecy 0.8.0",
+ "secrecy 0.10.3",
  "serde",
  "serde_json",
  "snafu",
