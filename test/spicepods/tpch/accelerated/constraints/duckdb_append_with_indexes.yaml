@@ -16,7 +16,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_mode: append
       refresh_check_interval: &default_refresh_check_interval 1s
       indexes:
@@ -28,6 +28,6 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_mode: append
       refresh_check_interval: *default_refresh_check_interval

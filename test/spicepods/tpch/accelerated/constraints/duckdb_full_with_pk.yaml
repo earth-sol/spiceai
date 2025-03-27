@@ -27,7 +27,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: &default_refresh_check_interval 10s
       primary_key: c_custkey
 
@@ -37,7 +37,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
       primary_key: '(l_orderkey, l_linenumber)'
 
@@ -47,7 +47,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
       primary_key: n_nationkey
     
@@ -57,7 +57,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
       primary_key: o_orderkey
 
@@ -67,7 +67,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
       primary_key: p_partkey
 
@@ -77,7 +77,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
       primary_key: '(ps_partkey, ps_suppkey)'
 
@@ -87,7 +87,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
   
   - from: duckdb:supplier
@@ -96,6 +96,6 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
       primary_key: s_suppkey

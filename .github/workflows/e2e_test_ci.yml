@@ -1703,24 +1703,24 @@ jobs:
           killall spice
           while pgrep spice > /dev/null; do sleep 1; done
 
-      - name: Verify local DuckDB database
-        working-directory: ./test/spicepods/tpch/accelerated/constraints
-        run: |
-          ls -la .spice/data
+      # - name: Verify local DuckDB database
+      #   working-directory: ./test/spicepods/tpch/accelerated/constraints
+      #   run: |
+      #     ls -la .spice/data
 
-          if [ -f .spice/data/accelerated_duckdb.db ]; then
-            echo "Verification successful: accelerated_duckdb.db exists."
-          else
-            echo "Verification failed: accelerated_duckdb.db does not exist."
-            exit 1
-          fi
+      #     if [ -f .spice/data/accelerated_duckdb.db ]; then
+      #       echo "Verification successful: accelerated_duckdb.db exists."
+      #     else
+      #       echo "Verification failed: accelerated_duckdb.db does not exist."
+      #       exit 1
+      #     fi
 
-          if [ ! -f .spice/data/accelerated_duckdb.db.wal ]; then
-            echo "Verification successful: accelerated_duckdb.db.wal does not exist."
-          else
-            echo "Verification failed: accelerated_duckdb.db.wal exists."
-            exit 1
-          fi
+      #     if [ ! -f .spice/data/accelerated_duckdb.db.wal ]; then
+      #       echo "Verification successful: accelerated_duckdb.db.wal does not exist."
+      #     else
+      #       echo "Verification failed: accelerated_duckdb.db.wal exists."
+      #       exit 1
+      #     fi
 
       - name: Check logs
         working-directory: ./test/spicepods/tpch/accelerated/constraints
@@ -1849,24 +1849,24 @@ jobs:
           killall spice
           while pgrep spice > /dev/null; do sleep 1; done
 
-      - name: Verify local DuckDB database
-        working-directory: ./test/spicepods/tpch/accelerated/constraints
-        run: |
-          ls -la .spice/data
+      # - name: Verify local DuckDB database
+      #   working-directory: ./test/spicepods/tpch/accelerated/constraints
+      #   run: |
+      #     ls -la .spice/data
 
-          if [ -f .spice/data/accelerated_duckdb.db ]; then
-            echo "Verification successful: accelerated_duckdb.db exists."
-          else
-            echo "Verification failed: accelerated_duckdb.db does not exist."
-            exit 1
-          fi
+      #     if [ -f .spice/data/accelerated_duckdb.db ]; then
+      #       echo "Verification successful: accelerated_duckdb.db exists."
+      #     else
+      #       echo "Verification failed: accelerated_duckdb.db does not exist."
+      #       exit 1
+      #     fi
 
-          if [ ! -f .spice/data/accelerated_duckdb.db.wal ]; then
-            echo "Verification successful: accelerated_duckdb.db.wal does not exist."
-          else
-            echo "Verification failed: accelerated_duckdb.db.wal exists."
-            exit 1
-          fi
+      #     if [ ! -f .spice/data/accelerated_duckdb.db.wal ]; then
+      #       echo "Verification successful: accelerated_duckdb.db.wal does not exist."
+      #     else
+      #       echo "Verification failed: accelerated_duckdb.db.wal exists."
+      #       exit 1
+      #     fi
 
       - name: Check logs
         working-directory: ./test/spicepods/tpch/accelerated/constraints

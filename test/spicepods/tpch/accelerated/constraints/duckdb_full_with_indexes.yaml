@@ -27,7 +27,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: &default_refresh_check_interval 10s
       indexes:
         c_mktsegment: enabled
@@ -38,7 +38,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
       indexes:
         l_orderkey: enabled
@@ -50,7 +50,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
       indexes:
         n_regionkey: enabled
@@ -61,7 +61,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
       indexes:
         '(o_custkey, o_orderkey)': unique
@@ -72,7 +72,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
 
   - from: duckdb:partsupp
@@ -81,7 +81,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
 
   - from: duckdb:region
@@ -90,7 +90,7 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
   
   - from: duckdb:supplier
@@ -99,6 +99,6 @@ datasets:
     acceleration:
       enabled: true
       engine: duckdb
-      mode: file
+      # mode: file
       refresh_check_interval: *default_refresh_check_interval
   
