@@ -43,6 +43,7 @@ json_schema:
                       - create_directory
                       - read_object
                       - write_object
+                      - interactive_input
                       - execute_terminal
                       - other
                       - response

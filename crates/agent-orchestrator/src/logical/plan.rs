@@ -45,6 +45,7 @@ pub enum Action {
     ReadObject,
     WriteObject,
     ExecuteTerminal,
+    InteractiveInput,
     Other,
     Response,
     RequestForInfo,

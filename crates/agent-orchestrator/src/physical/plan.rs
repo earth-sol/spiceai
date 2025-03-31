@@ -147,6 +147,7 @@ impl From<Action> for StepType {
             | Action::CreateDirectory
             | Action::ReadObject
             | Action::WriteObject
+            | Action::InteractiveInput
             | Action::ExecuteTerminal => StepType::Tool,
             Action::Other
             | Action::Response
