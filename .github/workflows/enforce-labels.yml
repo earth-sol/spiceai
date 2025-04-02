@@ -9,8 +9,16 @@ jobs:
   enforce-label:
     runs-on: spiceai-runners
     steps:
+      - name: Check if PR is a draft
+        id: check-draft
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const isDraft = context.payload.pull_request && context.payload.pull_request.draft === true;
+            core.setOutput('is_draft', isDraft.toString());
+
       - uses: yogevbd/enforce-label-action@2.2.2
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.check-draft.outputs.is_draft != 'true'
         with:
           REQUIRED_LABELS_ANY: 'kind/refactor,kind/bug,kind/enhancement,kind/documentation,kind/optimization,kind/dependencies'
           REQUIRED_LABELS_ANY_DESCRIPTION: "Select at least one label ['kind/refactor','kind/bug','kind/enhancement','kind/documentation', 'kind/optimization', 'kind/dependencies']"
