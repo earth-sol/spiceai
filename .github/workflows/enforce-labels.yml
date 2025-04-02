@@ -6,8 +6,10 @@ on:
   merge_group:
     types: [checks_requested]
 jobs:
-  enforce-label:
-    runs-on: spiceai-runners
+  check-draft-status:
+    runs-on: ubuntu-latest  # Use a lightweight runner for this check
+    outputs:
+      is_draft: ${{ steps.check-draft.outputs.is_draft }}
     steps:
       - name: Check if PR is a draft
         id: check-draft
@@ -17,8 +19,13 @@ jobs:
             const isDraft = context.payload.pull_request && context.payload.pull_request.draft === true;
             core.setOutput('is_draft', isDraft.toString());
 
+  enforce-label:
+    needs: check-draft-status
+    runs-on: spiceai-runners
+    if: needs.check-draft-status.outputs.is_draft != 'true'
+    steps:
       - uses: yogevbd/enforce-label-action@2.2.2
-        if: github.event_name == 'pull_request' && steps.check-draft.outputs.is_draft != 'true'
+        if: github.event_name == 'pull_request'
         with:
           REQUIRED_LABELS_ANY: 'kind/refactor,kind/bug,kind/enhancement,kind/documentation,kind/optimization,kind/dependencies'
           REQUIRED_LABELS_ANY_DESCRIPTION: "Select at least one label ['kind/refactor','kind/bug','kind/enhancement','kind/documentation', 'kind/optimization', 'kind/dependencies']"
