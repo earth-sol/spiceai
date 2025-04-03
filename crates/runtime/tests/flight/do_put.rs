@@ -23,6 +23,7 @@ use std::{
     time::Duration,
 };
 
+use crate::acceleration::ACCELERATION_MUTEX;
 use crate::{
     init_tracing,
     utils::{test_request_context, wait_until_true},
@@ -59,6 +60,7 @@ const LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 #[tokio::test]
 async fn test_flight_do_put_basic() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(Some("integration=debug,info"));
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     test_request_context()
         .scope(async {
@@ -99,6 +101,7 @@ async fn test_flight_do_put_basic() -> Result<(), anyhow::Error> {
 
 #[tokio::test]
 async fn test_do_put_stream_error() -> Result<(), Box<dyn std::error::Error>> {
+    let _guard = ACCELERATION_MUTEX.lock().await;
     let auth = Arc::new(ApiKeyAuth::new(vec![ApiKey::parse_str("valid:rw")]))
         as Arc<dyn FlightBasicAuth + Send + Sync>;
 
@@ -157,6 +160,7 @@ async fn test_do_put_stream_error() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn test_flight_do_put_no_auth() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(Some("integration=debug,info"));
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     test_request_context()
         .scope_retry(3, || async {
@@ -180,6 +184,7 @@ async fn test_flight_do_put_no_auth() -> Result<(), anyhow::Error> {
 #[tokio::test]
 async fn test_flight_do_put_ro_key() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(Some("integration=debug,info"));
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     test_request_context()
         .scope(async {
@@ -206,6 +211,7 @@ async fn test_flight_do_put_ro_key() -> Result<(), anyhow::Error> {
 #[tokio::test]
 async fn test_flight_do_put_rate_limit() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(Some("integration=debug,info"));
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     test_request_context()
         .scope(async {
@@ -266,6 +272,7 @@ async fn test_flight_do_put_rate_limit() -> Result<(), anyhow::Error> {
 #[tokio::test]
 async fn test_flight_do_put_max_rows_allowed() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(Some("integration=debug,info"));
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     test_request_context()
         .scope(async {
@@ -310,6 +317,7 @@ async fn test_flight_do_put_max_rows_allowed() -> Result<(), anyhow::Error> {
 
 #[tokio::test]
 async fn test_do_put_read_timeout() -> Result<(), Box<dyn std::error::Error>> {
+    let _guard = ACCELERATION_MUTEX.lock().await;
     let auth = Arc::new(ApiKeyAuth::new(vec![ApiKey::parse_str("valid:rw")]))
         as Arc<dyn FlightBasicAuth + Send + Sync>;
 
@@ -454,10 +462,31 @@ async fn start_spice_test_app(
     })
     .await;
 
-    let channel = Channel::from_shared(format!("http://localhost:{flight_port}"))?
-        .connect()
-        .await
-        .map_err(anyhow::Error::from)?;
+    // HTTP server readiness doesn't essentially mean the flight server is ready
+    // Validate the flight server readiness by sending a handshake request
+    let start_time = std::time::Instant::now();
+    let channel = loop {
+        if start_time.elapsed() > std::time::Duration::from_secs(30) {
+            return Err(anyhow::anyhow!(
+                "Flight server not ready within 30 seconds timeout"
+            ));
+        }
+
+        // Attempt to connect
+        match Channel::from_shared(format!("http://localhost:{flight_port}"))
+            .map_err(anyhow::Error::from)?
+            .connect()
+            .await
+        {
+            Ok(channel) => {
+                break channel;
+            }
+            Err(_) => {
+                // Wait before next attempt
+                sleep(std::time::Duration::from_millis(100)).await;
+            }
+        }
+    };
 
     Ok((channel, df))
 }

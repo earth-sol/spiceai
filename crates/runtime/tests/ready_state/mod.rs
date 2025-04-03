@@ -65,7 +65,7 @@ use spicepod::component::dataset::{
     acceleration::Acceleration, Dataset as SpicepodDataset, ReadyState,
 };
 
-use crate::{get_test_datafusion, init_tracing};
+use crate::{acceleration::ACCELERATION_MUTEX, get_test_datafusion, init_tracing};
 
 /// A stream that only yields data when signaled
 struct DelayedStream<T: Stream> {
@@ -503,6 +503,8 @@ async fn run_ready_state_test(
     snapshot_name: &str,
 ) -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(Some("integration=debug,info"));
+    let _guard = ACCELERATION_MUTEX.lock().await;
+
     tracing::info!("Starting test");
 
     register_slow_loading_providers().await;
@@ -899,6 +901,7 @@ async fn test_ready_state_mixed_arrow_acceleration() -> Result<(), anyhow::Error
 #[tokio::test]
 async fn test_ready_state_mixed_duckdb_acceleration() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(Some("integration=debug,info"));
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     register_slow_loading_providers().await;
 

@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 use crate::{
+    acceleration::ACCELERATION_MUTEX,
     get_test_datafusion, init_tracing,
     utils::{runtime_ready_check, test_request_context},
 };
@@ -62,6 +63,7 @@ async fn iceberg_integration_test_duckdb_acceleration() -> Result<(), anyhow::Er
     let _ = rustls::crypto::CryptoProvider::install_default(
         rustls::crypto::aws_lc_rs::default_provider(),
     );
+    let _guard = ACCELERATION_MUTEX.lock().await;
     let _tracing = init_tracing(None);
     test_request_context()
         .scope(async {
@@ -92,6 +94,7 @@ async fn iceberg_integration_test_duckdb_acceleration_restart() -> Result<(), an
     let _ = rustls::crypto::CryptoProvider::install_default(
         rustls::crypto::aws_lc_rs::default_provider(),
     );
+    let _guard = ACCELERATION_MUTEX.lock().await;
     let _tracing = init_tracing(None);
     test_request_context()
         .scope(async {
@@ -113,6 +116,7 @@ async fn iceberg_integration_test_duckdb_acceleration_restart() -> Result<(), an
             .await?;
 
             rt.shutdown().await;
+            drop(rt);
 
             let _ = run_iceberg_test(
                 "iceberg_dataset_test",

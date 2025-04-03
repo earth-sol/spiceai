@@ -40,7 +40,7 @@ async fn test_acceleration_postgres_checkpoint() -> Result<(), anyhow::Error> {
 
     test_request_context()
         .scope(async {
-            let port: usize = get_random_port();
+            let port: usize = get_random_port()?;
             let running_container = common::start_postgres_docker_container(port).await?;
 
             let pool = common::get_postgres_connection_pool(port, None).await?;
@@ -98,6 +98,7 @@ async fn test_acceleration_postgres_checkpoint() -> Result<(), anyhow::Error> {
             wait_for_checkpoints(&runtime_datasets, 120).await?;
 
             rt.shutdown().await;
+            drop(rt);
             runtime::dataaccelerator::unregister_all().await;
             runtime::dataaccelerator::register_all().await;
 

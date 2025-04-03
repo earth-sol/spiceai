@@ -22,6 +22,7 @@ use std::time::Duration;
 use tracing::instrument;
 
 use crate::{
+    acceleration::ACCELERATION_MUTEX,
     init_tracing,
     utils::{test_request_context, wait_until_true},
     RecordBatch,
@@ -121,6 +122,7 @@ async fn databricks_odbc() -> Result<(), String> {
 #[instrument]
 async fn databricks_odbc_with_acceleration() -> Result<(), String> {
     let _tracing = init_tracing(Some("integration=debug,info"));
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     test_request_context()
         .scope(async {

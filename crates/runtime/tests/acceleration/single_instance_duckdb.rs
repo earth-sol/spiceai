@@ -102,6 +102,7 @@ async fn test_acceleration_duckdb_single_instance() -> Result<(), anyhow::Error>
             wait_for_checkpoints(&runtime_datasets, 120).await?;
 
             rt.shutdown().await;
+            drop(rt);
             runtime::dataaccelerator::unregister_all().await;
             runtime::dataaccelerator::register_all().await;
             tokio::time::sleep(std::time::Duration::from_secs(15)).await;

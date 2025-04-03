@@ -145,6 +145,7 @@ async fn test_file_watcher() -> Result<(), anyhow::Error> {
             insta::assert_snapshot!(pretty);
 
             rt.shutdown().await;
+            drop(rt);
 
             // Remove the files
             std::fs::remove_file("./test_file_watcher.db").expect("remove file");
