@@ -30,6 +30,7 @@ use spicepod::component::dataset::{
 };
 
 use crate::{
+    acceleration::ACCELERATION_MUTEX,
     get_test_datafusion, init_tracing, run_query_and_check_results,
     run_query_and_check_results_with_plan_checks,
     utils::{runtime_ready_check, test_request_context},
@@ -122,6 +123,7 @@ fn downcast_decimal_array(array: &ArrayRef) -> &Decimal128Array {
 #[tokio::test]
 async fn test_sqlite_decimal_memory() -> anyhow::Result<()> {
     let _tracing = init_tracing(None);
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     test_request_context()
         .scope(async {
@@ -184,6 +186,7 @@ async fn test_sqlite_decimal_memory() -> anyhow::Result<()> {
 #[tokio::test]
 async fn test_sqlite_decimal_file() -> anyhow::Result<()> {
     let _tracing = init_tracing(None);
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     test_request_context()
         .scope(async {

@@ -786,6 +786,7 @@ async fn test_ready_state_on_load_federated_duckdb_acceleration() -> Result<(), 
 #[tokio::test]
 async fn test_ready_state_mixed_arrow_acceleration() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(Some("integration=debug,info"));
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     register_slow_loading_providers().await;
 

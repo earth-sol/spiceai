@@ -19,6 +19,7 @@ use datafusion::sql::TableReference;
 use futures::TryStreamExt;
 use std::{sync::Arc, time::Duration};
 
+use crate::acceleration::ACCELERATION_MUTEX;
 use app::AppBuilder;
 use runtime::{
     accelerated_table::refresh::RefreshOverrides, component::dataset::acceleration::RefreshMode,
@@ -47,6 +48,7 @@ async fn spiceai_integration_test_refresh_sql_override_append() -> Result<(), an
         rustls::crypto::aws_lc_rs::default_provider(),
     );
     let _tracing = init_tracing(None);
+    let _guard = ACCELERATION_MUTEX.lock().await;
 
     test_request_context()
         .scope(async {

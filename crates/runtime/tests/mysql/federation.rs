@@ -17,6 +17,7 @@ limitations under the License.
 //!
 //! Expects a Docker daemon to be running.
 use crate::{
+    acceleration::ACCELERATION_MUTEX,
     mysql::common::{get_mysql_conn, make_mysql_dataset, start_mysql_docker_container},
     utils::runtime_ready_check,
 };
@@ -171,6 +172,7 @@ async fn mysql_federation_push_down() -> Result<(), String> {
 async fn mysql_federation_inner_join_with_acc() -> Result<(), String> {
     type QueryTests<'a> = Vec<(&'a str, &'a str, Option<Box<ValidateFn>>)>;
     let _tracing = init_tracing(Some("integration=debug,info"));
+    let _guard = ACCELERATION_MUTEX.lock().await;
     let mysql_port = 13308;
 
     test_request_context().scope_retry(3, || async {

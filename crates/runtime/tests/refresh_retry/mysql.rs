@@ -17,6 +17,7 @@ limitations under the License.
 //!
 //! Expects a Docker daemon to be running.
 use crate::{
+    acceleration::ACCELERATION_MUTEX,
     docker::RunningContainer,
     mysql::common::{get_mysql_conn, make_mysql_dataset, start_mysql_docker_container},
     utils::test_request_context,
@@ -143,6 +144,7 @@ async fn get_accelerator(rt: &Runtime, table_name: &str) -> Result<Arc<dyn Table
 async fn mysql_refresh_retries() -> Result<(), String> {
     test_request_context()
         .scope(async {
+            let _guard = ACCELERATION_MUTEX.lock().await;
             let running_container = prepare_test_environment().await?;
             let running_container = Arc::new(running_container);
 
