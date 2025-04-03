@@ -484,6 +484,12 @@ pub fn get_tpcds_test_queries(
             86, // SQLite does not support `ROLLUP` and `GROUPING`
             8, 14, 38, 87 // EXCEPT and INTERSECT aren't supported
         ),
+        Some(QueryOverrides::Spark) => remove_tpcds_query!(
+            queries, 8, // https://github.com/spiceai/spiceai/issues/5250
+            36, 44, 47, 49, 57, 67, 70, 86, // https://github.com/spiceai/spiceai/issues/5249
+            38, 87, // https://github.com/spiceai/spiceai/issues/5247
+            6, 32, 92 // https://github.com/spiceai/spiceai/issues/5246
+        ),
         Some(_) | None => queries,
     }
 }
