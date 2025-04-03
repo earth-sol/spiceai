@@ -164,7 +164,7 @@ async fn execute_spill_to_disk_and_rehydration(
     assert_eq!(num_rows_loaded as u64, 10);
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    drop(rt);
+    rt.shutdown().await;
     runtime::dataaccelerator::unregister_all().await;
     runtime::dataaccelerator::register_all().await;
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -195,7 +195,7 @@ async fn execute_spill_to_disk_and_rehydration(
         arrow::util::pretty::pretty_format_batches(&restart1_items).expect("pretty format");
     insta::assert_snapshot!("records", restart1_items_pretty);
 
-    drop(rt);
+    rt.shutdown().await;
 
     // Restart the runtime with updated app definition that includes primary key and indexes
     let rt = init_spice_app(engine, db_file_path, true).await?;
@@ -205,7 +205,7 @@ async fn execute_spill_to_disk_and_rehydration(
     insta::assert_snapshot!("records", restart2_items_pretty);
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    drop(rt);
+    rt.shutdown().await;
     runtime::dataaccelerator::unregister_all().await;
     runtime::dataaccelerator::register_all().await;
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;

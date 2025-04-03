@@ -97,7 +97,7 @@ async fn test_acceleration_postgres_checkpoint() -> Result<(), anyhow::Error> {
             // Verify checkpoints are created before shutting down runtime
             wait_for_checkpoints(&runtime_datasets, 120).await?;
 
-            drop(rt);
+            rt.shutdown().await;
             runtime::dataaccelerator::unregister_all().await;
             runtime::dataaccelerator::register_all().await;
 
