@@ -195,6 +195,7 @@ pub enum QueryOverrides {
     ODBCAthena,
     ODBCDatabricks,
     DuckDB,
+    DuckDBOnZeroResults,
     Snowflake,
     IcebergSF1,
     SpicecloudCatalog,
@@ -448,6 +449,9 @@ pub fn get_tpcds_test_queries(
             queries, 8,  // EXCEPT and INTERSECT aren't supported
             38, // EXCEPT and INTERSECT aren't supported
             87  // EXCEPT and INTERSECT aren't supported
+        ),
+        Some(QueryOverrides::DuckDBOnZeroResults) => remove_tpcds_query!(
+            queries, 44, 54, 77 // https://github.com/spiceai/spiceai/issues/5261
         ),
         Some(QueryOverrides::MySQL) => remove_tpcds_query!(
             queries, 8,  // EXCEPT and INTERSECT aren't supported
