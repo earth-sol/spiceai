@@ -23,7 +23,7 @@ use app::AppBuilder;
 use arrow::record_batch::RecordBatch;
 use futures::StreamExt;
 use runtime::{status, Runtime};
-use spicepod::component::{catalog::Catalog, params::Params};
+use spicepod::{component::catalog::Catalog, param::Params};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -63,7 +63,7 @@ async fn glue_iceberg_integration_test_catalog() -> Result<(), anyhow::Error> {
                 .await;
 
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_secs(1200)) => {
+                () = tokio::time::sleep(std::time::Duration::from_secs(120)) => {
                     panic!("Timeout waiting for components to load");
                 }
                 () = rt.load_components() => {}

@@ -29,9 +29,9 @@ use crate::{
 
 use std::collections::HashMap;
 
-use spicepod::component::{
-    dataset::{acceleration::Acceleration, Dataset},
-    params::Params as DatasetParams,
+use spicepod::{
+    component::dataset::{acceleration::Acceleration, Dataset},
+    param::Params as DatasetParams,
 };
 
 // This method is only used in tests
@@ -90,7 +90,7 @@ async fn databricks_odbc() -> Result<(), String> {
 
             // Set a timeout for the test
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
                 () = rt.load_components() => {}

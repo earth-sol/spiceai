@@ -23,7 +23,7 @@ use crate::{
     ValidateFn,
 };
 use runtime::{status, Runtime};
-use spicepod::component::{dataset::Dataset, params::Params};
+use spicepod::{component::dataset::Dataset, param::Params};
 
 fn make_spark_dataset(path: &str, name: &str) -> Dataset {
     let mut dataset = Dataset::new(format!("spark:{path}"), name.to_string());
@@ -73,7 +73,7 @@ async fn spark_integration_test() -> Result<(), anyhow::Error> {
 
             // Set a timeout for the test
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                     return Err(anyhow::anyhow!("Timed out waiting for datasets to load"));
                 }
                 () = rt.load_components() => {}

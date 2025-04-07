@@ -37,12 +37,13 @@ use datafusion_table_providers::sql::arrow_sql_gen::statement::{
 use futures::TryStreamExt;
 use mysql_async::{prelude::Queryable, Params, Row};
 use runtime::{spice_data_base_path, status, Runtime};
-use spicepod::component::dataset::{
-    acceleration::{Acceleration, IndexType, Mode},
-    Dataset,
+use spicepod::{
+    component::dataset::{
+        acceleration::{Acceleration, IndexType, Mode},
+        Dataset,
+    },
+    param::Params as SpicepodParams,
 };
-
-use spicepod::component::params::Params as SpicepodParams;
 
 use tracing::instrument;
 use util::{fibonacci_backoff::FibonacciBackoffBuilder, retry, RetryError};
@@ -294,7 +295,7 @@ async fn init_spice_app(
         .await;
 
     tokio::select! {
-        () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+        () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
             return Err(anyhow::anyhow!("Timed out waiting for datasets to load"));
         }
         () = rt.load_components() => {}

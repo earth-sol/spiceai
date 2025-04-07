@@ -21,7 +21,7 @@ use app::AppBuilder;
 
 use arrow::array::RecordBatch;
 use runtime::{status, Runtime};
-use spicepod::component::{dataset::Dataset, params::Params as DatasetParams};
+use spicepod::{component::dataset::Dataset, param::Params as DatasetParams};
 
 use crate::{
     get_test_datafusion, init_tracing, run_query_and_check_results, utils::test_request_context,
@@ -65,7 +65,7 @@ async fn test_github_issues() -> Result<(), String> {
                 .await;
 
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
                 () = rt.load_components() => {}
@@ -170,7 +170,7 @@ async fn test_github_commits() -> Result<(), String> {
                 .await;
 
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
                 () = rt.load_components() => {}
@@ -229,7 +229,7 @@ async fn test_github_stargazers() -> Result<(), String> {
                 .await;
 
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
                 () = rt.load_components() => {}

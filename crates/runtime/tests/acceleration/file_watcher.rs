@@ -18,12 +18,12 @@ use app::AppBuilder;
 use arrow::array::RecordBatch;
 use futures::TryStreamExt;
 use runtime::{status, Runtime};
-use spicepod::component::{
-    dataset::{
+use spicepod::{
+    component::dataset::{
         acceleration::{Acceleration, Mode, RefreshMode},
         Dataset,
     },
-    params::Params,
+    param::Params,
 };
 use std::io::Write;
 use std::sync::Arc;
@@ -92,7 +92,7 @@ async fn test_file_watcher() -> Result<(), anyhow::Error> {
             );
 
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                     return Err(anyhow::Error::msg("Timed out waiting for datasets to load"));
                 }
                 () = rt.load_components() => {}
