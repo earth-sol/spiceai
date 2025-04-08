@@ -197,14 +197,18 @@ impl Query {
             let res_schema = res_stream.schema();
 
             if let Err(e) = verify_schema(df_schema.fields(), res_schema.fields()) {
-                handle_error!(
+                // See https://github.com/apache/datafusion/blob/main/datafusion/expr/src/expr_schema.rs#L213
+                // Unspecified placeholder type is null and so parameters will not match schema
+                // If we get a mistmatch datatype and the actual is Null we just allow it
+                if matches!(&e, arrow_tools::schema::Error::SchemaMismatchDataType { actual, .. } if actual == "Null") {                handle_error!(
                     tracker,
                     &request_context,
                     ErrorCode::InternalError,
                     e,
                     SchemaMismatch
-                )
-            };
+                    )
+                }                
+            }
 
             let final_stream = if cache_manager.should_cache_results() {
                 Self::wrap_stream_with_cache(
