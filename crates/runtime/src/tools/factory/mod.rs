@@ -21,6 +21,7 @@ use std::{
     sync::{Arc, LazyLock},
 };
 use tokio::sync::Mutex;
+use tools::SpiceModelTool;
 
 use crate::Runtime;
 
@@ -29,7 +30,7 @@ use super::mcp::factory::McpCatalogFactory;
 
 use super::{
     builtin::catalog::BuiltinToolCatalog, catalog::SpiceToolCatalog,
-    memory::catalog::MemoryToolCatalog, SpiceModelTool, Tooling,
+    memory::catalog::MemoryToolCatalog, Tooling,
 };
 
 pub enum ToolFactory {
