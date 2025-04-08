@@ -207,7 +207,7 @@ impl Query {
                     e,
                     SchemaMismatch
                     )
-                }                
+                }
             }
 
             let final_stream = if cache_manager.should_cache_results() {

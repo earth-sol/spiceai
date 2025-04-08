@@ -133,7 +133,68 @@ pub(crate) struct PreparedStatement {
     params: serde_json::Value,
 }
 
-// TODO: Add OpenAI docs
+/// Prepared SQL Query
+///
+/// Execute a parameterized SQL query and return the results.
+///
+/// This endpoint allows users to execute SQL queries with parameters directly from an HTTP request. The SQL query
+/// and its parameters are sent as JSON in the request body.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/sql/prepared",
+    operation_id = "post_sql_prepared",
+    tag = "SQL",
+    params(
+        ("Accept" = String, Header, description = "The format of the response, one of 'application/json'
+(default), 'text/csv' or 'text/plain'."),
+    ),
+    request_body(
+        content_type = "application/json",
+        description = "Prepared SQL query and its parameters to execute",
+        example = json!({
+            "sql": "SELECT $1, $2",
+            "params": [1, 7]
+        })
+    ),
+    responses(
+        (status = 200, description = "SQL query executed successfully (JSON format)", content((
+            Vec<serde_json::Value> = "application/json",
+            example = json!([
+                {
+                    "$1": 1,
+                    "$2": 7
+                }
+            ])
+        ),
+        (
+            String = "text/csv",
+            example = r#""$1","$2"
+1,7"#
+        ),
+        (
+            String = "text/plain",
+            example = r#"
+            +----+----+
+            | $1 | $2 |
+            +----+----+
+            | 1  | 7  |
+            +----+----+"#
+        ))),
+        (status = 400, description = "Invalid SQL query or malformed input", content((
+            String,
+            example = "Failed to execute query: Error during planning: table not found"
+        ))),
+        (status = 400, description = "Invalid SQL query or malformed input", content((
+            String,
+            example = "Failed to parse the request body as JSON: EOF while parsing an object"
+        ))),
+        (status = 500, description = "Internal server error", content((
+            String,
+            example = "Unexpected internal server error occurred"
+        )))
+        )
+    )
+)]
 pub(crate) async fn prepared(
     Extension(df): Extension<Arc<DataFusion>>,
     accept: Option<TypedHeader<Accept>>,
