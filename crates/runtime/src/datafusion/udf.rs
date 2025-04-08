@@ -100,7 +100,7 @@ impl ScalarUDFImpl for Greatest {
             }
         }
 
-        let types = data_types(arg_types, self.signature())?;
+        let types = data_types("greatest", arg_types, self.signature())?;
 
         match types.first() {
             Some(t) => Ok(t.clone()),
@@ -162,7 +162,7 @@ impl ScalarUDFImpl for Least {
             }
         }
 
-        let types = data_types(arg_types, self.signature())?;
+        let types = data_types("least", arg_types, self.signature())?;
 
         match types.first() {
             Some(t) => Ok(t.clone()),

@@ -31,8 +31,9 @@ use datafusion::{
     logical_expr::{Expr, TableProviderFilterPushDown},
     physical_expr::EquivalenceProperties,
     physical_plan::{
-        stream::RecordBatchStreamAdapter, DisplayAs, DisplayFormatType, ExecutionMode,
-        ExecutionPlan, Partitioning, PlanProperties,
+        execution_plan::{Boundedness, EmissionType},
+        stream::RecordBatchStreamAdapter,
+        DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
     },
 };
 use document_parse::DocumentParser;
@@ -256,7 +257,8 @@ impl ObjectStoreTextExec {
             properties: PlanProperties::new(
                 EquivalenceProperties::new(projected_schema),
                 Partitioning::UnknownPartitioning(1),
-                ExecutionMode::Bounded,
+                EmissionType::Incremental,
+                Boundedness::Bounded,
             ),
             ctx,
             formatter,
@@ -281,8 +283,8 @@ pub(crate) fn to_sendable_stream(
                     continue;
                     }
 
-                    let result: GetResult = ctx.store.get(&object_meta.location).await?;
-                    let bytz = result.bytes().await?;
+                    let result: GetResult = ctx.store.get(&object_meta.location).await.map_err(|e| DataFusionError::Execution(format!("{e}")))?;
+                    let bytz = result.bytes().await.map_err(|e| DataFusionError::Execution(format!("{e}")))?;
 
                     match ObjectStoreTextTable::to_record_batch(&[object_meta], &[bytz], formatter.as_ref()) {
                         Ok(batch) => {

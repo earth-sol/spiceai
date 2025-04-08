@@ -21,7 +21,7 @@ use std::{
 
 use cache::QueryResultsCacheProvider;
 use datafusion::{
-    catalog_common::{CatalogProvider, MemoryCatalogProvider},
+    catalog::{CatalogProvider, MemoryCatalogProvider},
     execution::SessionStateBuilder,
     optimizer::{
         analyzer::{

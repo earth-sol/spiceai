@@ -232,13 +232,13 @@ impl TableProvider for MemTable {
 
         let primary_key = self.get_and_ensure_only_primary_keys()?;
 
-        let sink = Arc::new(MemSink::new(self.batches.clone(), overwrite, primary_key));
-        Ok(Arc::new(DataSinkExec::new(
-            input,
-            sink,
-            Arc::clone(&self.schema),
-            None,
-        )))
+        let sink = Arc::new(MemSink::new(
+            self.batches.clone(),
+            overwrite,
+            primary_key,
+            self.schema(),
+        ));
+        Ok(Arc::new(DataSinkExec::new(input, sink, None)))
     }
 
     fn get_column_default(&self, column: &str) -> Option<&Expr> {
@@ -254,6 +254,7 @@ struct MemSink {
 
     /// Optional primary key columns. If present, primary key values must be unique, ordered ascendingly.
     primary_key: Option<Vec<usize>>,
+    schema: SchemaRef,
 }
 
 impl Debug for MemSink {
@@ -280,6 +281,7 @@ impl MemSink {
         batches: Vec<PartitionData>,
         overwrite: InsertOp,
         primary_key: Option<Vec<usize>>,
+        schema: SchemaRef,
     ) -> Self {
         Self {
             batches,
@@ -289,6 +291,7 @@ impl MemSink {
                 z.sort_unstable();
                 z
             }),
+            schema,
         }
     }
 }
@@ -478,6 +481,10 @@ impl DataSink for MemSink {
 
     fn metrics(&self) -> Option<MetricsSet> {
         None
+    }
+
+    fn schema(&self) -> &SchemaRef {
+        &self.schema
     }
 
     async fn write_all(

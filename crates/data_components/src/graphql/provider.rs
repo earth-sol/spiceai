@@ -24,9 +24,11 @@ use datafusion::{
     logical_expr::{Expr, TableProviderFilterPushDown},
     physical_expr::EquivalenceProperties,
     physical_plan::{
-        expressions::Column, projection::ProjectionExec, stream::RecordBatchStreamAdapter,
-        DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, Partitioning, PhysicalExpr,
-        PlanProperties,
+        execution_plan::{Boundedness, EmissionType},
+        expressions::Column,
+        projection::ProjectionExec,
+        stream::RecordBatchStreamAdapter,
+        DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PhysicalExpr, PlanProperties,
     },
 };
 use futures::StreamExt;
@@ -239,7 +241,8 @@ impl GraphQLTableProviderExec {
             properties: PlanProperties::new(
                 EquivalenceProperties::new(table_schema),
                 Partitioning::UnknownPartitioning(1),
-                ExecutionMode::Bounded,
+                EmissionType::Incremental,
+                Boundedness::Bounded,
             ),
         }
     }

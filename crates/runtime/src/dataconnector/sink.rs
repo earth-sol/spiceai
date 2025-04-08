@@ -170,15 +170,16 @@ impl TableProvider for SinkConnector {
     ) -> datafusion::error::Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(DataSinkExec::new(
             input,
-            Arc::new(SinkDataSink::new()),
-            self.schema(),
+            Arc::new(SinkDataSink::new(self.schema())),
             None,
         )) as _)
     }
 }
 
 #[derive(Clone)]
-struct SinkDataSink {}
+struct SinkDataSink {
+    schema: SchemaRef,
+}
 
 #[async_trait]
 impl DataSink for SinkDataSink {
@@ -188,6 +189,10 @@ impl DataSink for SinkDataSink {
 
     fn metrics(&self) -> Option<MetricsSet> {
         None
+    }
+
+    fn schema(&self) -> &SchemaRef {
+        &self.schema
     }
 
     async fn write_all(
@@ -200,8 +205,9 @@ impl DataSink for SinkDataSink {
 }
 
 impl SinkDataSink {
-    fn new() -> Self {
-        Self {}
+    #[must_use]
+    pub fn new(schema: SchemaRef) -> Self {
+        Self { schema }
     }
 }
 

@@ -29,7 +29,9 @@ use datafusion::execution::{SendableRecordBatchStream, TaskContext};
 use datafusion::logical_expr::Expr;
 use datafusion::physical_expr::EquivalenceProperties;
 use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
-use datafusion::physical_plan::{DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties};
+use datafusion::physical_plan::{
+    DisplayAs, DisplayFormatType, ExecutionPlan, ExecutionPlanProperties, PlanProperties,
+};
 use futures::stream::{Stream, StreamExt};
 use itertools::Itertools;
 use llms::chunking::Chunker;
@@ -155,8 +157,9 @@ impl EmbeddingTableExec {
     ) -> PlanProperties {
         let eq_properties = EquivalenceProperties::new(Arc::clone(projected_schema));
         let partitioning = base_plan.properties().partitioning.clone();
-        let execution_mode = base_plan.properties().execution_mode();
-        PlanProperties::new(eq_properties, partitioning, execution_mode)
+        let emission_type = base_plan.pipeline_behavior();
+        let boundedness = base_plan.boundedness();
+        PlanProperties::new(eq_properties, partitioning, emission_type, boundedness)
     }
 }
 

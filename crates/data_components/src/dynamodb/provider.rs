@@ -37,8 +37,9 @@ use datafusion::{
     execution::{SendableRecordBatchStream, TaskContext},
     physical_expr::EquivalenceProperties,
     physical_plan::{
-        stream::RecordBatchReceiverStream, DisplayAs, DisplayFormatType, ExecutionMode,
-        ExecutionPlan, Partitioning, PlanProperties,
+        execution_plan::{Boundedness, EmissionType},
+        stream::RecordBatchReceiverStream,
+        DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
     },
     prelude::Expr,
 };
@@ -257,7 +258,8 @@ impl DynamoDBTableProviderExec {
             properties: PlanProperties::new(
                 EquivalenceProperties::new(table_schema),
                 Partitioning::UnknownPartitioning(1),
-                ExecutionMode::Bounded,
+                EmissionType::Incremental,
+                Boundedness::Bounded,
             ),
         }
     }

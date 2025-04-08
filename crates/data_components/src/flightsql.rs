@@ -43,8 +43,11 @@ use datafusion::{
     logical_expr::{Expr, TableProviderFilterPushDown, TableType},
     physical_expr::EquivalenceProperties,
     physical_plan::{
-        project_schema, stream::RecordBatchStreamAdapter, DisplayAs, DisplayFormatType,
-        ExecutionMode, ExecutionPlan, Partitioning, PlanProperties, SendableRecordBatchStream,
+        execution_plan::{Boundedness, EmissionType},
+        project_schema,
+        stream::RecordBatchStreamAdapter,
+        DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
+        SendableRecordBatchStream,
     },
     sql::TableReference,
 };
@@ -421,7 +424,8 @@ impl FlightSqlExec {
             properties: PlanProperties::new(
                 EquivalenceProperties::new(projected_schema),
                 Partitioning::UnknownPartitioning(1),
-                ExecutionMode::Bounded,
+                EmissionType::Incremental,
+                Boundedness::Bounded,
             ),
         })
     }

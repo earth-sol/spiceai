@@ -148,7 +148,7 @@ where
             .map_err(|e| dbconnection::Error::UnableToGetSchema { source: e })?;
 
         let schema = Arc::new(
-            arrow_schema_from(&mut prepared)
+            arrow_schema_from(&mut prepared, false)
                 .boxed()
                 .map_err(|e| dbconnection::Error::UnableToGetSchema { source: e })?,
         );
@@ -195,7 +195,7 @@ where
             let cxn = handle.block_on(async { conn.lock().await });
 
             let mut prepared = cxn.prepare(&sql)?;
-            let schema = Arc::new(arrow_schema_from(&mut prepared)?);
+            let schema = Arc::new(arrow_schema_from(&mut prepared, false)?);
             blocking_channel_send(&schema_tx, Arc::clone(&schema))?;
 
             let mut statement = prepared.into_statement();
@@ -287,6 +287,7 @@ fn build_odbc_reader<C: Cursor>(
 ) -> Result<OdbcReader<C>, Error> {
     let mut builder = OdbcReaderBuilder::new();
     builder.with_schema(Arc::clone(schema));
+    builder.trim_fixed_sized_characters(true);
 
     let bind_as_usize = |k: &str, default: Option<usize>, f: &mut dyn FnMut(usize)| {
         params

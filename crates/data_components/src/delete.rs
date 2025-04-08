@@ -31,8 +31,9 @@ use datafusion::{
     logical_expr::{dml::InsertOp, Expr, LogicalPlan},
     physical_expr::EquivalenceProperties,
     physical_plan::{
-        stream::RecordBatchStreamAdapter, DisplayAs, DisplayFormatType, ExecutionMode,
-        ExecutionPlan, Partitioning, PlanProperties,
+        execution_plan::{Boundedness, EmissionType},
+        stream::RecordBatchStreamAdapter,
+        DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
     },
 };
 
@@ -64,7 +65,8 @@ impl DeletionExec {
         let properties = PlanProperties::new(
             EquivalenceProperties::new(Arc::clone(schema)),
             Partitioning::UnknownPartitioning(1),
-            ExecutionMode::Bounded,
+            EmissionType::Incremental,
+            Boundedness::Bounded,
         );
         Self {
             deletion_sink,

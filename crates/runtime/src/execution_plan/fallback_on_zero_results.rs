@@ -59,7 +59,8 @@ impl FallbackOnZeroResultsScanExec {
         fallback_scan_params: TableScanParams,
     ) -> Self {
         let eq_properties = input.equivalence_properties().clone();
-        let execution_mode = input.execution_mode();
+        let emission_type = input.pipeline_behavior();
+        let boundedness = input.boundedness();
 
         // Ensure the input has a single partition
         if input.output_partitioning().partition_count() != 1 {
@@ -73,7 +74,8 @@ impl FallbackOnZeroResultsScanExec {
             properties: PlanProperties::new(
                 eq_properties,
                 Partitioning::UnknownPartitioning(1),
-                execution_mode,
+                emission_type,
+                boundedness,
             ),
         }
     }
