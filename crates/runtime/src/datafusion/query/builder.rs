@@ -16,6 +16,7 @@ limitations under the License.
 
 use std::{collections::HashSet, sync::Arc};
 
+use datafusion::common::ParamValues;
 use tokio::time::Instant;
 use uuid::Uuid;
 
@@ -27,6 +28,7 @@ pub struct QueryBuilder<'a> {
     df: Arc<DataFusion>,
     sql: &'a str,
     query_id: Uuid,
+    params: Option<ParamValues>,
 }
 
 impl<'a> QueryBuilder<'a> {
@@ -35,6 +37,7 @@ impl<'a> QueryBuilder<'a> {
             df,
             sql,
             query_id: Uuid::new_v4(),
+            params: None,
         }
     }
 
@@ -44,12 +47,18 @@ impl<'a> QueryBuilder<'a> {
         self
     }
 
+    pub(crate) fn params(&mut self, params: ParamValues) -> &mut Self {
+        self.params = Some(params);
+        self
+    }
+
     #[must_use]
     pub fn build(self) -> Query {
         let sql: Arc<str> = self.sql.into();
         Query {
             df: Arc::clone(&self.df),
             sql: Arc::clone(&sql),
+            params: self.params,
             tracker: QueryTracker {
                 schema: None,
                 query_duration_secs: None,

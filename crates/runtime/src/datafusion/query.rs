@@ -24,6 +24,7 @@ use arrow::{
 use arrow_tools::schema::verify_schema;
 use cache::PlanOrCached;
 use datafusion::{
+    common::ParamValues,
     error::DataFusionError,
     execution::{context::SQLOptions, SendableRecordBatchStream},
     physical_plan::stream::RecordBatchStreamAdapter,
@@ -83,6 +84,7 @@ thread_local! {
 pub struct Query {
     df: Arc<crate::datafusion::DataFusion>,
     sql: Arc<str>,
+    params: Option<ParamValues>,
     tracker: QueryTracker,
 }
 
@@ -126,6 +128,13 @@ impl Query {
             {
                 PlanOrCached::Plan(plan, tracker, cache_manager) => (plan, tracker, cache_manager),
                 PlanOrCached::Cached(query_result) => return Ok(query_result),
+            };
+
+            let plan = if let Some(params) = ctx.params {
+                plan.with_param_values(params)
+                    .map_err(|e| Error::UnableToExecuteQuery { source: e })?
+            } else {
+                plan
             };
 
             if let Err(e) =
