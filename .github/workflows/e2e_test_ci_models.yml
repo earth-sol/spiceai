@@ -114,6 +114,11 @@ jobs:
         run: |
           make -C bin/spiced SPICED_NON_DEFAULT_FEATURES="models"
 
+      - name: Install CMake (macOS)
+        if: matrix.target.target_os == 'darwin'
+        run: |
+          brew install cmake
+
       - name: Build spiced (macOS)
         if: matrix.target.target_os == 'darwin'
         run: |
