@@ -14,7 +14,7 @@ on:
       - 'CONTRIBUTING.md'
       - 'SECURITY.md'
       - 'LICENSE'
-      - '.github/**'
+      # - '.github/**'
       - 'version.txt'
       - '.schema/**'
       - '.vscode/**'
