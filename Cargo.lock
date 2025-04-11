@@ -270,7 +270,7 @@ dependencies = [
  "strum_macros 0.26.4",
  "thiserror 1.0.69",
  "typed-builder 0.19.1",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -587,7 +587,7 @@ dependencies = [
  "clickhouse-rs",
  "datafusion-table-providers",
  "snafu",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -1079,7 +1079,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "tracing",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -1548,7 +1548,7 @@ dependencies = [
  "time",
  "tracing",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -1588,7 +1588,7 @@ dependencies = [
  "time",
  "tracing",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -1609,7 +1609,7 @@ dependencies = [
  "time",
  "tracing",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -1715,13 +1715,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "bb8-postgres"
-version = "0.8.1"
+name = "bb8"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56ac82c42eb30889b5c4ee4763a24b8c566518171ebea648cd7e3bc532c60680"
+checksum = "212d8b8e1a22743d9241575c6ba822cf9c8fef34771c86ab7e477a4fbfd254e5"
 dependencies = [
- "async-trait",
- "bb8",
+ "futures-util",
+ "parking_lot 0.12.3",
+ "tokio",
+]
+
+[[package]]
+name = "bb8-postgres"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e570e6557cd0f88d28d32afa76644873271a70dc22656df565b2021c4036aa9c"
+dependencies = [
+ "bb8 0.9.0",
  "tokio",
  "tokio-postgres",
 ]
@@ -2678,7 +2688,7 @@ dependencies = [
  "tokio",
  "tokio-native-tls",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -3169,14 +3179,13 @@ dependencies = [
  "aws-config",
  "aws-sdk-dynamodb",
  "base64 0.22.1",
- "bb8",
+ "bb8 0.8.6",
  "bytes",
  "charset",
  "chrono",
  "clickhouse-rs",
  "datafusion",
  "datafusion-federation",
- "datafusion-federation-sql",
  "datafusion-table-providers",
  "db_connection_pool",
  "delta_kernel",
@@ -3214,7 +3223,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -3262,7 +3271,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
  "xz2",
  "zstd",
 ]
@@ -3378,27 +3387,14 @@ dependencies = [
 
 [[package]]
 name = "datafusion-federation"
-version = "0.1.6"
-source = "git+https://github.com/spiceai/datafusion-federation.git?rev=1c814422cfbdeb7f7bd2399e3369656710413aa8#1c814422cfbdeb7f7bd2399e3369656710413aa8"
+version = "0.3.7"
+source = "git+https://github.com/spiceai/datafusion-federation.git?rev=e7f982d4794f07c1f715bd86f1d0d08012c7d0fe#e7f982d4794f07c1f715bd86f1d0d08012c7d0fe"
 dependencies = [
  "arrow-json",
  "async-stream",
  "async-trait",
  "datafusion",
  "futures",
-]
-
-[[package]]
-name = "datafusion-federation-sql"
-version = "0.1.6"
-source = "git+https://github.com/spiceai/datafusion-federation.git?rev=1c814422cfbdeb7f7bd2399e3369656710413aa8#1c814422cfbdeb7f7bd2399e3369656710413aa8"
-dependencies = [
- "async-trait",
- "datafusion",
- "datafusion-federation",
- "futures",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -3427,7 +3423,7 @@ dependencies = [
  "regex",
  "sha2",
  "unicode-segmentation",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -3677,43 +3673,44 @@ dependencies = [
 
 [[package]]
 name = "datafusion-table-providers"
-version = "0.1.0"
-source = "git+https://github.com/datafusion-contrib/datafusion-table-providers.git?rev=f60653b6ff9a0f26e5b44a1d43d947fdf1fd8853#f60653b6ff9a0f26e5b44a1d43d947fdf1fd8853"
+version = "0.4.0"
+source = "git+https://github.com/datafusion-contrib/datafusion-table-providers.git?rev=a3da8999f06aba515ee77d92005f8c1d2d9bfd3e#a3da8999f06aba515ee77d92005f8c1d2d9bfd3e"
 dependencies = [
  "arrow",
  "arrow-json",
  "arrow-schema",
  "async-stream",
  "async-trait",
- "bb8",
+ "bb8 0.9.0",
  "bb8-postgres",
  "bigdecimal",
  "byte-unit",
  "byteorder",
  "chrono",
+ "dashmap",
  "datafusion",
  "datafusion-federation",
- "datafusion-federation-sql",
- "duckdb",
  "dyn-clone",
  "fallible-iterator 0.3.0",
  "fundu",
  "futures",
  "geo-types",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mysql_async",
  "native-tls",
  "num-bigint",
  "pem",
  "postgres-native-tls",
  "r2d2",
- "rand 0.8.5",
+ "rand 0.9.0",
  "rusqlite",
  "sea-query",
  "secrecy",
  "serde",
  "serde_json",
+ "sha2",
  "snafu",
+ "spiceai_duckdb_fork",
  "time",
  "tokio",
  "tokio-postgres",
@@ -3721,7 +3718,7 @@ dependencies = [
  "tracing",
  "trust-dns-resolver",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -3792,7 +3789,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
  "visibility",
  "z85",
 ]
@@ -4101,7 +4098,7 @@ dependencies = [
  "fallible-iterator 0.3.0",
  "fallible-streaming-iterator",
  "hashlink",
- "libduckdb-sys",
+ "libduckdb-sys 1.1.3",
  "memchr",
  "num",
  "num-integer",
@@ -5161,7 +5158,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
  "x509-parser",
 ]
 
@@ -5215,7 +5212,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -5411,7 +5408,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
  "whoami",
 ]
 
@@ -5429,20 +5426,6 @@ dependencies = [
  "object_store",
  "thiserror 2.0.12",
  "tokio",
-]
-
-[[package]]
-name = "hdrhistogram"
-version = "7.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "765c9198f173dd59ce26ff9f95ef0aafd0a0fe01fb9d72841bc5066a4c06511d"
-dependencies = [
- "base64 0.21.7",
- "byteorder",
- "crossbeam-channel",
- "flate2",
- "nom 7.1.3",
- "num-traits",
 ]
 
 [[package]]
@@ -5936,7 +5919,7 @@ dependencies = [
  "tokio",
  "typed-builder 0.20.0",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
  "zstd",
 ]
 
@@ -5963,7 +5946,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "typed-builder 0.20.0",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -6741,6 +6724,22 @@ checksum = "b5aba8db14291edd000dfcc4d620c7ebfb122c613afb886ca8803fa4e128a20a"
 name = "libduckdb-sys"
 version = "1.1.3"
 source = "git+https://github.com/spiceai/duckdb-rs.git?rev=2e24b958e44ec7419290249e27a15f1a19703fff#2e24b958e44ec7419290249e27a15f1a19703fff"
+dependencies = [
+ "autocfg",
+ "cc",
+ "flate2",
+ "pkg-config",
+ "serde",
+ "serde_json",
+ "tar",
+ "vcpkg",
+]
+
+[[package]]
+name = "libduckdb-sys"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddeb5c68cb108d753a03613337f4bc9bed32281123d1f7884971f060f532fb6c"
 dependencies = [
  "autocfg",
  "cc",
@@ -7568,7 +7567,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ureq",
- "uuid 1.13.1",
+ "uuid 1.16.0",
  "variantly",
  "vob",
 ]
@@ -7673,7 +7672,7 @@ dependencies = [
  "smallvec",
  "tagptr",
  "thiserror 1.0.69",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -7756,7 +7755,6 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
- "hdrhistogram",
  "keyed_priority_queue",
  "lru",
  "mysql_common",
@@ -7807,7 +7805,7 @@ dependencies = [
  "subprocess",
  "thiserror 1.0.69",
  "time",
- "uuid 1.13.1",
+ "uuid 1.16.0",
  "zstd",
 ]
 
@@ -8540,7 +8538,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -9307,7 +9305,7 @@ dependencies = [
  "postgres-protocol",
  "serde",
  "serde_json",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -10496,7 +10494,7 @@ dependencies = [
  "rkyv_derive",
  "seahash",
  "tinyvec",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -10622,7 +10620,6 @@ dependencies = [
  "data_components",
  "datafusion",
  "datafusion-federation",
- "datafusion-federation-sql",
  "datafusion-functions-json",
  "datafusion-table-providers",
  "db_connection_pool",
@@ -10719,7 +10716,7 @@ dependencies = [
  "util",
  "utoipa",
  "utoipa-swagger-ui",
- "uuid 1.13.1",
+ "uuid 1.16.0",
  "winver",
  "x509-certificate",
 ]
@@ -11145,8 +11142,9 @@ dependencies = [
 
 [[package]]
 name = "sea-query"
-version = "0.32.0-rc.1"
-source = "git+https://github.com/spiceai/sea-query.git?rev=213b6b876068f58159ebdd5852604a021afaebf9#213b6b876068f58159ebdd5852604a021afaebf9"
+version = "0.32.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5a24d8b9fcd2674a6c878a3d871f4f1380c6c43cc3718728ac96864d888458e"
 dependencies = [
  "bigdecimal",
  "chrono",
@@ -11158,14 +11156,16 @@ dependencies = [
 
 [[package]]
 name = "sea-query-derive"
-version = "0.4.1"
-source = "git+https://github.com/spiceai/sea-query.git?rev=213b6b876068f58159ebdd5852604a021afaebf9#213b6b876068f58159ebdd5852604a021afaebf9"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bae0cbad6ab996955664982739354128c58d16e126114fe88c2a493642502aab"
 dependencies = [
+ "darling 0.20.10",
  "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.98",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -11637,7 +11637,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -11693,7 +11693,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -11731,6 +11731,27 @@ dependencies = [
  "snafu",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "spiceai_duckdb_fork"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9293086270aff32097c27af628107e8f33358de8993ebd9769fd3f72ac2250d"
+dependencies = [
+ "arrow",
+ "cast",
+ "fallible-iterator 0.3.0",
+ "fallible-streaming-iterator",
+ "hashlink",
+ "libduckdb-sys 1.2.1",
+ "memchr",
+ "num",
+ "num-integer",
+ "r2d2",
+ "rust_decimal",
+ "smallvec",
+ "strum 0.25.0",
 ]
 
 [[package]]
@@ -12295,7 +12316,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tonic",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -12481,7 +12502,7 @@ dependencies = [
  "tokio-rustls 0.24.1",
  "tokio-util",
  "tracing",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -12614,9 +12635,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.43.0"
+version = "1.44.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d61fa4ffa3de412bfea335c6ecff681de2b609ba3c77ef3e00e521813a9ed9e"
+checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
 dependencies = [
  "backtrace",
  "bytes",
@@ -13431,7 +13452,7 @@ dependencies = [
  "tracing",
  "typespec",
  "url",
- "uuid 1.13.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -13760,9 +13781,9 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.13.1"
+version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ced87ca4be083373936a67f8de945faa23b6b42384bd5b64434850802c6dccd0"
+checksum = "458f7a779bf54acc9f347480ac654f68407d3aab21269a6e3c9f922acd9e2da9"
 dependencies = [
  "getrandom 0.3.1",
  "rand 0.9.0",

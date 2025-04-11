@@ -38,7 +38,6 @@ dashmap = "6.1.0"
 data_components = { path = "../data_components" }
 datafusion.workspace = true
 datafusion-federation = { workspace = true }
-datafusion-federation-sql = { workspace = true }
 datafusion-functions-json = { workspace = true }
 datafusion-table-providers = { workspace = true }
 db_connection_pool = { path = "../db_connection_pool" }
