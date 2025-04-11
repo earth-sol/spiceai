@@ -17,16 +17,16 @@ limitations under the License.
 use async_trait::async_trait;
 use datafusion::{
     catalog::Session, datasource::TableProvider, logical_expr::Expr, physical_plan::ExecutionPlan,
+    sql::unparser::dialect::SqliteDialect,
 };
-use datafusion_table_providers::{
-    sql::sql_provider_datafusion::expr::Engine,
-    sqlite::{Sqlite, write::SqliteTableWriter},
-    util,
-};
+use datafusion_table_providers::sqlite::{Sqlite, write::SqliteTableWriter};
 use rusqlite::Transaction;
 use std::sync::Arc;
 
-use crate::delete::{DeletionExec, DeletionSink, DeletionTableProvider};
+use crate::{
+    delete::{DeletionExec, DeletionSink, DeletionTableProvider},
+    filters_to_sql,
+};
 
 #[async_trait]
 impl DeletionTableProvider for SqliteTableWriter {
@@ -62,7 +62,7 @@ impl DeletionSink for SqliteDeletionSink {
         let mut db_conn = self.sqlite.connect().await?;
         let sqlite_conn = Sqlite::sqlite_conn(&mut db_conn)?;
         let sqlite = Arc::clone(&self.sqlite);
-        let sql = util::filters_to_sql(&self.filters, Some(Engine::SQLite))?;
+        let sql = filters_to_sql(&self.filters, Some(Arc::new(SqliteDialect {})))?;
 
         let count: u64 = sqlite_conn
             .conn

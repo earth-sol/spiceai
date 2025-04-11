@@ -180,6 +180,14 @@ impl<'a> AsyncDbConnection<Arc<SnowflakeApi>, &'a (dyn Sync)> for SnowflakeConne
     ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
         return NotImplementedSnafu.fail()?;
     }
+
+    async fn tables(&self, _schema: &str) -> Result<Vec<String>, dbconnection::Error> {
+        Ok(vec![])
+    }
+
+    async fn schemas(&self) -> Result<Vec<String>, dbconnection::Error> {
+        Ok(vec![])
+    }
 }
 
 fn to_execution_error(e: impl Into<Box<dyn std::error::Error>>) -> DataFusionError {

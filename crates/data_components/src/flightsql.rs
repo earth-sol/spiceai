@@ -20,7 +20,6 @@ use arrow::{
 };
 use async_stream::stream;
 use async_trait::async_trait;
-use datafusion_table_providers::sql::sql_provider_datafusion::expr;
 use flight_client::{
     MAX_DECODING_MESSAGE_SIZE, MAX_ENCODING_MESSAGE_SIZE, tls::new_tls_flight_channel,
 };
@@ -54,7 +53,7 @@ use datafusion::{
 use tonic::codegen::Bytes;
 use tonic::transport::{Channel, channel};
 
-use crate::Read;
+use crate::{Read, filters_to_sql, supports_filters_pushdown};
 
 pub mod federation;
 
@@ -68,7 +67,7 @@ pub enum Error {
     #[snafu(display(
         "Failed to create SQL query (flightsql).\n{source}\nAn unexpected error occurred. Report a bug on GitHub: https://github.com/spiceai/spiceai/issues"
     ))]
-    UnableToGenerateSQL { source: expr::Error },
+    UnableToGenerateSQL { source: crate::Error },
 
     #[snafu(display("Query execution failed (flightsql).\n{source}"))]
     UnableToQueryArrowFlight { source: FlightError },
@@ -385,15 +384,7 @@ impl TableProvider for FlightSQLTable {
         &self,
         filters: &[&Expr],
     ) -> DataFusionResult<Vec<TableProviderFilterPushDown>> {
-        let mut filter_push_down = vec![];
-        for filter in filters {
-            match expr::to_sql(filter) {
-                Ok(_) => filter_push_down.push(TableProviderFilterPushDown::Exact),
-                Err(_) => filter_push_down.push(TableProviderFilterPushDown::Unsupported),
-            }
-        }
-
-        Ok(filter_push_down)
+        Ok(supports_filters_pushdown(filters, None))
     }
 
     async fn scan(
@@ -459,13 +450,9 @@ impl FlightSqlExec {
         let where_expr = if self.filters.is_empty() {
             String::new()
         } else {
-            let filter_expr = self
-                .filters
-                .iter()
-                .map(expr::to_sql)
-                .collect::<expr::Result<Vec<_>>>()
-                .context(UnableToGenerateSQLSnafu)?;
-            format!("WHERE {}", filter_expr.join(" AND "))
+            let filter_expr =
+                filters_to_sql(&self.filters, None).context(UnableToGenerateSQLSnafu)?;
+            format!("WHERE {filter_expr}")
         };
         Ok(format!(
             "SELECT {columns} FROM {table_reference} {where_expr} {limit_expr}",

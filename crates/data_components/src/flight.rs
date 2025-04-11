@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::{Read, ReadWrite};
+use crate::{Read, ReadWrite, filters_to_sql, supports_filters_pushdown};
 use arrow::{
     array::RecordBatch,
     datatypes::{Schema, SchemaRef},
@@ -38,7 +38,6 @@ use datafusion::{
     sql::unparser::dialect::Dialect,
 };
 use datafusion_federation::table_reference::MultiPartTableReference;
-use datafusion_table_providers::sql::sql_provider_datafusion::expr;
 use flight_client::FlightClient;
 use futures::{Stream, StreamExt};
 use snafu::prelude::*;
@@ -56,7 +55,7 @@ pub enum Error {
     #[snafu(display(
         "Query execution failed.\n{source}\nReport a bug to request support: https://github.com/spiceai/spiceai/issues"
     ))]
-    UnableToGenerateSQL { source: expr::Error },
+    UnableToGenerateSQL { source: crate::Error },
 
     #[snafu(display("Failed to query Arrow Flight.\n{source}"))]
     Flight { source: flight_client::Error },
@@ -381,15 +380,10 @@ impl TableProvider for FlightTable {
         &self,
         filters: &[&Expr],
     ) -> DataFusionResult<Vec<TableProviderFilterPushDown>> {
-        let mut filter_push_down = vec![];
-        for filter in filters {
-            match expr::to_sql(filter) {
-                Ok(_) => filter_push_down.push(TableProviderFilterPushDown::Exact),
-                Err(_) => filter_push_down.push(TableProviderFilterPushDown::Unsupported),
-            }
-        }
-
-        Ok(filter_push_down)
+        Ok(supports_filters_pushdown(
+            filters,
+            Some(Arc::clone(&self.dialect)),
+        ))
     }
 
     async fn scan(
@@ -455,13 +449,9 @@ impl FlightExec {
         let where_expr = if self.filters.is_empty() {
             String::new()
         } else {
-            let filter_expr = self
-                .filters
-                .iter()
-                .map(expr::to_sql)
-                .collect::<expr::Result<Vec<_>>>()
-                .context(UnableToGenerateSQLSnafu)?;
-            format!("WHERE {}", filter_expr.join(" AND "))
+            let filter_expr =
+                filters_to_sql(&self.filters, None).context(UnableToGenerateSQLSnafu)?;
+            format!("WHERE {filter_expr}")
         };
 
         Ok(format!(

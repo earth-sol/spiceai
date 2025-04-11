@@ -278,6 +278,14 @@ where
 
         Ok(row_count.unwrap().try_into().context(TryFromSnafu)?)
     }
+
+    async fn tables(&self, _schema: &str) -> Result<Vec<String>, dbconnection::Error> {
+        Ok(vec![])
+    }
+
+    async fn schemas(&self) -> Result<Vec<String>, dbconnection::Error> {
+        Ok(vec![])
+    }
 }
 
 fn build_odbc_reader<C: Cursor>(

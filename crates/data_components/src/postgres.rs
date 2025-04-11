@@ -17,8 +17,11 @@ limitations under the License.
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use datafusion::{
-    catalog::Session, datasource::TableProvider, logical_expr::Expr, physical_plan::ExecutionPlan,
-    sql::TableReference,
+    catalog::Session,
+    datasource::TableProvider,
+    logical_expr::Expr,
+    physical_plan::ExecutionPlan,
+    sql::{TableReference, unparser::dialect::PostgreSqlDialect},
 };
 use std::sync::Arc;
 use tokio_postgres::Transaction;
@@ -26,11 +29,11 @@ use tokio_postgres::Transaction;
 use crate::{
     Read, ReadWrite,
     delete::{DeletionExec, DeletionSink, DeletionTableProvider},
+    filters_to_sql,
 };
 
-use datafusion_table_providers::{
-    postgres::{Postgres, PostgresTableFactory, write::PostgresTableWriter},
-    util,
+use datafusion_table_providers::postgres::{
+    Postgres, PostgresTableFactory, write::PostgresTableWriter,
 };
 
 #[async_trait]
@@ -113,7 +116,7 @@ impl DeletionSink for PostgresDeletionSink {
         let count = delete_from(
             self.postgres.table_name(),
             &tx,
-            &util::filters_to_sql(&self.filters, None)?,
+            &filters_to_sql(&self.filters, Some(Arc::new(PostgreSqlDialect {})))?,
         )
         .await?;
         tx.commit().await?;

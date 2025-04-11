@@ -17,19 +17,20 @@ limitations under the License.
 use crate::{
     Read, ReadWrite,
     delete::{DeletionExec, DeletionSink, DeletionTableProvider},
+    filters_to_sql,
 };
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use datafusion::{
-    catalog::Session, datasource::TableProvider, logical_expr::Expr, physical_plan::ExecutionPlan,
-    sql::TableReference,
+    catalog::Session,
+    datasource::TableProvider,
+    logical_expr::Expr,
+    physical_plan::ExecutionPlan,
+    sql::{TableReference, unparser::dialect::DuckDBDialect},
 };
 use datafusion_table_providers::{
     duckdb::{DuckDB, DuckDBTableFactory, TableDefinition, write::DuckDBTableWriter},
-    sql::{
-        db_connection_pool::duckdbpool::DuckDbConnectionPool, sql_provider_datafusion::expr::Engine,
-    },
-    util,
+    sql::db_connection_pool::duckdbpool::DuckDbConnectionPool,
 };
 use duckdb::Transaction;
 use snafu::prelude::*;
@@ -124,7 +125,7 @@ impl DeletionSink for DuckDBDeletionSink {
             }
         };
 
-        let sql = util::filters_to_sql(&self.filters, Some(Engine::DuckDB))?;
+        let sql = filters_to_sql(&self.filters, Some(Arc::new(DuckDBDialect::new())))?;
         let count = delete_from(&table_name.to_string(), tx, &sql)?;
 
         Ok(count)

@@ -79,11 +79,11 @@ impl Read for SnowflakeTableFactory {
         let pool = Arc::clone(&self.pool);
         let table_provider = match schema {
             Some(schema) => Arc::new(
-                SqlTable::new_with_schema("snowflake", &pool, schema, table_reference, None)
+                SqlTable::new_with_schema("snowflake", &pool, schema, table_reference)
                     .with_dialect(dialect),
             ),
             None => Arc::new(
-                SqlTable::new("snowflake", &pool, table_reference, None)
+                SqlTable::new("snowflake", &pool, table_reference)
                     .await
                     .context(UnableToConstructSQLTableSnafu)?
                     .with_dialect(dialect),

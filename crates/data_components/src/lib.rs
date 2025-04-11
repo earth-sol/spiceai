@@ -15,11 +15,33 @@ limitations under the License.
 */
 
 #![allow(clippy::missing_errors_doc)]
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
 use ::arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
-use datafusion::{catalog::CatalogProvider, datasource::TableProvider, sql::TableReference};
+use datafusion::{
+    catalog::CatalogProvider,
+    datasource::TableProvider,
+    error::{DataFusionError, Result as DataFusionResult},
+    logical_expr::TableProviderFilterPushDown,
+    prelude::Expr,
+    sql::{
+        TableReference,
+        unparser::{
+            Unparser,
+            dialect::{DefaultDialect, Dialect},
+        },
+    },
+};
+use snafu::prelude::*;
+
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("Unable to generate SQL: {source}"))]
+    UnableToGenerateSQL { source: DataFusionError },
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub mod arrow;
 #[cfg(feature = "clickhouse")]
@@ -81,7 +103,7 @@ pub trait Read: Send + Sync {
         &self,
         table_reference: TableReference,
         schema: Option<SchemaRef>,
-    ) -> Result<Arc<dyn TableProvider + 'static>, Box<dyn Error + Send + Sync>>;
+    ) -> Result<Arc<dyn TableProvider + 'static>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 #[async_trait]
@@ -90,10 +112,39 @@ pub trait ReadWrite: Send + Sync {
         &self,
         table_reference: TableReference,
         schema: Option<SchemaRef>,
-    ) -> Result<Arc<dyn TableProvider + 'static>, Box<dyn Error + Send + Sync>>;
+    ) -> Result<Arc<dyn TableProvider + 'static>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 #[async_trait]
 pub trait RefreshableCatalogProvider: CatalogProvider {
-    async fn refresh(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
+    async fn refresh(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+}
+
+pub fn filters_to_sql(filters: &[Expr], dialect: Option<Arc<dyn Dialect>>) -> Result<String> {
+    let dialect = dialect.unwrap_or(Arc::new(DefaultDialect {}));
+    Ok(filters
+        .iter()
+        .map(|f| {
+            Unparser::new(dialect.as_ref())
+                .expr_to_sql(f)
+                .map(|e| e.to_string())
+        })
+        .collect::<DataFusionResult<Vec<String>>>()
+        .context(UnableToGenerateSQLSnafu)?
+        .join(" AND "))
+}
+
+#[must_use]
+pub fn supports_filters_pushdown(
+    filters: &[&Expr],
+    dialect: Option<Arc<dyn Dialect>>,
+) -> Vec<TableProviderFilterPushDown> {
+    let dialect = dialect.unwrap_or(Arc::new(DefaultDialect {}));
+    filters
+        .iter()
+        .map(|f| match Unparser::new(dialect.as_ref()).expr_to_sql(f) {
+            Ok(_) => TableProviderFilterPushDown::Exact,
+            Err(_) => TableProviderFilterPushDown::Unsupported,
+        })
+        .collect()
 }

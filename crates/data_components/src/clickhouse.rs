@@ -72,10 +72,9 @@ impl Read for ClickhouseTableFactory {
                 &pool,
                 schema,
                 table_reference,
-                None,
             )),
             None => Arc::new(
-                SqlTable::new("clickhouse", &pool, table_reference, None)
+                SqlTable::new("clickhouse", &pool, table_reference)
                     .await
                     .context(UnableToConstructSQLTableSnafu)?,
             ),

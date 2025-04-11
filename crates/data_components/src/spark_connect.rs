@@ -17,7 +17,7 @@ limitations under the License.
 use std::fmt;
 use std::sync::Arc;
 
-use crate::Read;
+use crate::{Read, supports_filters_pushdown};
 use arrow::array::RecordBatch;
 use arrow::datatypes::SchemaRef;
 use async_stream::stream;
@@ -32,6 +32,8 @@ use datafusion::physical_plan::execution_plan::{Boundedness, EmissionType};
 use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
 use datafusion::physical_plan::{DisplayAs, DisplayFormatType};
 use datafusion::physical_plan::{Partitioning, PlanProperties};
+use datafusion::sql::unparser::Unparser;
+use datafusion::sql::unparser::dialect::{CustomDialectBuilder, Dialect};
 use datafusion::{
     datasource::{TableProvider, TableType},
     error::Result,
@@ -39,7 +41,6 @@ use datafusion::{
     physical_plan::ExecutionPlan,
     sql::TableReference,
 };
-use datafusion_table_providers::sql::sql_provider_datafusion::expr::{self, Engine};
 use futures::Stream;
 use spark_connect_rs::errors::SparkError;
 use spark_connect_rs::{
@@ -88,6 +89,13 @@ impl SparkConnect {
             session,
             join_push_down_context,
         })
+    }
+
+    #[must_use]
+    pub fn dialect() -> Arc<dyn Dialect> {
+        // The default custom dialect (unlike the DefaultDialect) does not quote identifiers, which is
+        // what we want for Spark Connect.
+        Arc::new(CustomDialectBuilder::new().build())
     }
 }
 
@@ -173,15 +181,10 @@ impl TableProvider for SparkConnectTableProvider {
         &self,
         filters: &[&Expr],
     ) -> DataFusionResult<Vec<TableProviderFilterPushDown>> {
-        let mut filter_push_down = vec![];
-        for filter in filters {
-            match expr::to_sql(filter) {
-                Ok(_) => filter_push_down.push(TableProviderFilterPushDown::Exact),
-                Err(_) => filter_push_down.push(TableProviderFilterPushDown::Unsupported),
-            }
-        }
-
-        Ok(filter_push_down)
+        Ok(supports_filters_pushdown(
+            filters,
+            Some(SparkConnect::dialect()),
+        ))
     }
 
     async fn scan(
@@ -236,14 +239,15 @@ impl SparkConnectExecutionPlan {
                 }
             })
             .transpose()?;
+        let dialect = SparkConnect::dialect();
+        let unparser = Unparser::new(dialect.as_ref());
         Ok(Self {
             dataframe,
             projected_schema: Arc::clone(&projected_schema),
             filters: filters
                 .iter()
-                .map(|f| expr::to_sql_with_engine(f, Some(Engine::Spark)))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| DataFusionError::Execution(e.to_string()))?,
+                .map(|f| unparser.expr_to_sql(f).map(|e| e.to_string()))
+                .collect::<Result<Vec<_>, _>>()?,
             limit,
             properties: PlanProperties::new(
                 EquivalenceProperties::new(projected_schema),

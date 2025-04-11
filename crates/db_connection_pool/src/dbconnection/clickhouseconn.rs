@@ -170,6 +170,14 @@ impl<'a> AsyncDbConnection<ClientHandle, &'a (dyn Sync)> for ClickhouseConnectio
         // Shouldn't be an issue for now since we don't have a data accelerator for now.
         Ok(0)
     }
+
+    async fn tables(&self, _schema: &str) -> Result<Vec<String>, dbconnection::Error> {
+        Ok(vec![])
+    }
+
+    async fn schemas(&self) -> Result<Vec<String>, dbconnection::Error> {
+        Ok(vec![])
+    }
 }
 
 fn query_to_stream(
