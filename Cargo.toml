@@ -75,7 +75,7 @@ datafusion = "45"
 datafusion-common = "45"
 datafusion-execution = "45"
 datafusion-expr = "45"
-datafusion-federation = "0.3.7"
+datafusion-federation = { version = "0.3.7", features = ["sql"] }
 datafusion-functions-json = "0.45"
 datafusion-table-providers = "0.4"
 dotenvy = "0.15"
