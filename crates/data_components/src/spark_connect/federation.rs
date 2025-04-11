@@ -25,8 +25,8 @@ use datafusion::{
     physical_plan::stream::RecordBatchStreamAdapter,
     sql::unparser::dialect::{CustomDialectBuilder, Dialect},
 };
+use datafusion_federation::sql::{SQLExecutor, SQLFederationProvider, SQLTableSource};
 use datafusion_federation::{FederatedTableProviderAdaptor, FederatedTableSource};
-use datafusion_federation_sql::{SQLExecutor, SQLFederationProvider, SQLTableSource};
 use futures::Stream;
 
 use crate::spark_connect::map_error_to_datafusion_err;

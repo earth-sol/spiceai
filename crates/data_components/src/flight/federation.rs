@@ -1,6 +1,6 @@
 use async_trait::async_trait;
+use datafusion_federation::sql::{SQLExecutor, SQLFederationProvider, SQLTableSource};
 use datafusion_federation::{FederatedTableProviderAdaptor, FederatedTableSource};
-use datafusion_federation_sql::{SQLExecutor, SQLFederationProvider, SQLTableSource};
 use std::sync::Arc;
 
 use datafusion::{

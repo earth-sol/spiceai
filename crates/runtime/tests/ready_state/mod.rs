@@ -46,10 +46,10 @@ use datafusion::{
     prelude::{Expr, SessionContext},
     sql::unparser::dialect::{Dialect, PostgreSqlDialect},
 };
+use datafusion_federation::sql::{SQLExecutor, SQLFederationProvider, SQLTableSource};
 use datafusion_federation::{
     FederatedTableProviderAdaptor, table_reference::MultiPartTableReference,
 };
-use datafusion_federation_sql::{SQLExecutor, SQLFederationProvider, SQLTableSource};
 use futures::{Stream, TryStreamExt};
 use runtime::{
     Runtime,
