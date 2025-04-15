@@ -46,7 +46,10 @@ use crate::{
         get_taxi_trips_dataset, get_tpcds_dataset, normalize_chat_completion_response,
         send_chat_completions_request,
     },
-    utils::{runtime_ready_check, test_request_context, verify_env_secret_exists},
+    utils::{
+        runtime_ready_check, runtime_ready_check_with_timeout, test_request_context,
+        verify_env_secret_exists,
+    },
 };
 
 use tokio::sync::Mutex;
@@ -128,7 +131,7 @@ mod nsql {
 
                 drop(llm_init_lock);
 
-                runtime_ready_check(&rt).await;
+                runtime_ready_check_with_timeout(&rt, Duration::from_secs(180)).await;
 
                 let test_cases = [
                     TestCase {
@@ -471,6 +474,8 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
             () = Arc::clone(&rt).load_components() => {}
         }
 
+        runtime_ready_check(&rt).await;
+
         drop(llm_init_lock);
 
         let response = send_chat_completions_request(
@@ -526,6 +531,8 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
             }
             () = Arc::clone(&rt).load_components() => {}
         }
+
+        runtime_ready_check(&rt).await;
 
         drop(llm_init_lock);
 
