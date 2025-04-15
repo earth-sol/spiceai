@@ -224,7 +224,7 @@ impl ToolUsingChat {
         messages.push(assistant_message);
         messages.extend(tool_messages);
 
-        if messages.len() > 0 {
+        if !messages.is_empty() {
             // exclude "list_datasets" tool from counting, since it is used on every AI inference call
             let used_tools = spiced_tools
                 .iter()
@@ -382,14 +382,14 @@ impl Chat for ToolUsingChat {
         req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
         let inner_req = self.prepare_req(req).await?;
-        let res = self
+        let response = self
             .chat_request_inner(inner_req, self.recursion_limit)
             .await;
 
         // track ai_inferences_count metric
         track_ai_inferences_count().await;
 
-        res
+        response
     }
 
     fn as_sql(&self) -> Option<&dyn SqlGeneration> {

@@ -96,7 +96,7 @@ impl<S> Layer<S> for ModelContextLayer {
     }
 }
 
-/// Emit the ai_inference_count metric with the tools_used dimension set to true or false.
+/// Emit the `ai_inference_count` metric with the `tools_used` dimension set to true or false.
 /// It requires the model extension to be set for the request context.
 pub async fn track_ai_inferences_count() {
     let context = RequestContext::current(AsyncMarker::new().await);

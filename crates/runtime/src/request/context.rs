@@ -150,16 +150,16 @@ impl RequestContext {
         self.cache_control
     }
 
-    pub async fn extension<T: 'static + Send + Sync>(&self) -> Option<Arc<T>>
+    pub async fn extension<T>(&self) -> Option<Arc<T>>
     where
-        T: Clone,
+        T: 'static + Send + Sync + Clone,
     {
         let extensions = self.extensions.read().await;
         let type_id = TypeId::of::<T>();
 
         extensions
             .get(&type_id)
-            .and_then(|arc_any| arc_any.clone().downcast::<T>().ok())
+            .and_then(|arc_any| Arc::clone(arc_any).downcast::<T>().ok())
     }
 
     pub async fn insert_extension<T: 'static + Send + Sync>(&self, extension: T) {
