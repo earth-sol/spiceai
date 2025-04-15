@@ -75,6 +75,8 @@ mod nsql {
 
     #[tokio::test]
     async fn huggingface_test_nsql() -> Result<(), anyhow::Error> {
+        let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+
         let _tracing = init_tracing(None);
 
         if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
@@ -119,8 +121,6 @@ mod nsql {
                     Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth())).await
                 });
 
-                let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
-
                 tokio::select! {
                     // increased timeout to download and load huggingface model
                     () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
@@ -131,8 +131,6 @@ mod nsql {
 
                 // Increased timeout for accelerated dataset to be created
                 runtime_ready_check_with_timeout(&rt, Duration::from_secs(300)).await;
-
-                drop(llm_init_lock);
 
                 let test_cases = [
                     TestCase {
@@ -192,6 +190,8 @@ mod search {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn huggingface_test_search() -> Result<(), anyhow::Error> {
+        let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+
         let _tracing = init_tracing(None);
 
         test_request_context()
@@ -253,8 +253,6 @@ mod search {
                         .await
                 });
 
-                let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
-
                 tokio::select! {
                     () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                         return Err(anyhow::anyhow!("Timed out waiting for components to load"));
@@ -263,8 +261,6 @@ mod search {
                 }
 
                 runtime_ready_check(&rt).await;
-
-                drop(llm_init_lock);
 
                 let test_cases = [
                     TestCase {
@@ -385,6 +381,8 @@ async fn hf_embeddings_beta_requirements() -> Result<(), anyhow::Error> {
 
 #[tokio::test]
 async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
+    let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+
     let _tracing = init_tracing(None);
 
     test_request_context()
@@ -441,6 +439,8 @@ async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
 #[tokio::test]
 // https://github.com/spiceai/spiceai/issues/4943
 async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
+    let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+
     let _tracing = init_tracing(None);
 
     if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
@@ -469,8 +469,6 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
             Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth())).await
         });
 
-        let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
-
         tokio::select! {
             // increased timeout to download and load huggingface model
             () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
@@ -478,8 +476,6 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
             }
             () = Arc::clone(&rt).load_components() => {}
         }
-
-        runtime_ready_check(&rt).await;
 
         drop(llm_init_lock);
 
@@ -507,6 +503,8 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
 #[tokio::test]
 // https://github.com/spiceai/spiceai/issues/4943
 async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
+    let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+
     if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
         verify_env_secret_exists("SPICE_HF_TOKEN")
             .await
@@ -527,8 +525,6 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
 
         let rt = Arc::new(Runtime::builder().with_app(app).build().await);
 
-        let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
-
         tokio::select! {
             // increased timeout to download and load huggingface model
             () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
@@ -538,8 +534,6 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
         }
 
         runtime_ready_check(&rt).await;
-
-        drop(llm_init_lock);
 
         let tool_model = Box::new(ToolUsingChat::new(
             Arc::clone(&model),
