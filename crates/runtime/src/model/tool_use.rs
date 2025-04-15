@@ -43,7 +43,7 @@ use tokio::sync::mpsc;
 use tracing::{Instrument, Span};
 
 use crate::Runtime;
-use crate::model::model_context::ModelContextExtension;
+use crate::model::model_context::{ModelContextExtension, track_ai_inferences_count};
 use crate::request::{AsyncMarker, RequestContext};
 use crate::tools::SpiceModelTool;
 use crate::tools::builtin::list_datasets::ListDatasetsTool;
@@ -234,7 +234,7 @@ impl ToolUsingChat {
             if used_tools {
                 let context = RequestContext::current(AsyncMarker::new().await);
                 if let Some(model_context) = context.extension::<ModelContextExtension>().await {
-                    model_context.set_used_tools(true);
+                    model_context.set_tools_used(true);
                 }
             }
         }
@@ -319,6 +319,7 @@ impl ToolUsingChat {
     async fn chat_stream_inner(
         &self,
         req: CreateChatCompletionRequest,
+        is_root_call: bool,
     ) -> Result<ChatCompletionResponseStream, OpenAIError> {
         // Don't use spice runtime tools if users has explicitly chosen to not use any tools.
         if req
@@ -351,6 +352,7 @@ impl ToolUsingChat {
             ),
             req,
             s,
+            is_root_call,
         ))
     }
 }
@@ -373,7 +375,7 @@ impl Chat for ToolUsingChat {
         req: CreateChatCompletionRequest,
     ) -> Result<ChatCompletionResponseStream, OpenAIError> {
         let inner_req = self.prepare_req(req).await?;
-        self.chat_stream_inner(inner_req).await
+        self.chat_stream_inner(inner_req, true).await
     }
 
     async fn chat_request(
@@ -386,11 +388,7 @@ impl Chat for ToolUsingChat {
             .await;
 
         // track ai_inferences_count metric
-        let context = RequestContext::current(AsyncMarker::new().await);
-        if let Some(model_context) = context.extension::<ModelContextExtension>().await {
-            let dimensions = vec![KeyValue::new("tools_used", model_context.used_tools())];
-            crate::metrics::telemetry::track_ai_inferences_count(&dimensions);
-        }
+        track_ai_inferences_count().await;
 
         res
     }
@@ -526,6 +524,7 @@ fn make_a_stream(
     model: ToolUsingChat,
     req: CreateChatCompletionRequest,
     mut s: ChatCompletionResponseStream,
+    is_root_call: bool,
 ) -> ChatCompletionResponseStream {
     let (sender, receiver) = mpsc::channel(100);
     let sender_clone = sender.clone();
@@ -656,7 +655,7 @@ fn make_a_stream(
                                         &req,
                                         new_messages,
                                         response.usage.as_ref(),
-                                    ))
+                                    ), false)
                                     .await
                                 {
                                     Ok(mut s) => {
@@ -710,6 +709,11 @@ fn make_a_stream(
                             }
                         }
                     }
+                }
+
+                // track ai_inferences_count metric
+                if is_root_call {
+                    track_ai_inferences_count().await;
                 }
 
                 tracing::info!(target: "task_history", captured_output = %chat_output);

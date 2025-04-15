@@ -22,6 +22,7 @@ use std::sync::{
 use axum::body::Body;
 use axum::http::Request;
 use futures::future::BoxFuture;
+use opentelemetry::KeyValue;
 use std::task::{Context, Poll};
 use tower::{Layer, Service};
 
@@ -39,11 +40,11 @@ impl ModelContextExtension {
         }
     }
 
-    pub fn used_tools(&self) -> bool {
+    pub fn tools_used(&self) -> bool {
         self.used_tools.load(Ordering::Relaxed)
     }
 
-    pub fn set_used_tools(&self, value: bool) {
+    pub fn set_tools_used(&self, value: bool) {
         self.used_tools.store(value, Ordering::Relaxed);
     }
 }
@@ -92,5 +93,15 @@ impl<S> Layer<S> for ModelContextLayer {
 
     fn layer(&self, service: S) -> Self::Service {
         ModelContextService { inner: service }
+    }
+}
+
+/// Emit the ai_inference_count metric with the tools_used dimension set to true or false.
+/// It requires the model extension to be set for the request context.
+pub async fn track_ai_inferences_count() {
+    let context = RequestContext::current(AsyncMarker::new().await);
+    if let Some(model_context) = context.extension::<ModelContextExtension>().await {
+        let dimensions = vec![KeyValue::new("tools_used", model_context.tools_used())];
+        crate::metrics::telemetry::track_ai_inferences_count(&dimensions);
     }
 }
