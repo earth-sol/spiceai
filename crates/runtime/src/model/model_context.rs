@@ -1,0 +1,96 @@
+/*
+Copyright 2024-2025 The Spice.ai OSS Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
+use axum::body::Body;
+use axum::http::Request;
+use futures::future::BoxFuture;
+use std::task::{Context, Poll};
+use tower::{Layer, Service};
+
+use crate::request::{AsyncMarker, RequestContext};
+
+#[derive(Clone)]
+pub struct ModelContextExtension {
+    used_tools: Arc<AtomicBool>,
+}
+
+impl ModelContextExtension {
+    pub fn new() -> Self {
+        Self {
+            used_tools: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn used_tools(&self) -> bool {
+        self.used_tools.load(Ordering::Relaxed)
+    }
+
+    pub fn set_used_tools(&self, value: bool) {
+        self.used_tools.store(value, Ordering::Relaxed);
+    }
+}
+
+#[derive(Clone)]
+pub struct ModelContextService<S> {
+    inner: S,
+}
+
+impl<S> Service<Request<Body>> for ModelContextService<S>
+where
+    S: Service<Request<Body>> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let inner = self.inner.clone();
+
+        Box::pin(async move {
+            let context = RequestContext::current(AsyncMarker::new().await);
+            context.insert_extension(ModelContextExtension::new()).await;
+
+            context
+                .scope(async move {
+                    let mut inner_service = inner;
+                    inner_service.call(req).await
+                })
+                .await
+        })
+    }
+}
+
+// The layer that will apply our service
+#[derive(Clone)]
+pub struct ModelContextLayer;
+
+impl<S> Layer<S> for ModelContextLayer {
+    type Service = ModelContextService<S>;
+
+    fn layer(&self, service: S) -> Self::Service {
+        ModelContextService { inner: service }
+    }
+}

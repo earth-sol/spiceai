@@ -24,6 +24,7 @@ mod chat;
 mod embed;
 pub(crate) mod eval;
 mod metrics;
+mod model_context;
 mod tool_use;
 mod wrapper;
 
@@ -41,6 +42,7 @@ pub use eval::{
     },
     scorer::{EvalScorerRegistry, Scorer, builtin_scorer},
 };
+pub use model_context::ModelContextLayer;
 pub use tool_use::ToolUsingChat;
 
 use crate::DataFusion;
