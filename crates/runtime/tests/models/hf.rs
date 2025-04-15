@@ -56,7 +56,7 @@ use tokio::sync::Mutex;
 
 // Mistral loads and initializes models sequentially, so Mutex is used to control LLMs initialization.
 // This also prevents unpredicted behavior when we are attempting to load the same model multiple times in parallel.
-static LOCAL_LLM_INIT_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+pub(crate) static LOCAL_LLM_INIT_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 const HF_TEST_MODEL: &str = "meta-llama/Llama-3.2-3B-Instruct";
 const HF_TEST_MODEL_TYPE: &str = "llama";
@@ -129,9 +129,10 @@ mod nsql {
                     () = Arc::clone(&rt).load_components() => {}
                 }
 
-                drop(llm_init_lock);
+                // Increased timeout for accelerated dataset to be created
+                runtime_ready_check_with_timeout(&rt, Duration::from_secs(300)).await;
 
-                runtime_ready_check_with_timeout(&rt, Duration::from_secs(180)).await;
+                drop(llm_init_lock);
 
                 let test_cases = [
                     TestCase {
@@ -252,6 +253,8 @@ mod search {
                         .await
                 });
 
+                let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+
                 tokio::select! {
                     () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                         return Err(anyhow::anyhow!("Timed out waiting for components to load"));
@@ -260,6 +263,8 @@ mod search {
                 }
 
                 runtime_ready_check(&rt).await;
+
+                drop(llm_init_lock);
 
                 let test_cases = [
                     TestCase {

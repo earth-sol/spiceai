@@ -17,7 +17,7 @@ limitations under the License.
 #![allow(clippy::expect_used)]
 use super::send_embeddings_request;
 use crate::{
-    models::{create_api_bindings_config, normalize_embeddings_response},
+    models::{create_api_bindings_config, hf::LOCAL_LLM_INIT_MUTEX, normalize_embeddings_response},
     utils::{runtime_ready_check, runtime_ready_check_with_timeout},
 };
 use app::AppBuilder;
@@ -195,12 +195,16 @@ async fn start_runtime_with_embedding(
         Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth())).await
     });
 
+    let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+
     tokio::select! {
         () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
             return Err(anyhow::anyhow!("Timed out waiting for components to load"));
         }
         () = Arc::clone(&rt).load_components() => {}
     }
+
+    drop(llm_init_lock);
 
     match ready_timeout {
         Some(timeout) => runtime_ready_check_with_timeout(&rt, timeout).await,
