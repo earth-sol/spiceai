@@ -36,12 +36,14 @@ use async_openai::types::{
 
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
+use opentelemetry::KeyValue;
 use serde_json::Value;
 
 use tokio::sync::mpsc;
 use tracing::{Instrument, Span};
 
 use crate::Runtime;
+use crate::model::model_context::ModelContextExtension;
 use crate::request::{AsyncMarker, RequestContext};
 use crate::tools::SpiceModelTool;
 use crate::tools::builtin::list_datasets::ListDatasetsTool;
@@ -198,7 +200,7 @@ impl ToolUsingChat {
                 .into();
 
         let mut tool_and_response_content = vec![];
-        for t in spiced_tools {
+        for t in spiced_tools.clone() {
             let content = self.call_tool(&t.function).await;
             tool_and_response_content.push((t, content));
         }
@@ -222,6 +224,20 @@ impl ToolUsingChat {
         let mut messages = original_messages.clone();
         messages.push(assistant_message);
         messages.extend(tool_messages);
+
+        if messages.len() > 0 {
+            // exclude "list_datasets" tool from counting, since it is used on every AI inference call
+            let used_tools = spiced_tools
+                .iter()
+                .any(|t| t.function.name != "list_datasets");
+
+            if used_tools {
+                let context = RequestContext::current(AsyncMarker::new().await);
+                if let Some(model_context) = context.extension::<ModelContextExtension>().await {
+                    model_context.set_used_tools(true);
+                }
+            }
+        }
 
         Ok(Some(messages))
     }
@@ -365,8 +381,18 @@ impl Chat for ToolUsingChat {
         req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
         let inner_req = self.prepare_req(req).await?;
-        self.chat_request_inner(inner_req, self.recursion_limit)
-            .await
+        let res = self
+            .chat_request_inner(inner_req, self.recursion_limit)
+            .await;
+
+        // track ai_inferences_count metric
+        let context = RequestContext::current(AsyncMarker::new().await);
+        if let Some(model_context) = context.extension::<ModelContextExtension>().await {
+            let dimensions = vec![KeyValue::new("tools_used", model_context.used_tools())];
+            crate::metrics::telemetry::track_ai_inferences_count(&dimensions);
+        }
+
+        res
     }
 
     fn as_sql(&self) -> Option<&dyn SqlGeneration> {
