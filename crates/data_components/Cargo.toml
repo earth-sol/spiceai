@@ -82,7 +82,7 @@ uuid.workspace = true
 rdkafka = { version = "0.37.0", features = ["cmake-build"], optional = true }
 
 [features]
-clickhouse = ["dep:clickhouse-rs"]
+clickhouse = ["dep:clickhouse-rs", "datafusion-table-providers/federation"]
 databricks = ["delta_lake", "spark_connect"]
 debezium = ["dep:rdkafka"]
 delta_lake = ["dep:delta_kernel"]
