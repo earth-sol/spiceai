@@ -23,9 +23,10 @@ use std::{sync::LazyLock, time::Duration};
 
 #[cfg(feature = "anonymous_telemetry")]
 pub mod anonymous;
-mod exporter;
-mod meter;
+pub mod exporter;
+pub mod meter;
 pub mod noop;
+pub mod reader;
 
 static QUERY_COUNT: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
