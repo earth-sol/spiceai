@@ -34,18 +34,26 @@ pub struct ModelContextExtension {
 }
 
 impl ModelContextExtension {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             used_tools: Arc::new(AtomicBool::new(false)),
         }
     }
 
+    #[must_use]
     pub fn tools_used(&self) -> bool {
         self.used_tools.load(Ordering::Relaxed)
     }
 
     pub fn set_tools_used(&self, value: bool) {
         self.used_tools.store(value, Ordering::Relaxed);
+    }
+}
+
+impl Default for ModelContextExtension {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
