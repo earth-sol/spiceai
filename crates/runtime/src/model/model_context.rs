@@ -108,7 +108,10 @@ impl<S> Layer<S> for ModelContextLayer {
 /// Panics if the model extension is not found in the request context.
 pub fn track_ai_inferences_count(context: &Arc<RequestContext>) {
     if let Some(model_context) = context.extension::<ModelContextExtension>() {
-        let dimensions = vec![KeyValue::new("tools_used", model_context.tools_used())];
+        let dimensions = vec![KeyValue::new(
+            "tools_used",
+            model_context.tools_used().to_string(),
+        )];
         crate::metrics::telemetry::track_ai_inferences_with_spice_count(&dimensions);
     } else if cfg!(feature = "dev") {
         panic!("ModelContextExtension not found in request context");
