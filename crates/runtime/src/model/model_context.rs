@@ -43,11 +43,11 @@ impl ModelContextExtension {
 
     #[must_use]
     pub fn tools_used(&self) -> u16 {
-        self.used_tools.load(Ordering::Relaxed)
+        self.used_tools.load(Ordering::SeqCst)
     }
 
-    pub fn increment_tools_used(&self) {
-        self.used_tools.fetch_add(1, Ordering::Relaxed);
+    pub fn add_tools_used(&self, value: u16) {
+        self.used_tools.fetch_add(value, Ordering::SeqCst);
     }
 }
 
@@ -124,9 +124,9 @@ pub fn track_ai_inferences_count(context: &Arc<RequestContext>) {
 /// # Panics
 ///
 /// Panics if the model extension is not found in the request context.
-pub fn increment_tools_used(context: &Arc<RequestContext>) {
+pub fn add_tools_used(context: &Arc<RequestContext>, value: u16) {
     if let Some(model_context) = context.extension::<ModelContextExtension>() {
-        model_context.increment_tools_used();
+        model_context.add_tools_used(value);
     } else if cfg!(feature = "dev") {
         panic!("ModelContextExtension not found in request context");
     }
