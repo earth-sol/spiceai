@@ -26,7 +26,7 @@ chrono.workspace = true
 clickhouse-rs = { workspace = true, optional = true }
 datafusion.workspace = true
 datafusion-federation = { workspace = true }
-datafusion-table-providers = { workspace = true }
+datafusion-table-providers = { workspace = true, features = ["federation"] }
 db_connection_pool = { path = "../db_connection_pool" }
 delta_kernel = { version = "0.9", features = [
     "default-engine",
@@ -96,7 +96,7 @@ dynamodb = ["dep:aws-sdk-dynamodb", "dep:aws-config"]
 flightsql = []
 imap = ["dep:charset", "dep:imap", "dep:mailparse"]
 mssql = ["dep:tiberius", "dep:tokio-util", "dep:bb8"]
-mysql = ["datafusion-table-providers/mysql"]
+mysql = ["datafusion-table-providers/mysql", "datafusion-table-providers/mysql-federation"]
 odbc = []
 postgres = [
     "dep:tokio-postgres",
