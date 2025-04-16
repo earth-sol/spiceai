@@ -94,7 +94,7 @@ pub fn track_query_execution_duration(duration: Duration, dimensions: &[KeyValue
 static AI_INFERENCES_COUNT: LazyLock<Counter<u64>> = LazyLock::new(|| {
     TELEMETRY_METER
         .u64_counter("ai_inferences_with_spice_count")
-        .with_description("Number of AI Inferences")
+        .with_description("AI Inferences with Spice count")
         .with_unit("inferences")
         .build()
 });
