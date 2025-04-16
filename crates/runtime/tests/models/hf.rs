@@ -75,7 +75,7 @@ mod nsql {
 
     #[tokio::test]
     async fn huggingface_test_nsql() -> Result<(), anyhow::Error> {
-        let _ = LOCAL_LLM_INIT_MUTEX.lock().await;
+        let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
 
         let _tracing = init_tracing(None);
 
@@ -190,7 +190,7 @@ mod search {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn huggingface_test_search() -> Result<(), anyhow::Error> {
-        let _ = LOCAL_LLM_INIT_MUTEX.lock().await;
+        let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
 
         let _tracing = init_tracing(None);
 
@@ -364,7 +364,7 @@ mod search {
 
 #[tokio::test]
 async fn hf_embeddings_beta_requirements() -> Result<(), anyhow::Error> {
-    let _ = LOCAL_LLM_INIT_MUTEX.lock().await;
+    let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
 
     let _tracing = init_tracing(None);
 
@@ -383,7 +383,7 @@ async fn hf_embeddings_beta_requirements() -> Result<(), anyhow::Error> {
 
 #[tokio::test]
 async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
-    let _ = LOCAL_LLM_INIT_MUTEX.lock().await;
+    let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
 
     let _tracing = init_tracing(None);
 
@@ -441,7 +441,7 @@ async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
 #[tokio::test]
 // https://github.com/spiceai/spiceai/issues/4943
 async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
-    let _ = LOCAL_LLM_INIT_MUTEX.lock().await;
+    let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
 
     let _tracing = init_tracing(None);
 
@@ -479,6 +479,8 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
             () = Arc::clone(&rt).load_components() => {}
         }
 
+        runtime_ready_check(&rt).await;
+
         let response = send_chat_completions_request(
             http_base_url.as_str(),
             vec![
@@ -503,7 +505,7 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
 #[tokio::test]
 // https://github.com/spiceai/spiceai/issues/4943
 async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
-    let _ = LOCAL_LLM_INIT_MUTEX.lock().await;
+    let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
 
     if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
         verify_env_secret_exists("SPICE_HF_TOKEN")
