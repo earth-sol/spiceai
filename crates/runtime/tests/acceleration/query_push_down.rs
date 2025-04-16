@@ -237,7 +237,7 @@ async fn acceleration_with_and_without_federation() -> Result<(), anyhow::Error>
                 "|               |       BytesProcessedExec                                                       |",
                 "|               |         SchemaCastScanExec                                                     |",
                 "|               |           RepartitionExec: partitioning=RoundRobinBatch(3), input_partitions=1 |",
-                "|               |             SqlExec sql=SELECT \"id\", \"created_at\" FROM non_federated_abc       |",
+                "|               |             SqlExec sql=SELECT 1 FROM \"non_federated_abc\"                      |",
                 "|               |                                                                                |",
                 "+---------------+--------------------------------------------------------------------------------+",
             ];
