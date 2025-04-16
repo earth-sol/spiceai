@@ -181,7 +181,7 @@ pub(crate) fn routes(
             .route("/v1/models", get(v1::models::get))
             .route("/v1/models/:name/predict", get(v1::inference::get))
             .route("/v1/predict", post(v1::inference::post))
-            .route("/v1/nsql", post(v1::nsql::post))
+            .route("/v1/nsql", post(v1::nsql::post).layer(ModelContextLayer))
             .route(
                 "/v1/chat/completions",
                 post(v1::chat::post).layer(ModelContextLayer),
