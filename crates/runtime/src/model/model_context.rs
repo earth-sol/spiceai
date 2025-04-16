@@ -16,7 +16,7 @@ limitations under the License.
 
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicUsize, Ordering},
 };
 
 use axum::body::Body;
@@ -30,24 +30,24 @@ use crate::request::{AsyncMarker, RequestContext};
 
 #[derive(Clone)]
 pub struct ModelContextExtension {
-    used_tools: Arc<AtomicBool>,
+    used_tools: Arc<AtomicUsize>,
 }
 
 impl ModelContextExtension {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            used_tools: Arc::new(AtomicBool::new(false)),
+            used_tools: Arc::new(AtomicUsize::new(0)),
         }
     }
 
     #[must_use]
-    pub fn tools_used(&self) -> bool {
-        self.used_tools.load(Ordering::Relaxed)
+    pub fn tools_used(&self) -> usize {
+        self.used_tools.load(Ordering::SeqCst)
     }
 
-    pub fn set_tools_used(&self, value: bool) {
-        self.used_tools.store(value, Ordering::Relaxed);
+    pub fn add_tools_used(&self, value: usize) {
+        self.used_tools.fetch_add(value, Ordering::SeqCst);
     }
 }
 
@@ -100,7 +100,7 @@ impl<S> Layer<S> for ModelContextLayer {
     }
 }
 
-/// Emit the `ai_inference_count` metric with the `tools_used` dimension set to true or false.
+/// Emit the `ai_inference_count` metric with the `tools_used` dimension set to the number of called tools.
 /// It requires the model extension to be set for the request context.
 ///
 /// # Panics
@@ -108,10 +108,8 @@ impl<S> Layer<S> for ModelContextLayer {
 /// Panics if the model extension is not found in the request context.
 pub fn track_ai_inferences_count(context: &Arc<RequestContext>) {
     if let Some(model_context) = context.extension::<ModelContextExtension>() {
-        let dimensions = vec![KeyValue::new(
-            "tools_used",
-            model_context.tools_used().to_string(),
-        )];
+        let tools_used: i64 = model_context.tools_used().try_into().unwrap_or_default();
+        let dimensions = vec![KeyValue::new("tools_used", tools_used)];
         crate::metrics::telemetry::track_ai_inferences_with_spice_count(&dimensions);
     } else if cfg!(feature = "dev") {
         panic!("ModelContextExtension not found in request context");
@@ -124,9 +122,9 @@ pub fn track_ai_inferences_count(context: &Arc<RequestContext>) {
 /// # Panics
 ///
 /// Panics if the model extension is not found in the request context.
-pub fn set_tools_used(context: &Arc<RequestContext>, value: bool) {
+pub fn add_tools_used(context: &Arc<RequestContext>, value: usize) {
     if let Some(model_context) = context.extension::<ModelContextExtension>() {
-        model_context.set_tools_used(value);
+        model_context.add_tools_used(value);
     } else if cfg!(feature = "dev") {
         panic!("ModelContextExtension not found in request context");
     }
