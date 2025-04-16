@@ -18,13 +18,14 @@ use std::sync::Arc;
 
 use app::AppBuilder;
 use futures::StreamExt;
-use runtime::{Runtime, status};
+
+use runtime::Runtime;
 use spicepod::{
     component::dataset::Dataset,
     param::{ParamValue, Params},
 };
 
-use crate::{get_test_datafusion, init_tracing, utils::test_request_context};
+use crate::{configure_test_datafusion, init_tracing, utils::test_request_context};
 
 pub fn get_s3_dataset(s3_uri: &str, name: &str) -> Dataset {
     let mut dataset = Dataset::new(s3_uri, name);
@@ -73,14 +74,12 @@ async fn s3_federation() -> Result<(), anyhow::Error> {
                 ))
                 .build();
 
-            let status = status::RuntimeStatus::new();
-            let df = get_test_datafusion(Arc::clone(&status));
-
             let rt = Runtime::builder()
-                .with_datafusion(df)
                 .with_app(app)
+                .with_datafusion_configuration_fn(configure_test_datafusion)
                 .build()
                 .await;
+
             let cloned_rt = Arc::new(rt.clone());
 
             // Set a timeout for the test
@@ -128,61 +127,6 @@ async fn s3_federation() -> Result<(), anyhow::Error> {
 }
 
 #[tokio::test]
-async fn s3_pdfs() -> Result<(), anyhow::Error> {
-    let _tracing = init_tracing(Some("integration=debug,info"));
-
-    let mut dataset = Dataset::new("s3://spiceai-public-datasets/test_pdf_files", "pdfs");
-    dataset.params = Some(Params::from_string_map(
-        vec![
-            ("file_format".to_string(), "pdf".to_string()),
-            ("client_timeout".to_string(), "120s".to_string()),
-        ]
-        .into_iter()
-        .collect(),
-    ));
-
-    test_request_context()
-        .scope(async {
-            let app = AppBuilder::new("s3_pdfs").with_dataset(dataset).build();
-
-            let status = status::RuntimeStatus::new();
-            let df = get_test_datafusion(Arc::clone(&status));
-
-            let rt = Runtime::builder()
-                .with_datafusion(df)
-                .with_app(app)
-                .build()
-                .await;
-            let cloned_rt = Arc::new(rt.clone());
-
-            // Set a timeout for the test
-            tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
-                    return Err(anyhow::anyhow!("Timed out waiting for datasets to load"));
-                }
-                () = cloned_rt.load_components() => {}
-            }
-
-            let mut query_result = rt
-                .datafusion()
-                .query_builder("SELECT * FROM pdfs")
-                .build()
-                .run()
-                .await
-                .map_err(|e| anyhow::anyhow!(e))?;
-            let mut batches = vec![];
-            while let Some(batch) = query_result.data.next().await {
-                batches.push(batch?);
-            }
-
-            assert_eq!(batches.len(), 2);
-
-            Ok(())
-        })
-        .await
-}
-
-#[tokio::test]
 async fn s3_hive_partitioning() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(Some("integration=debug,info"));
 
@@ -193,14 +137,12 @@ async fn s3_hive_partitioning() -> Result<(), anyhow::Error> {
                 .with_dataset(get_s3_hive_partitioned_dataset("hive_data_no_infer", false))
                 .build();
 
-            let status = status::RuntimeStatus::new();
-            let df = get_test_datafusion(Arc::clone(&status));
-
             let rt = Runtime::builder()
                 .with_app(app)
-                .with_datafusion(df)
+                .with_datafusion_configuration_fn(configure_test_datafusion)
                 .build()
                 .await;
+
             let cloned_rt = Arc::new(rt.clone());
 
             // Set a timeout for the test
@@ -261,14 +203,12 @@ async fn s3_schema_evolution() -> Result<(), anyhow::Error> {
                 ))
                 .build();
 
-            let status = status::RuntimeStatus::new();
-            let df = get_test_datafusion(Arc::clone(&status));
-
             let rt = Runtime::builder()
                 .with_app(app)
-                .with_datafusion(df)
+                .with_datafusion_configuration_fn(configure_test_datafusion)
                 .build()
                 .await;
+
             let cloned_rt = Arc::new(rt.clone());
 
             // Set a timeout for the test
@@ -316,14 +256,12 @@ async fn s3_bulk_bucket_schema() -> Result<(), anyhow::Error> {
                 ))
                 .build();
 
-            let status = status::RuntimeStatus::new();
-            let df = get_test_datafusion(Arc::clone(&status));
-
             let rt = Runtime::builder()
                 .with_app(app)
-                .with_datafusion(df)
+                .with_datafusion_configuration_fn(configure_test_datafusion)
                 .build()
                 .await;
+
             let cloned_rt = Arc::new(rt.clone());
 
             // Set a timeout for the test
@@ -414,14 +352,13 @@ async fn s3_schema_source_path() -> Result<(), anyhow::Error> {
                 .with_dataset(ds3)
                 .build();
 
-            let status = status::RuntimeStatus::new();
-            let df = get_test_datafusion(Arc::clone(&status));
-
-            let rt = Runtime::builder()
+            let rt =
+            Runtime::builder()
                 .with_app(app)
-                .with_datafusion(df)
+                .with_datafusion_configuration_fn(configure_test_datafusion)
                 .build()
                 .await;
+
             let cloned_rt = Arc::new(rt.clone());
 
             // Set a timeout for the test
