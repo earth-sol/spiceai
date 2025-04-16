@@ -74,12 +74,8 @@ where
             let context = RequestContext::current(AsyncMarker::new().await);
             context.insert_extension(ModelContextExtension::new()).await;
 
-            context
-                .scope(async move {
-                    let mut inner_service = inner;
-                    inner_service.call(req).await
-                })
-                .await
+            let mut inner_service = inner;
+            inner_service.call(req).await
         })
     }
 }
