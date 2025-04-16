@@ -140,7 +140,7 @@ jobs:
             echo "Error: Hugging Face API Token is not defined."
             exit 1
           fi
-          INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" ./integration_test/ai_integration_test --nocapture hf_embeddings_beta_requirements
+          INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" ./integration_test/ai_integration_test --test-threads=1 --nocapture hf_embeddings_beta_requirements
 
   test-local:
     name: Test Local Models
