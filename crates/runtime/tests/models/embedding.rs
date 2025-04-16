@@ -42,7 +42,7 @@ pub(crate) async fn run_embedding_tests(
     models: Vec<Embeddings>,
     tests: Vec<EmbeddingTestCase<'_>>,
 ) -> Result<(), anyhow::Error> {
-    let (_, http_base) = start_runtime_with_embedding(models, None).await?;
+    let (rt, http_base) = start_runtime_with_embedding(models, None).await?;
 
     for EmbeddingTestCase {
         input,
@@ -68,6 +68,8 @@ pub(crate) async fn run_embedding_tests(
             normalize_embeddings_response(response)
         );
     }
+
+    rt.shutdown().await;
     Ok(())
 }
 

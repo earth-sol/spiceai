@@ -431,9 +431,7 @@ async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
                     },
                 ],
             )
-            .await;
-
-            rt.shutdown().await;
+            .await
         })
         .await?;
 
