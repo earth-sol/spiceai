@@ -173,6 +173,7 @@ mod nsql {
                 }
 
                 rt.shutdown().await;
+                drop(rt);
 
                 Ok(())
             })
@@ -359,6 +360,8 @@ mod search {
                 }
 
                 rt.shutdown().await;
+                drop(rt);
+
                 Ok(())
             })
             .await
@@ -499,6 +502,7 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
         );
 
         rt.shutdown().await;
+        drop(rt);
 
         Ok(())
     }).await
@@ -567,6 +571,7 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
         insta::assert_snapshot!("chat_1_response_choices", format!("{:?}", response.choices));
 
         rt.shutdown().await;
+        drop(rt);
 
         Ok(())
     })

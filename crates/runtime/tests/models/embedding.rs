@@ -70,6 +70,7 @@ pub(crate) async fn run_embedding_tests(
     }
 
     rt.shutdown().await;
+    drop(rt);
     Ok(())
 }
 
