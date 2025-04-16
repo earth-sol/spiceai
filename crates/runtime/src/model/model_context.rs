@@ -94,6 +94,10 @@ impl<S> Layer<S> for ModelContextLayer {
 
 /// Emit the `ai_inference_count` metric with the `tools_used` dimension set to true or false.
 /// It requires the model extension to be set for the request context.
+///
+/// # Panics
+///
+/// Panics if the model extension is not found in the request context.
 pub fn track_ai_inferences_count(context: &Arc<RequestContext>) {
     if let Some(model_context) = context.extension::<ModelContextExtension>() {
         let dimensions = vec![KeyValue::new("tools_used", model_context.tools_used())];
@@ -103,6 +107,12 @@ pub fn track_ai_inferences_count(context: &Arc<RequestContext>) {
     }
 }
 
+/// Set the `tools_used` flag in the model context extension for further metric tracking.
+/// It requires the model extension to be set for the request context.
+///
+/// # Panics
+///
+/// Panics if the model extension is not found in the request context.
 pub fn set_tools_used(context: &Arc<RequestContext>, value: bool) {
     if let Some(model_context) = context.extension::<ModelContextExtension>() {
         model_context.set_tools_used(value);
