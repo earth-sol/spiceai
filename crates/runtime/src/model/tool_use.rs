@@ -232,7 +232,7 @@ impl ToolUsingChat {
 
             if used_tools {
                 let context = RequestContext::current(AsyncMarker::new().await);
-                crate::model::set_tools_used(&context, true);
+                crate::model::increment_tools_used(&context);
             }
         }
 
