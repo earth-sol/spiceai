@@ -36,6 +36,7 @@ use async_openai::types::{
 
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
+use pin_project::pin_project;
 use serde_json::Value;
 
 use tokio::sync::mpsc;
@@ -318,7 +319,6 @@ impl ToolUsingChat {
     async fn chat_stream_inner(
         &self,
         req: CreateChatCompletionRequest,
-        is_root_call: bool,
     ) -> Result<ChatCompletionResponseStream, OpenAIError> {
         // Don't use spice runtime tools if users has explicitly chosen to not use any tools.
         if req
@@ -351,7 +351,6 @@ impl ToolUsingChat {
             ),
             req,
             s,
-            is_root_call,
         ))
     }
 }
@@ -373,8 +372,12 @@ impl Chat for ToolUsingChat {
         &self,
         req: CreateChatCompletionRequest,
     ) -> Result<ChatCompletionResponseStream, OpenAIError> {
+        let context = RequestContext::current(AsyncMarker::new().await);
         let inner_req = self.prepare_req(req).await?;
-        self.chat_stream_inner(inner_req, true).await
+
+        // wrap the completion stream to track the `ai_inferences_count` when it is ready.
+        let stream = self.chat_stream_inner(inner_req).await?;
+        Ok(Box::pin(InferenceTrackingStream::new(stream, context)))
     }
 
     async fn chat_request(
@@ -387,7 +390,8 @@ impl Chat for ToolUsingChat {
             .await;
 
         // track ai_inferences_count metric
-        track_ai_inferences_count().await;
+        let context = RequestContext::current(AsyncMarker::new().await);
+        track_ai_inferences_count(&context).await;
 
         response
     }
@@ -523,7 +527,6 @@ fn make_a_stream(
     model: ToolUsingChat,
     req: CreateChatCompletionRequest,
     mut s: ChatCompletionResponseStream,
-    is_root_call: bool,
 ) -> ChatCompletionResponseStream {
     let (sender, receiver) = mpsc::channel(100);
     let sender_clone = sender.clone();
@@ -654,7 +657,7 @@ fn make_a_stream(
                                         &req,
                                         new_messages,
                                         response.usage.as_ref(),
-                                    ), false)
+                                    ))
                                     .await
                                 {
                                     Ok(mut s) => {
@@ -710,11 +713,6 @@ fn make_a_stream(
                     }
                 }
 
-                // track ai_inferences_count metric
-                if is_root_call {
-                    track_ai_inferences_count().await;
-                }
-
                 tracing::info!(target: "task_history", captured_output = %chat_output);
             })
             .instrument(span),
@@ -728,5 +726,39 @@ fn encode_tool_name(name: &str) -> String {
         name.replace('_', "__").replace('/', "_")
     } else {
         name.to_string()
+    }
+}
+
+#[pin_project]
+struct InferenceTrackingStream<S> {
+    #[pin]
+    stream: S,
+    context: Arc<RequestContext>,
+}
+
+impl<S: Stream> InferenceTrackingStream<S> {
+    pub fn new(stream: S, context: Arc<RequestContext>) -> Self {
+        InferenceTrackingStream { stream, context }
+    }
+}
+
+impl<S: Stream> Stream for InferenceTrackingStream<S> {
+    type Item = S::Item;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut this = self.project();
+        let stream = &mut this.stream;
+        let context = this.context;
+
+        match stream.as_mut().poll_next(cx) {
+            Poll::Ready(None) => {
+                let context = Arc::clone(context);
+                tokio::task::spawn(async move {
+                    track_ai_inferences_count(&context).await;
+                });
+                Poll::Ready(None)
+            }
+            Poll::Ready(Some(item)) => Poll::Ready(Some(item)),
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
