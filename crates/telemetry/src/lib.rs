@@ -91,14 +91,14 @@ pub fn track_query_execution_duration(duration: Duration, dimensions: &[KeyValue
     QUERY_EXECUTION_DURATION_MS.record(duration.as_secs_f64() * 1000.0, dimensions);
 }
 
-static AI_INFERENCES_COUNT: LazyLock<Counter<u64>> = LazyLock::new(|| {
+static AI_INFERENCES_WITH_SPICE_COUNT: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
-        .u64_counter("ai_inferences_count")
-        .with_description("Number of AI Inferences")
+        .u64_counter("ai_inferences_with_spice_count")
+        .with_description("AI Inferences with Spice count")
         .with_unit("inferences")
         .build()
 });
 
-pub fn track_ai_inferences_count(dimensions: &[KeyValue]) {
-    AI_INFERENCES_COUNT.add(1, dimensions);
+pub fn track_ai_inferences_with_spice_count(dimensions: &[KeyValue]) {
+    AI_INFERENCES_WITH_SPICE_COUNT.add(1, dimensions);
 }

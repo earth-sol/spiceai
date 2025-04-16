@@ -33,6 +33,7 @@ use super::{CacheControl, CacheKeyType, Protocol, UserAgent, baggage};
 type Extensions = HashMap<TypeId, Arc<dyn Any + Send + Sync>>;
 
 pub struct RequestContext {
+    // Use an AtomicU8 to allow updating the protocol without locking
     protocol: AtomicU8,
     cache_control: CacheControl,
     dimensions: Vec<KeyValue>,
