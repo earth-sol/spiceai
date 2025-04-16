@@ -17,7 +17,7 @@ use crate::{
     Runtime,
     datafusion::DataFusion,
     http::v1::{ResponseMetadata, ResponseMimeType, run_sql, to_http_response},
-    model::{LLMModelStore, ModelContextExtension},
+    model::LLMModelStore,
     request::{AsyncMarker, RequestContext},
     tools::{
         builtin::{
@@ -239,9 +239,7 @@ pub(crate) async fn post(
 ) -> Response {
     // track ai_inferences_count metric
     let context = RequestContext::current(AsyncMarker::new().await);
-    if let Some(model_context) = context.extension::<ModelContextExtension>().await {
-        model_context.set_tools_used(true);
-    }
+    crate::model::set_tools_used(&context, true);
 
     let span = tracing::span!(target: "task_history", tracing::Level::INFO, "nsql", input = %payload.query, model = %payload.model, "labels");
 

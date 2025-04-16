@@ -19,7 +19,7 @@ use std::{
     collections::HashMap,
     future::Future,
     marker::PhantomData,
-    sync::{Arc, LazyLock, OnceLock, atomic::AtomicU8},
+    sync::{Arc, LazyLock, OnceLock, RwLock, atomic::AtomicU8},
 };
 
 use app::App;
@@ -27,7 +27,6 @@ use http::HeaderMap;
 use opentelemetry::KeyValue;
 use runtime_auth::{AuthPrincipalRef, AuthRequestContext};
 use spicepod::component::runtime::UserAgentCollection;
-use tokio::sync::RwLock;
 
 use super::{CacheControl, CacheKeyType, Protocol, UserAgent, baggage};
 
@@ -150,21 +149,21 @@ impl RequestContext {
         self.cache_control
     }
 
-    pub async fn extension<T>(&self) -> Option<Arc<T>>
+    pub fn extension<T>(&self) -> Option<Arc<T>>
     where
         T: 'static + Send + Sync + Clone,
     {
-        let extensions = self.extensions.read().await;
+        let extensions = self.extensions.read().ok()?;
         let type_id = TypeId::of::<T>();
-
         extensions
             .get(&type_id)
             .and_then(|arc_any| Arc::clone(arc_any).downcast::<T>().ok())
     }
 
-    pub async fn insert_extension<T: 'static + Send + Sync>(&self, extension: T) {
-        let mut extensions = self.extensions.write().await;
-        extensions.insert(TypeId::of::<T>(), Arc::new(extension));
+    pub fn insert_extension<T: 'static + Send + Sync>(&self, extension: T) {
+        if let Ok(mut extensions) = self.extensions.write() {
+            extensions.insert(TypeId::of::<T>(), Arc::new(extension));
+        }
     }
 }
 

@@ -72,7 +72,7 @@ where
 
         Box::pin(async move {
             let context = RequestContext::current(AsyncMarker::new().await);
-            context.insert_extension(ModelContextExtension::new()).await;
+            context.insert_extension(ModelContextExtension::new());
 
             let mut inner_service = inner;
             inner_service.call(req).await
@@ -94,10 +94,18 @@ impl<S> Layer<S> for ModelContextLayer {
 
 /// Emit the `ai_inference_count` metric with the `tools_used` dimension set to true or false.
 /// It requires the model extension to be set for the request context.
-pub async fn track_ai_inferences_count(context: &Arc<RequestContext>) {
-    if let Some(model_context) = context.extension::<ModelContextExtension>().await {
+pub fn track_ai_inferences_count(context: &Arc<RequestContext>) {
+    if let Some(model_context) = context.extension::<ModelContextExtension>() {
         let dimensions = vec![KeyValue::new("tools_used", model_context.tools_used())];
         crate::metrics::telemetry::track_ai_inferences_count(&dimensions);
+    } else if cfg!(feature = "dev") {
+        panic!("ModelContextExtension not found in request context");
+    }
+}
+
+pub fn set_tools_used(context: &Arc<RequestContext>, value: bool) {
+    if let Some(model_context) = context.extension::<ModelContextExtension>() {
+        model_context.set_tools_used(value);
     } else if cfg!(feature = "dev") {
         panic!("ModelContextExtension not found in request context");
     }

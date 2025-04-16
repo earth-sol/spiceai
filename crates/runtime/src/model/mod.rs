@@ -42,7 +42,9 @@ pub use eval::{
     },
     scorer::{EvalScorerRegistry, Scorer, builtin_scorer},
 };
-pub use model_context::{ModelContextExtension, ModelContextLayer};
+pub use model_context::{
+    ModelContextExtension, ModelContextLayer, set_tools_used, track_ai_inferences_count,
+};
 pub use tool_use::ToolUsingChat;
 
 use crate::DataFusion;

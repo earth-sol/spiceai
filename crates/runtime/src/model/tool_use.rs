@@ -43,7 +43,6 @@ use tokio::sync::mpsc;
 use tracing::{Instrument, Span};
 
 use crate::Runtime;
-use crate::model::model_context::{ModelContextExtension, track_ai_inferences_count};
 use crate::request::{AsyncMarker, RequestContext};
 use crate::tools::SpiceModelTool;
 use crate::tools::builtin::list_datasets::ListDatasetsTool;
@@ -233,9 +232,7 @@ impl ToolUsingChat {
 
             if used_tools {
                 let context = RequestContext::current(AsyncMarker::new().await);
-                if let Some(model_context) = context.extension::<ModelContextExtension>().await {
-                    model_context.set_tools_used(true);
-                }
+                crate::model::set_tools_used(&context, true);
             }
         }
 
@@ -391,7 +388,7 @@ impl Chat for ToolUsingChat {
 
         // track ai_inferences_count metric
         let context = RequestContext::current(AsyncMarker::new().await);
-        track_ai_inferences_count(&context).await;
+        crate::model::track_ai_inferences_count(&context);
 
         response
     }
@@ -752,9 +749,7 @@ impl<S: Stream> Stream for InferenceTrackingStream<S> {
         match stream.as_mut().poll_next(cx) {
             Poll::Ready(None) => {
                 let context = Arc::clone(context);
-                tokio::task::spawn(async move {
-                    track_ai_inferences_count(&context).await;
-                });
+                crate::model::track_ai_inferences_count(&context);
                 Poll::Ready(None)
             }
             Poll::Ready(Some(item)) => Poll::Ready(Some(item)),
