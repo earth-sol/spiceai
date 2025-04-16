@@ -75,8 +75,6 @@ mod nsql {
 
     #[tokio::test]
     async fn huggingface_test_nsql() -> Result<(), anyhow::Error> {
-        let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
-
         let _tracing = init_tracing(None);
 
         if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
@@ -87,6 +85,7 @@ mod nsql {
 
         test_request_context()
             .scope(async {
+                let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
 
                 let mut taxi_trips_with_embeddings = get_taxi_trips_dataset();
                 taxi_trips_with_embeddings.embeddings = vec![ColumnEmbeddingConfig {
@@ -190,12 +189,12 @@ mod search {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn huggingface_test_search() -> Result<(), anyhow::Error> {
-        let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
-
         let _tracing = init_tracing(None);
 
         test_request_context()
             .scope(async {
+                let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+
                 let mut ds_tpcds_item = get_tpcds_dataset("item", None, None);
                 ds_tpcds_item.embeddings = vec![ColumnEmbeddingConfig {
                     column: "i_item_desc".to_string(),
@@ -364,8 +363,6 @@ mod search {
 
 #[tokio::test]
 async fn hf_embeddings_beta_requirements() -> Result<(), anyhow::Error> {
-    let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
-
     let _tracing = init_tracing(None);
 
     test_request_context()
@@ -383,12 +380,11 @@ async fn hf_embeddings_beta_requirements() -> Result<(), anyhow::Error> {
 
 #[tokio::test]
 async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
-    let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
-
     let _tracing = init_tracing(None);
 
     test_request_context()
         .scope(async {
+            let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
             run_embedding_tests(
                 vec![
                     get_huggingface_embeddings(
@@ -441,8 +437,6 @@ async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
 #[tokio::test]
 // https://github.com/spiceai/spiceai/issues/4943
 async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
-    let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
-
     let _tracing = init_tracing(None);
 
     if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
@@ -452,6 +446,8 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
     }
 
     test_request_context().scope_retry(3, || async {
+        let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+
         let mut model_with_tools = get_huggingface_model(HF_TEST_MODEL, HF_TEST_MODEL_TYPE, "hf_model");
         model_with_tools
             .params
@@ -505,8 +501,6 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
 #[tokio::test]
 // https://github.com/spiceai/spiceai/issues/4943
 async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
-    let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
-
     if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
         verify_env_secret_exists("SPICE_HF_TOKEN")
             .await
@@ -514,6 +508,8 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
     }
 
     test_request_context().scope(async {
+        let _lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+
         let model = Arc::new(create_hf_model(
             HF_TEST_MODEL,
         Some(HF_TEST_MODEL_TYPE),
