@@ -172,6 +172,8 @@ mod nsql {
                     run_nsql_test(http_base_url.as_str(), &ts, &trace_provider).await?;
                 }
 
+                rt.shutdown().await;
+
                 Ok(())
             })
             .await
@@ -355,6 +357,8 @@ mod search {
                 for ts in test_cases {
                     run_search_test(http_base_url.as_str(), &ts).await?;
                 }
+
+                rt.shutdown().await;
                 Ok(())
             })
             .await
@@ -427,7 +431,9 @@ async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
                     },
                 ],
             )
-            .await
+            .await;
+
+            rt.shutdown().await;
         })
         .await?;
 
@@ -494,6 +500,8 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
             normalize_chat_completion_response(response, true)
         );
 
+        rt.shutdown().await;
+
         Ok(())
     }).await
 }
@@ -559,6 +567,8 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
         });
 
         insta::assert_snapshot!("chat_1_response_choices", format!("{:?}", response.choices));
+
+        rt.shutdown().await;
 
         Ok(())
     })
