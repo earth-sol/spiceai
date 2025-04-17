@@ -126,7 +126,6 @@ mod nsql {
                     () = Arc::clone(&rt).load_components() => {}
                 }
 
-                drop(llm_init_lock);
 
                 runtime_ready_check(&rt).await;
 
@@ -170,6 +169,8 @@ mod nsql {
                 for ts in test_cases {
                     run_nsql_test(http_base_url.as_str(), &ts, &trace_provider).await?;
                 }
+
+                drop(llm_init_lock);
 
                 Ok(())
             })
@@ -471,8 +472,6 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
             () = Arc::clone(&rt).load_components() => {}
         }
 
-        drop(llm_init_lock);
-
         let response = send_chat_completions_request(
             http_base_url.as_str(),
             vec![
@@ -489,6 +488,8 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
             "chat_completion",
             normalize_chat_completion_response(response, true)
         );
+
+        drop(llm_init_lock);
 
         Ok(())
     }).await
@@ -527,8 +528,6 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
             () = Arc::clone(&rt).load_components() => {}
         }
 
-        drop(llm_init_lock);
-
         let tool_model = Box::new(ToolUsingChat::new(
             Arc::clone(&model),
             Arc::clone(&rt),
@@ -555,6 +554,8 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
         });
 
         insta::assert_snapshot!("chat_1_response_choices", format!("{:?}", response.choices));
+
+        drop(llm_init_lock);
 
         Ok(())
     })
