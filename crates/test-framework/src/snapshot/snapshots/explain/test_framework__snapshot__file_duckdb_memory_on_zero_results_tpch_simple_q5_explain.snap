@@ -33,7 +33,7 @@ description: "Query: tpch_simple_q5"
 |               |                             FallbackOnZeroResultsScanExec                                                                                       |
 |               |                               CoalescePartitionsExec                                                                                            |
 |               |                                 RepartitionExec: partitioning=RoundRobinBatch(24), input_partitions=1                                           |
-|               |                                   DuckSqlExec sql= SELECT "o_orderkey", "o_totalprice" FROM orders                                              |
+|               |                                   DuckSqlExec sql= SELECT "orders"."o_orderkey", "orders"."o_totalprice" FROM "orders"                          |
 |               |                   CoalesceBatchesExec: target_batch_size=8192                                                                                   |
 |               |                     RepartitionExec: partitioning=Hash([l_orderkey@0], 24), input_partitions=24                                                 |
 |               |                       BytesProcessedExec                                                                                                        |
@@ -42,6 +42,6 @@ description: "Query: tpch_simple_q5"
 |               |                             FallbackOnZeroResultsScanExec                                                                                       |
 |               |                               CoalescePartitionsExec                                                                                            |
 |               |                                 RepartitionExec: partitioning=RoundRobinBatch(24), input_partitions=1                                           |
-|               |                                   DuckSqlExec sql= SELECT "l_orderkey", "l_linestatus" FROM lineitem                                            |
+|               |                                   DuckSqlExec sql= SELECT "lineitem"."l_orderkey", "lineitem"."l_linestatus" FROM "lineitem"                    |
 |               |                                                                                                                                                 |
 +---------------+-------------------------------------------------------------------------------------------------------------------------------------------------+
