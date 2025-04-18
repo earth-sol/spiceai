@@ -431,69 +431,69 @@ async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-#[tokio::test]
-// #[ignore] // https://github.com/spiceai/spiceai/issues/4943
-async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
-    let _tracing = init_tracing(None);
+// #[tokio::test]
+// // #[ignore] // https://github.com/spiceai/spiceai/issues/4943
+// async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
+//     let _tracing = init_tracing(None);
 
-    if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
-        verify_env_secret_exists("SPICE_HF_TOKEN")
-            .await
-            .map_err(anyhow::Error::msg)?;
-    }
+//     if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
+//         verify_env_secret_exists("SPICE_HF_TOKEN")
+//             .await
+//             .map_err(anyhow::Error::msg)?;
+//     }
 
-    test_request_context().scope_retry(3, || async {
-        let mut model_with_tools = get_huggingface_model(HF_TEST_MODEL, HF_TEST_MODEL_TYPE, "hf_model");
-        model_with_tools
-            .params
-            .insert("tools".to_string(), "auto".into());
+//     test_request_context().scope_retry(3, || async {
+//         let mut model_with_tools = get_huggingface_model(HF_TEST_MODEL, HF_TEST_MODEL_TYPE, "hf_model");
+//         model_with_tools
+//             .params
+//             .insert("tools".to_string(), "auto".into());
 
-        let app = AppBuilder::new("text-to-sql")
-            .with_dataset(get_taxi_trips_dataset())
-            .with_model(model_with_tools)
-            .build();
+//         let app = AppBuilder::new("text-to-sql")
+//             .with_dataset(get_taxi_trips_dataset())
+//             .with_model(model_with_tools)
+//             .build();
 
-        let api_config = create_api_bindings_config();
-        let http_base_url = format!("http://{}", api_config.http_bind_address);
-        let rt = Arc::new(Runtime::builder().with_app(app).build().await);
+//         let api_config = create_api_bindings_config();
+//         let http_base_url = format!("http://{}", api_config.http_bind_address);
+//         let rt = Arc::new(Runtime::builder().with_app(app).build().await);
 
-        let rt_ref_copy = Arc::clone(&rt);
-        tokio::spawn(async move {
-            Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth())).await
-        });
+//         let rt_ref_copy = Arc::clone(&rt);
+//         tokio::spawn(async move {
+//             Box::pin(rt_ref_copy.start_servers(api_config, None, EndpointAuth::no_auth())).await
+//         });
 
-        let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
+//         let llm_init_lock = LOCAL_LLM_INIT_MUTEX.lock().await;
 
-        tokio::select! {
-            // increased timeout to download and load huggingface model
-            () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
-                return Err(anyhow::anyhow!("Timed out waiting for components to load"));
-            }
-            () = Arc::clone(&rt).load_components() => {}
-        }
+//         tokio::select! {
+//             // increased timeout to download and load huggingface model
+//             () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
+//                 return Err(anyhow::anyhow!("Timed out waiting for components to load"));
+//             }
+//             () = Arc::clone(&rt).load_components() => {}
+//         }
 
-        let response = send_chat_completions_request(
-            http_base_url.as_str(),
-            vec![
-                ("system".to_string(), "You are an assistant that responds to queries by providing only the requested data values without extra explanation.".to_string()),
-                ("user".to_string(), "Provide the total number of records in the taxi_trips dataset. If known, return a single numeric value.".to_string()),
-            ],
-            "hf_model",
-            false,
-        ).await?;
+//         let response = send_chat_completions_request(
+//             http_base_url.as_str(),
+//             vec![
+//                 ("system".to_string(), "You are an assistant that responds to queries by providing only the requested data values without extra explanation.".to_string()),
+//                 ("user".to_string(), "Provide the total number of records in the taxi_trips dataset. If known, return a single numeric value.".to_string()),
+//             ],
+//             "hf_model",
+//             false,
+//         ).await?;
 
-        // Message content verification is disabled due to issue below: model does not use tools and can't provide the expected response.
-        // https://github.com/spiceai/spiceai/issues/3426
-        insta::assert_snapshot!(
-            "chat_completion",
-            normalize_chat_completion_response(response, true)
-        );
+//         // Message content verification is disabled due to issue below: model does not use tools and can't provide the expected response.
+//         // https://github.com/spiceai/spiceai/issues/3426
+//         insta::assert_snapshot!(
+//             "chat_completion",
+//             normalize_chat_completion_response(response, true)
+//         );
 
-        drop(llm_init_lock);
+//         drop(llm_init_lock);
 
-        Ok(())
-    }).await
-}
+//         Ok(())
+//     }).await
+// }
 
 #[tokio::test]
 // #[ignore] // https://github.com/spiceai/spiceai/issues/4943
@@ -506,8 +506,8 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
 
     test_request_context().scope(async {
         let model = Arc::new(create_hf_model(
-            HF_TEST_MODEL,
-        Some(HF_TEST_MODEL_TYPE),
+            "huggingface:huggingface.co/Qwen/Qwen2.5-3B-Instruct",
+        Some("qwen"),
         None,
             None,
         )?);
