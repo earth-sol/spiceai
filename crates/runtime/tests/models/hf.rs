@@ -176,7 +176,7 @@ mod nsql {
                 rt.shutdown().await;
                 drop(rt);
 
-                sleep(duration::Duration::from_secs(10)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
                 Ok(())
             })
@@ -361,7 +361,7 @@ mod search {
                 }
                 rt.shutdown().await;
                 drop(rt);
-                sleep(duration::Duration::from_secs(10)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
                 Ok(())
 
@@ -573,7 +573,7 @@ None,
 
         rt.shutdown().await;
         drop(rt);
-        sleep(duration::Duration::from_secs(10)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
         Ok(())
     })

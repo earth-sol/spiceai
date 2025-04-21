@@ -26,6 +26,7 @@ use core::time;
 use runtime::{Runtime, auth::EndpointAuth};
 use spicepod::component::embeddings::Embeddings;
 use std::sync::Arc;
+use std::time::Duration;
 
 pub(crate) struct EmbeddingTestCase<'a> {
     pub input: EmbeddingInput,
@@ -71,7 +72,7 @@ pub(crate) async fn run_embedding_tests(
 
     rt.shutdown().await;
     drop(rt);
-    sleep(duration::Duration::from_secs(10)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     Ok(())
 }
 
