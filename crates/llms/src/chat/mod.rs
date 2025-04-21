@@ -13,7 +13,7 @@ limitations under the License.
 #![allow(clippy::missing_errors_doc)]
 use async_openai::types::{
     ChatCompletionRequestAssistantMessageContent, ChatCompletionRequestSystemMessageArgs,
-    CreateChatCompletionRequestArgs,
+    ChatCompletionRequestUserMessageContentPart, CreateChatCompletionRequestArgs,
 };
 use async_stream::stream;
 use async_trait::async_trait;
@@ -23,6 +23,7 @@ use rand::distr::Alphanumeric;
 use rand::{Rng, rng};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -47,7 +48,7 @@ use async_openai::{
 pub mod mistral;
 pub mod nsql;
 use indexmap::IndexMap;
-use mistralrs::MessageContent;
+use mistralrs::{MessageContent, VisionPromptPrefixer};
 
 static WEIGHTS_EXTENSIONS: [&str; 7] = [
     ".safetensors",
@@ -163,9 +164,15 @@ pub enum Error {
     ))]
     ModelFileMissing { file_url: String },
 
-    #[snafu(display(""))]
+    #[snafu(display("File '{filename}' used in model was not valid: {source}"))]
     InvalidModelFile {
         filename: String,
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[snafu(display("Failed to load the provided image from url={url}. Error: {source}"))]
+    UnableToLoadImageUrl {
+        url: String,
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 }
@@ -315,162 +322,220 @@ pub fn message_to_content(message: &ChatCompletionRequestMessage) -> String {
     }
 }
 
+async fn load_image(url: &str) -> Result<image::DynamicImage> {
+    let resp = reqwest::get(url.to_string())
+        .await
+        .boxed()
+        .context(UnableToLoadImageUrlSnafu {
+            url: url.to_string(),
+        })?;
+    let bytes = resp
+        .bytes()
+        .await
+        .boxed()
+        .context(UnableToLoadImageUrlSnafu {
+            url: url.to_string(),
+        })?
+        .to_vec();
+
+    let image = image::load_from_memory(&bytes)
+        .boxed()
+        .context(UnableToLoadImageUrlSnafu {
+            url: url.to_string(),
+        })?;
+
+    Ok(image)
+}
+
+async fn process_user_message_parts(
+    parts: &Vec<ChatCompletionRequestUserMessageContentPart>,
+    images: &mut Vec<image::DynamicImage>,
+    image_index: &mut usize,
+    image_prefixer: Option<&Arc<dyn VisionPromptPrefixer>>,
+) -> Result<MessageContent> {
+    let mut index_map: IndexMap<String, Value> = IndexMap::with_capacity(parts.len());
+    for p in parts {
+        let (key, value) = match p {
+            async_openai::types::ChatCompletionRequestUserMessageContentPart::Text(t) => {
+                ("content".to_string(), Value::String(t.text.clone()))
+            }
+            async_openai::types::ChatCompletionRequestUserMessageContentPart::ImageUrl(i) => {
+                let image_url = i.image_url.url.clone();
+                // Only vision models will have prefixer
+                if let Some(prefixer) = image_prefixer {
+                    let image_text = prefixer.prefix_image(*image_index, ""); // Empty prompt. Text will be added separately.
+                    *image_index += 1;
+                    images.push(load_image(image_url.as_str()).await?);
+                    ("content".to_string(), Value::String(image_text))
+                } else {
+                    ("image_url".to_string(), Value::String(image_url))
+                }
+            }
+            async_openai::types::ChatCompletionRequestUserMessageContentPart::InputAudio(a) => (
+                "input_audio".to_string(),
+                Value::String(a.input_audio.data.clone()),
+            ),
+        };
+        index_map.insert(key, value);
+    }
+    Ok(either::Either::Right(vec![index_map]))
+}
+
 /// Convert a structured [`ChatCompletionRequestMessage`] to the mistral.rs compatible [`RequestMessage`] type.
-#[must_use]
 #[allow(clippy::too_many_lines)]
-pub fn message_to_mistral(
-    message: &ChatCompletionRequestMessage,
-) -> IndexMap<String, MessageContent> {
+pub async fn messages_and_images(
+    messages: &Vec<ChatCompletionRequestMessage>,
+    image_prefixer: Option<&Arc<dyn VisionPromptPrefixer>>,
+) -> Result<(
+    Vec<IndexMap<String, MessageContent>>,
+    Vec<image::DynamicImage>,
+)> {
     use async_openai::types::{
         ChatCompletionRequestSystemMessageContent, ChatCompletionRequestToolMessageContent,
     };
     use either::Either;
     use serde_json::{Value, json};
 
+    let mut image_index = 0;
     let mut images: Vec<image::DynamicImage> = vec![];
+    let mut index_maps: Vec<IndexMap<String, MessageContent>> = vec![];
 
-    match message {
-        ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-            content, ..
-        }) => {
-            let body: MessageContent = match content {
-                ChatCompletionRequestUserMessageContent::Text(text) => {
-                    either::Either::Left(text.clone())
-                }
-                ChatCompletionRequestUserMessageContent::Array(array) => {
-                    let v = array.iter().map(|p| {
-                        match p {
-                            async_openai::types::ChatCompletionRequestUserMessageContentPart::Text(t) => {
-                                ("content".to_string(), Value::String(t.text.clone()))
-                            }
-                            async_openai::types::ChatCompletionRequestUserMessageContentPart::ImageUrl(i) => {
-                                // TODO Add image to map
-                                ("image_url".to_string(), Value::String(i.image_url.url.clone()))
-                            }
-                            async_openai::types::ChatCompletionRequestUserMessageContentPart::InputAudio(a) => {
-                                ("input_audio".to_string(), Value::String(a.input_audio.data.clone()))
-                            }
-                        }
-
-                    }).collect::<Vec<_>>();
-                    let index_map: IndexMap<String, Value> = v.into_iter().collect();
-                    either::Either::Right(vec![index_map])
-                }
-            };
-            IndexMap::from([
-                (String::from("role"), Either::Left(String::from("user"))),
-                (String::from("content"), body),
-            ])
-        }
-        ChatCompletionRequestMessage::Developer(ChatCompletionRequestDeveloperMessage {
-            content: ChatCompletionRequestDeveloperMessageContent::Text(text),
-            ..
-        }) => IndexMap::from([
-            (
-                String::from("role"),
-                Either::Left(String::from("developer")),
-            ),
-            (String::from("content"), Either::Left(text.clone())),
-        ]),
-        ChatCompletionRequestMessage::Developer(ChatCompletionRequestDeveloperMessage {
-            content: ChatCompletionRequestDeveloperMessageContent::Array(parts),
-            ..
-        }) => {
-            // TODO: This will cause issue for some chat_templates. Tracking: https://github.com/EricLBuehler/mistral.rs/issues/793
-            let content_json = parts.iter().map(|p| p.text.clone()).collect::<Vec<_>>();
-            IndexMap::from([
+    for message in messages {
+        let index_map = match message {
+            ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
+                content,
+                ..
+            }) => {
+                let body: MessageContent = match content {
+                    ChatCompletionRequestUserMessageContent::Text(text) => {
+                        either::Either::Left(text.clone())
+                    }
+                    ChatCompletionRequestUserMessageContent::Array(array) => {
+                        process_user_message_parts(
+                            array,
+                            &mut images,
+                            &mut image_index,
+                            image_prefixer,
+                        )
+                        .await?
+                    }
+                };
+                IndexMap::from([
+                    (String::from("role"), Either::Left(String::from("user"))),
+                    (String::from("content"), body),
+                ])
+            }
+            ChatCompletionRequestMessage::Developer(ChatCompletionRequestDeveloperMessage {
+                content: ChatCompletionRequestDeveloperMessageContent::Text(text),
+                ..
+            }) => IndexMap::from([
                 (
                     String::from("role"),
                     Either::Left(String::from("developer")),
                 ),
-                (
-                    String::from("content"),
-                    Either::Left(json!(content_json).to_string()),
-                ),
-            ])
-        }
-        ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-            content: ChatCompletionRequestSystemMessageContent::Text(text),
-            ..
-        }) => IndexMap::from([
-            (String::from("role"), Either::Left(String::from("system"))),
-            (String::from("content"), Either::Left(text.clone())),
-        ]),
-        ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-            content: ChatCompletionRequestSystemMessageContent::Array(parts),
-            ..
-        }) => {
-            // TODO: This will cause issue for some chat_templates. Tracking: https://github.com/EricLBuehler/mistral.rs/issues/793
-            let content_json = parts
-                .iter()
-                .map(|p| match p {
+                (String::from("content"), Either::Left(text.clone())),
+            ]),
+            ChatCompletionRequestMessage::Developer(ChatCompletionRequestDeveloperMessage {
+                content: ChatCompletionRequestDeveloperMessageContent::Array(parts),
+                ..
+            }) => {
+                // TODO: This will cause issue for some chat_templates. Tracking: https://github.com/EricLBuehler/mistral.rs/issues/793
+                let content_json = parts.iter().map(|p| p.text.clone()).collect::<Vec<_>>();
+                IndexMap::from([
+                    (
+                        String::from("role"),
+                        Either::Left(String::from("developer")),
+                    ),
+                    (
+                        String::from("content"),
+                        Either::Left(json!(content_json).to_string()),
+                    ),
+                ])
+            }
+            ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
+                content: ChatCompletionRequestSystemMessageContent::Text(text),
+                ..
+            }) => IndexMap::from([
+                (String::from("role"), Either::Left(String::from("system"))),
+                (String::from("content"), Either::Left(text.clone())),
+            ]),
+            ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
+                content: ChatCompletionRequestSystemMessageContent::Array(parts),
+                ..
+            }) => {
+                // TODO: This will cause issue for some chat_templates. Tracking: https://github.com/EricLBuehler/mistral.rs/issues/793
+                let content_json = parts
+                    .iter()
+                    .map(|p| {
+                        match p {
                     async_openai::types::ChatCompletionRequestSystemMessageContentPart::Text(t) => {
                         ("text".to_string(), t.text.clone())
                     }
-                })
-                .collect::<Vec<_>>();
-            IndexMap::from([
-                (String::from("role"), Either::Left(String::from("system"))),
-                (
-                    String::from("content"),
-                    Either::Left(json!(content_json).to_string()),
-                ),
-            ])
-        }
-        ChatCompletionRequestMessage::Tool(ChatCompletionRequestToolMessage {
-            content: ChatCompletionRequestToolMessageContent::Text(text),
-            tool_call_id,
-        }) => IndexMap::from([
-            (String::from("role"), Either::Left(String::from("tool"))),
-            (String::from("content"), Either::Left(text.clone())),
-            (
-                String::from("tool_call_id"),
-                Either::Left(tool_call_id.clone()),
-            ),
-        ]),
-        ChatCompletionRequestMessage::Tool(ChatCompletionRequestToolMessage {
-            content: ChatCompletionRequestToolMessageContent::Array(parts),
-            tool_call_id,
-        }) => {
-            // TODO: This will cause issue for some chat_templates. Tracking: https://github.com/EricLBuehler/mistral.rs/issues/793
-            let content_json = parts
-                .iter()
-                .map(|p| match p {
-                    async_openai::types::ChatCompletionRequestToolMessageContentPart::Text(t) => {
-                        ("text".to_string(), t.text.clone())
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            IndexMap::from([
+                }
+                    })
+                    .collect::<Vec<_>>();
+                IndexMap::from([
+                    (String::from("role"), Either::Left(String::from("system"))),
+                    (
+                        String::from("content"),
+                        Either::Left(json!(content_json).to_string()),
+                    ),
+                ])
+            }
+            ChatCompletionRequestMessage::Tool(ChatCompletionRequestToolMessage {
+                content: ChatCompletionRequestToolMessageContent::Text(text),
+                tool_call_id,
+            }) => IndexMap::from([
                 (String::from("role"), Either::Left(String::from("tool"))),
-                (
-                    String::from("content"),
-                    Either::Left(json!(content_json).to_string()),
-                ),
+                (String::from("content"), Either::Left(text.clone())),
                 (
                     String::from("tool_call_id"),
                     Either::Left(tool_call_id.clone()),
                 ),
-            ])
-        }
-        ChatCompletionRequestMessage::Assistant(ChatCompletionRequestAssistantMessage {
-            content,
-            name,
-            tool_calls,
-            ..
-        }) => {
-            let mut map: IndexMap<String, MessageContent> = IndexMap::from([(
-                String::from("role"),
-                Either::Left(String::from("assistant")),
-            )]);
-            match content {
-                Some(ChatCompletionRequestAssistantMessageContent::Text(s)) => {
-                    map.insert("content".to_string(), Either::Left(s.clone()));
-                }
-                Some(ChatCompletionRequestAssistantMessageContent::Array(parts)) => {
-                    // TODO: This will cause issue for some chat_templates. Tracking: https://github.com/EricLBuehler/mistral.rs/issues/793
-                    let content_json= parts.iter().map(|p| match p {
+            ]),
+            ChatCompletionRequestMessage::Tool(ChatCompletionRequestToolMessage {
+                content: ChatCompletionRequestToolMessageContent::Array(parts),
+                tool_call_id,
+            }) => {
+                // TODO: This will cause issue for some chat_templates. Tracking: https://github.com/EricLBuehler/mistral.rs/issues/793
+                let content_json = parts
+                    .iter()
+                    .map(|p| match p {
+                        async_openai::types::ChatCompletionRequestToolMessageContentPart::Text(
+                            t,
+                        ) => ("text".to_string(), t.text.clone()),
+                    })
+                    .collect::<Vec<_>>();
+
+                IndexMap::from([
+                    (String::from("role"), Either::Left(String::from("tool"))),
+                    (
+                        String::from("content"),
+                        Either::Left(json!(content_json).to_string()),
+                    ),
+                    (
+                        String::from("tool_call_id"),
+                        Either::Left(tool_call_id.clone()),
+                    ),
+                ])
+            }
+            ChatCompletionRequestMessage::Assistant(ChatCompletionRequestAssistantMessage {
+                content,
+                name,
+                tool_calls,
+                ..
+            }) => {
+                let mut map: IndexMap<String, MessageContent> = IndexMap::from([(
+                    String::from("role"),
+                    Either::Left(String::from("assistant")),
+                )]);
+                match content {
+                    Some(ChatCompletionRequestAssistantMessageContent::Text(s)) => {
+                        map.insert("content".to_string(), Either::Left(s.clone()));
+                    }
+                    Some(ChatCompletionRequestAssistantMessageContent::Array(parts)) => {
+                        // TODO: This will cause issue for some chat_templates. Tracking: https://github.com/EricLBuehler/mistral.rs/issues/793
+                        let content_json= parts.iter().map(|p| match p {
                         async_openai::types::ChatCompletionRequestAssistantMessageContentPart::Text(t) => {
                             ("text".to_string(), t.text.clone())
                         }
@@ -478,53 +543,57 @@ pub fn message_to_mistral(
                             ("refusal".to_string(), i.refusal.clone())
                         }
                     }).collect::<Vec<_>>();
-                    map.insert(
-                        String::from("content"),
-                        Either::Left(json!(content_json).to_string()),
-                    );
+                        map.insert(
+                            String::from("content"),
+                            Either::Left(json!(content_json).to_string()),
+                        );
+                    }
+                    None => {
+                        // Use Some(""), not None as it is more compatible with many open source `chat_template`s.
+                        map.insert("content".to_string(), Either::Left(String::new()));
+                    }
+                };
+                if let Some(name) = name {
+                    map.insert("name".to_string(), Either::Left(name.clone()));
                 }
-                None => {
-                    // Use Some(""), not None as it is more compatible with many open source `chat_template`s.
-                    map.insert("content".to_string(), Either::Left(String::new()));
+                if let Some(tool_calls) = tool_calls {
+                    let tool_call_results: Vec<IndexMap<String, Value>> = tool_calls
+                        .iter()
+                        .filter_map(|t| {
+                            let Ok(function) = serde_json::to_value(&t.function) else {
+                                tracing::warn!("Invalid function call: {:#?}", t.function);
+                                return None;
+                            };
+
+                            let mut map = IndexMap::new();
+                            map.insert("id".to_string(), Value::String(t.id.to_string()));
+                            map.insert("function".to_string(), function);
+                            map.insert("type".to_string(), Value::String("function".to_string()));
+
+                            Some(map)
+                        })
+                        .collect();
+
+                    map.insert("tool_calls".to_string(), Either::Right(tool_call_results));
                 }
-            };
-            if let Some(name) = name {
-                map.insert("name".to_string(), Either::Left(name.clone()));
+                map
             }
-            if let Some(tool_calls) = tool_calls {
-                let tool_call_results: Vec<IndexMap<String, Value>> = tool_calls
-                    .iter()
-                    .filter_map(|t| {
-                        let Ok(function) = serde_json::to_value(&t.function) else {
-                            tracing::warn!("Invalid function call: {:#?}", t.function);
-                            return None;
-                        };
+            ChatCompletionRequestMessage::Function(ChatCompletionRequestFunctionMessage {
+                content,
+                name,
+            }) => IndexMap::from([
+                (String::from("role"), Either::Left(String::from("function"))),
+                (
+                    "content".to_string(),
+                    Either::Left(content.clone().unwrap_or_default().clone()),
+                ),
+                ("name".to_string(), Either::Left(name.clone())),
+            ]),
+        };
 
-                        let mut map = IndexMap::new();
-                        map.insert("id".to_string(), Value::String(t.id.to_string()));
-                        map.insert("function".to_string(), function);
-                        map.insert("type".to_string(), Value::String("function".to_string()));
-
-                        Some(map)
-                    })
-                    .collect();
-
-                map.insert("tool_calls".to_string(), Either::Right(tool_call_results));
-            }
-            map
-        }
-        ChatCompletionRequestMessage::Function(ChatCompletionRequestFunctionMessage {
-            content,
-            name,
-        }) => IndexMap::from([
-            (String::from("role"), Either::Left(String::from("function"))),
-            (
-                "content".to_string(),
-                Either::Left(content.clone().unwrap_or_default().clone()),
-            ),
-            ("name".to_string(), Either::Left(name.clone())),
-        ]),
+        index_maps.push(index_map);
     }
+    Ok((index_maps, images))
 }
 
 #[async_trait]
@@ -750,7 +819,7 @@ pub fn create_local_model(
     generation_config: Option<&str>,
     chat_template_literal: Option<&str>,
 ) -> Result<Arc<dyn Chat>> {
-    mistral::MistralLlama::from(
+    mistral::MistralLlama::from_files(
         model_weights
             .iter()
             .map(|p| PathBuf::from_str(p))

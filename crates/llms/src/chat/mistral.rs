@@ -14,7 +14,7 @@ limitations under the License.
 #![allow(clippy::borrowed_box)]
 #![allow(clippy::needless_pass_by_value)]
 
-use crate::chat::message_to_mistral;
+use crate::chat::messages_and_images;
 
 use super::{
     Chat, Error as ChatError, FailedToLoadModelSnafu, FailedToRunModelSnafu, InvalidModelFileSnafu,
@@ -41,12 +41,11 @@ use mistralrs::{
     GGMLSpecificConfig, GGUFLoaderBuilder, GGUFSpecificConfig, Loader, LocalModelPaths, MistralRs,
     MistralRsBuilder, ModelDType, ModelPaths, NormalLoaderBuilder, NormalLoaderType, NormalRequest,
     Pipeline, Request as MistralRequest, RequestMessage, Response as MistralResponse,
-    SamplingParams, TokenSource, Tool, ToolCallResponse, ToolChoice, ToolType, VisionLoaderType,
-    VisionSpecificConfig,
+    SamplingParams, TokenSource, Tool, ToolCallResponse, ToolChoice, ToolType, VisionLoader,
+    VisionLoaderType, VisionPromptPrefixer, VisionSpecificConfig,
 };
 
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use snafu::ResultExt;
 use std::{
@@ -64,6 +63,7 @@ use tokio::sync::mpsc::{Receiver, Sender, channel};
 
 pub struct MistralLlama {
     pipeline: Arc<MistralRs>,
+    image_prefixer: Option<Arc<dyn VisionPromptPrefixer>>,
     counter: AtomicUsize,
 }
 
@@ -73,17 +73,12 @@ pub(crate) enum ModelLoaderType {
     Vision(VisionLoaderType),
 }
 
-pub(crate) enum ModelLoadSource {
-    HF,
-    Filepath,
-}
-
 impl ModelLoaderType {
     fn from_hf(
         model_id: &str,
         revision: Option<&str>,
         hf_token_literal: Option<&SecretString>,
-        gguf_filename: Option<PathBuf>,
+        _gguf_filename: Option<PathBuf>,
     ) -> Result<Self> {
         let api = ApiBuilder::new()
             .with_progress(false)
@@ -118,7 +113,9 @@ impl ModelLoaderType {
             })?;
         let Some(Value::String(model_type)) = map.get("model_type") else {
             return Err(ChatError::InvalidModelFile {
-                source: Box::from(""),
+                source: Box::from(
+                    "file was not valid JSON with 'model_type' key that maps to a string value.",
+                ),
                 filename: f.to_string_lossy().to_string(),
             });
         };
@@ -151,7 +148,7 @@ fn to_openai_response(
 }
 
 impl MistralLlama {
-    pub fn from(
+    pub fn from_files(
         model_weights: &[PathBuf],
         config: Option<&Path>,
         tokenizer: Option<&Path>,
@@ -167,7 +164,7 @@ impl MistralLlama {
             }
         }
 
-        /// Currently, loader type cannot be used for GGUF so we aren't strict about its existence.
+        // Currently, loader type cannot be used for GGUF so we aren't strict about its existence.
         let mut loader_type: Option<ModelLoaderType> = None;
         if let Some(config) = config {
             if !config.exists() {
@@ -217,27 +214,90 @@ impl MistralLlama {
             .and_then(|p| p.as_path().extension())
             .and_then(|e| e.to_str());
 
-        let pipeline = match (extension, loader_type) {
-            (Some("ggml"), _) => Self::load_ggml_pipeline(paths, &model_id, chat_template_literal)?,
-            (Some("gguf"), _) => Self::load_gguf_pipeline(paths, &model_id, chat_template_literal)?,
-            (_, Some(ref loader_type)) => Self::load_default_pipeline(
-                paths,
+        match (extension, loader_type) {
+            (Some("ggml"), _) => Ok(Self::from_pipeline(
+                Self::load_ggml_pipeline(paths, &model_id, chat_template_literal)?,
+                None,
+            )),
+            (Some("gguf"), _) => Ok(Self::from_pipeline(
+                Self::load_gguf_pipeline(paths, &model_id, chat_template_literal)?,
+                None,
+            )),
+            (_, Some(ref loader_type)) => Self::load_with_default(
+                Some(paths),
                 &model_id,
                 loader_type,
-                &ModelLoadSource::Filepath,
                 chat_template_literal.map(ToString::to_string),
                 None, // Don't need HF token
-            )?,
+            ),
             (_, None) => {
-                return Err(ChatError::UnsupportedInferredModelType {
+                Err(ChatError::UnsupportedInferredModelType {
                     source: Box::from(
                         "Model type isn't provided in `params.model_type` and no `config.json` provided".to_string()),
                     from: "config.json".to_string()
-                });
+                })
             }
-        };
+        }
+    }
 
-        Ok(Self::from_pipeline(pipeline))
+    pub fn from_hf(
+        model_id: &str,
+        arch: Option<&str>,
+        hf_token_literal: Option<&SecretString>,
+        gguf_filename: Option<PathBuf>,
+    ) -> Result<Self> {
+        // Parse provided `model_type`, failing that check in `config.json` from huggingface.
+        // TODO: this will break when GGUF, no config.json will provide this.
+        let model_type = arch
+            .map(ModelLoaderType::from_str)
+            .transpose()
+            .map_err(|e| ChatError::UnsupportedModelType { source: e.into() })?
+            .unwrap_or(
+                ModelLoaderType::from_hf(model_id, None, hf_token_literal, gguf_filename.clone())
+                    .boxed()
+                    .context(UnsupportedInferredModelTypeSnafu {
+                        from: "huggingface".to_string(),
+                    })?,
+            );
+
+        let model_parts: Vec<&str> = model_id.split(':').collect();
+
+        if let Some(gguf) = gguf_filename {
+            // Loading the GGUF directly (as if it is a quantized model, although it need not be quantized).
+            let loader = GGUFLoaderBuilder::new(
+                None,
+                None,
+                model_parts[0].to_string(),
+                vec![gguf.to_string_lossy().to_string()],
+                GGUFSpecificConfig::default(),
+                false,
+                None,
+            )
+            .build();
+            let device = Self::get_device();
+            let token_source = hf_token_literal.map_or(TokenSource::CacheToken, |secret| {
+                tracing::debug!("A HuggingFace token was specified in parameters. The specified token will be used instead of any system/environment defaults.");
+                TokenSource::Literal(secret.expose_secret().to_string())
+            });
+            let pipeline = loader
+                .load_model_from_hf(
+                    model_parts.get(1).map(|&x| x.to_string()),
+                    token_source,
+                    &ModelDType::Auto,
+                    &device,
+                    false,
+                    DeviceMapSetting::Auto(match model_type {
+                        ModelLoaderType::Text(_) => AutoDeviceMapParams::default_text(),
+                        ModelLoaderType::Vision(_) => AutoDeviceMapParams::default_vision(),
+                    }),
+                    None,
+                    None,
+                )
+                .map_err(|e| ChatError::FailedToLoadModel { source: e.into() })?;
+            Ok(Self::from_pipeline(pipeline, None))
+        } else {
+            Self::load_with_default(None, model_id, &model_type, None, hf_token_literal)
+        }
     }
 
     /// Create paths object, [`ModelPaths`], to create new [`MistralLlama`].
@@ -267,16 +327,20 @@ impl MistralLlama {
         ))
     }
 
-    fn load_default_pipeline(
-        paths: Box<dyn ModelPaths>,
+    /// Load from default model files (e.g. separate config.json, tokenizer.json, etc).
+    ///
+    /// If [`paths_opt.is_none()`], will attempt to load from Huggingface.
+    fn load_with_default(
+        paths_opt: Option<Box<dyn ModelPaths>>,
         model_id: &str,
         model_type: &ModelLoaderType,
-        model_source: &ModelLoadSource,
         chat_template_literal: Option<String>,
         hf_token_literal: Option<&SecretString>,
-    ) -> Result<Arc<tokio::sync::Mutex<dyn Pipeline + Sync + Send>>> {
+    ) -> Result<Self> {
         let device = Self::get_device();
         let model_parts: Vec<&str> = model_id.split(':').collect();
+
+        let mut image_prefixer = None;
         let loader: Result<Box<dyn Loader>> = match model_type {
             ModelLoaderType::Text(loader_type) => {
                 let builder = NormalLoaderBuilder::new(
@@ -310,13 +374,16 @@ impl MistralLlama {
                     Some(model_parts[0].to_string()),
                     None,
                 );
-                let ldr = builder.build(vision_type.clone());
-                Ok(ldr)
+
+                let ldr: Box<VisionLoader> = builder.build_as_vision(vision_type.clone());
+                image_prefixer = Some(ldr.get_prefixer());
+
+                Ok(ldr as Box<dyn Loader>)
             }
         };
 
-        let pipeline = match model_source {
-            ModelLoadSource::Filepath => loader?.load_model_from_path(
+        let pipeline = if let Some(paths) = paths_opt {
+            loader?.load_model_from_path(
                 &paths,
                 &ModelDType::Auto,
                 &device,
@@ -327,29 +394,29 @@ impl MistralLlama {
                 }),
                 None,
                 None,
-            ),
-            ModelLoadSource::HF => {
-                let token_source = hf_token_literal.map_or(TokenSource::CacheToken, |secret| {
-                    tracing::debug!("A HuggingFace token was specified in parameters. The specified token will be used instead of any system/environment defaults.");
-                    TokenSource::Literal(secret.expose_secret().to_string())
-                });
+            )
+        } else {
+            let token_source = hf_token_literal.map_or(TokenSource::CacheToken, |secret| {
+                tracing::debug!("A HuggingFace token was specified in parameters. The specified token will be used instead of any system/environment defaults.");
+                TokenSource::Literal(secret.expose_secret().to_string())
+            });
 
-                loader?.load_model_from_hf(
-                    model_parts.get(1).map(|&x| x.to_string()),
-                    token_source,
-                    &ModelDType::Auto,
-                    &device,
-                    false,
-                    DeviceMapSetting::Auto(match model_type {
-                        ModelLoaderType::Text(_) => AutoDeviceMapParams::default_text(),
-                        ModelLoaderType::Vision(_) => AutoDeviceMapParams::default_vision(),
-                    }),
-                    None,
-                    None,
-                )
-            }
-        };
-        pipeline.map_err(|e| ChatError::FailedToLoadModel { source: e.into() })
+            loader?.load_model_from_hf(
+                model_parts.get(1).map(|&x| x.to_string()),
+                token_source,
+                &ModelDType::Auto,
+                &device,
+                false,
+                DeviceMapSetting::Auto(match model_type {
+                    ModelLoaderType::Text(_) => AutoDeviceMapParams::default_text(),
+                    ModelLoaderType::Vision(_) => AutoDeviceMapParams::default_vision(),
+                }),
+                None,
+                None,
+            )
+        }.map_err(|e| ChatError::FailedToLoadModel { source: e.into() })?;
+
+        Ok(Self::from_pipeline(pipeline, image_prefixer))
     }
 
     fn load_gguf_pipeline(
@@ -456,109 +523,11 @@ impl MistralLlama {
         }
     }
 
-    pub fn from_hf(
-        model_id: &str,
-        arch: Option<&str>,
-        hf_token_literal: Option<&SecretString>,
-        gguf_filename: Option<PathBuf>,
-    ) -> Result<Self> {
-        // Parse provided `model_type`, failing that check in `config.json` from huggingface.
-        let model_type = arch
-            .map(ModelLoaderType::from_str)
-            .transpose()
-            .map_err(|e| ChatError::UnsupportedModelType { source: e.into() })?
-            .unwrap_or(
-                ModelLoaderType::from_hf(model_id, None, hf_token_literal, gguf_filename.clone())
-                    .boxed()
-                    .context(UnsupportedInferredModelTypeSnafu {
-                        from: "huggingface".to_string(),
-                    })?,
-            );
-
-        let model_parts: Vec<&str> = model_id.split(':').collect();
-
-        // Loading the GGUF directly (as if it is a quantized model, although it need not be quantized).
-        let loader: Result<Box<dyn Loader>> = if let Some(gguf) = gguf_filename {
-            Ok(GGUFLoaderBuilder::new(
-                None,
-                None,
-                model_parts[0].to_string(),
-                vec![gguf.to_string_lossy().to_string()],
-                GGUFSpecificConfig::default(),
-                false,
-                None,
-            )
-            .build())
-        } else {
-            // Hardcoded model architecture can ensure correct loading type.
-            // If not provided, it will be inferred (generally from `.model_type` in a downloaded `config.json`)
-
-            match model_type.clone() {
-                ModelLoaderType::Text(loader_type) => {
-                    let builder = NormalLoaderBuilder::new(
-                        mistralrs::NormalSpecificConfig::default(),
-                        None,
-                        None,
-                        Some(model_parts[0].to_string()),
-                        false,
-                        None,
-                    );
-
-                    builder
-                        .build(Some(loader_type))
-                        .map_err(|e| ChatError::FailedToLoadModel { source: e.into() })
-                }
-                ModelLoaderType::Vision(vision_type) => {
-                    let builder = mistralrs_core::VisionLoaderBuilder::new(
-                        VisionSpecificConfig {
-                            use_flash_attn: false,
-                            prompt_chunksize: None,
-                            topology: None,
-                            write_uqff: None,
-                            from_uqff: None,
-                            max_edge: None, // Most vision models handles this internally
-                            imatrix: None,
-                            calibration_file: None,
-                            hf_cache_path: None,
-                        },
-                        None,
-                        None,
-                        Some(model_parts[0].to_string()),
-                        None,
-                    );
-                    let ldr = builder.build(vision_type);
-                    Ok(ldr)
-                }
-            }
-        };
-
-        let device = Self::get_device();
-        let token_source = hf_token_literal.map_or(TokenSource::CacheToken, |secret| {
-            tracing::debug!("A HuggingFace token was specified in parameters. The specified token will be used instead of any system/environment defaults.");
-            TokenSource::Literal(secret.expose_secret().to_string())
-        });
-
-        let pipeline = loader?
-            .load_model_from_hf(
-                model_parts.get(1).map(|&x| x.to_string()),
-                token_source,
-                &ModelDType::Auto,
-                &device,
-                false,
-                DeviceMapSetting::Auto(match model_type {
-                    ModelLoaderType::Text(_) => AutoDeviceMapParams::default_text(),
-                    ModelLoaderType::Vision(_) => AutoDeviceMapParams::default_vision(),
-                }),
-                None,
-                None,
-            )
-            .map_err(|e| ChatError::FailedToLoadModel { source: e.into() })?;
-
-        Ok(Self::from_pipeline(pipeline))
-    }
-
     #[allow(clippy::expect_used)]
-    fn from_pipeline(p: Arc<tokio::sync::Mutex<dyn Pipeline + Sync + Send>>) -> Self {
+    fn from_pipeline(
+        p: Arc<tokio::sync::Mutex<dyn Pipeline + Sync + Send>>,
+        image_prefixer: Option<Arc<dyn VisionPromptPrefixer>>,
+    ) -> Self {
         Self {
             pipeline: MistralRsBuilder::new(
                 p,
@@ -572,6 +541,7 @@ impl MistralLlama {
             )
             .build(),
             counter: AtomicUsize::new(0),
+            image_prefixer,
         }
     }
 
@@ -608,12 +578,13 @@ impl MistralLlama {
         &self,
         req: CreateChatCompletionRequest,
     ) -> Result<Receiver<MistralResponse>> {
-        let message = RequestMessage::Chat(
-            req.messages
-                .iter()
-                .map(message_to_mistral)
-                .collect::<Vec<_>>(),
-        );
+        let (messages, images) =
+            messages_and_images(&req.messages, self.image_prefixer.as_ref()).await?;
+        let message: RequestMessage = if images.is_empty() {
+            RequestMessage::Chat(messages)
+        } else {
+            RequestMessage::VisionChat { images, messages }
+        };
 
         let tools: Option<Vec<Tool>> = req.tools.map(|t| t.iter().map(convert_tool).collect());
         let tool_choice: Option<ToolChoice> = req.tool_choice.map(|s| convert_tool_choice(&s));
