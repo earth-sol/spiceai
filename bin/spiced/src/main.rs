@@ -20,6 +20,12 @@ use rustls::crypto::{self, CryptoProvider};
 use telemetry::noop::NoopMeterProvider;
 use tokio::runtime::Runtime;
 
+#[cfg(not(target_os = "windows"))]
+#[global_allocator]
+static ALLOC: heaptrack_alloc::HeaptrackAlloc<snmalloc_rs::SnMalloc> =
+    heaptrack_alloc::HeaptrackAlloc::new(snmalloc_rs::SnMalloc);
+
+#[cfg(target_os = "windows")]
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 

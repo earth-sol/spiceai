@@ -13,6 +13,7 @@ app = { path = "../../crates/app" }
 clap = { workspace = true, features = ["derive"] }
 flightrepl = { path = "../../crates/flightrepl" }
 futures.workspace = true
+heaptrack_alloc = { path = "../../crates/heaptrack_alloc" }
 opentelemetry.workspace = true
 opentelemetry-http.workspace = true
 opentelemetry-prometheus.workspace = true

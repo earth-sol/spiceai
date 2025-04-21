@@ -5462,6 +5462,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "heaptrack_alloc"
+version = "1.2.0-unstable"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11702,6 +11710,7 @@ dependencies = [
  "clap",
  "flightrepl",
  "futures",
+ "heaptrack_alloc",
  "opentelemetry 0.27.1",
  "opentelemetry-http",
  "opentelemetry-prometheus",

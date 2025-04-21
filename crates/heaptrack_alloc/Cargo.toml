@@ -1,0 +1,14 @@
+[package]
+name    = "heaptrack_alloc"
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+links   = "heaptrack_shim"      # lets cargo know build.rs produces native objects
+
+[dependencies]
+libc = "0.2"
+
+[build-dependencies]
+cc = "1"

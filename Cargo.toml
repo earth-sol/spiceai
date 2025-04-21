@@ -9,6 +9,7 @@ members = [
     "crates/document_parse",
     "crates/flight_client",
     "crates/flightrepl",
+    "crates/heaptrack_alloc",
     "crates/llms",
     "crates/model_components",
     "crates/ns_lookup",
