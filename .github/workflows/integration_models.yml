@@ -122,7 +122,7 @@ jobs:
           ls -l ./integration_test
           chmod +x ./integration_test/ai_integration_test
 
-      - name: Run integration test
+      - name: Run integration test with profiling
         env:
           SPICE_AI_HF_TOKEN: ${{ secrets.SPICE_SECRET_HF_TOKEN }}
         run: |
@@ -130,7 +130,67 @@ jobs:
             echo "Error: Hugging Face API Token is not defined."
             exit 1
           fi
-          INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" ./integration_test/ai_integration_test --test-threads=1 --nocapture huggingface_test
+
+          # Set up monitoring script in background
+          echo "Starting resource monitoring..."
+
+          # Create monitoring script
+          cat > monitor.sh << 'EOF'
+          #!/bin/bash
+          echo "Resource monitoring started at $(date)"
+          echo "-------------------------------------"
+
+          # Print system info
+          echo "System Information:"
+          sw_vers || uname -a
+          echo "Available memory:"
+          vm_stat || free -m
+          echo "-------------------------------------"
+
+          # Monitor loop
+          while true; do
+            echo "$(date +%T) | Memory: $(ps -o rss= -p $1 | awk '{print $1/1024 " MB"}') | CPU: $(ps -o %cpu= -p $1)%"
+
+            # Get process threads
+            echo "Thread count: $(ps -M $1 | wc -l)"
+
+            # On macOS, check for GPU info
+            if command -v system_profiler &>/dev/null; then
+              system_profiler SPDisplaysDataType | grep -A 3 "Metal:"
+            fi
+
+            echo "-------------------------------------"
+            sleep 5
+          done
+          EOF
+
+          chmod +x monitor.sh
+
+          # Start test with monitoring
+          ./monitor.sh $$ > monitoring.log &
+          MONITOR_PID=$!
+
+          echo "Running test with profiling..."
+          RUST_LOG=debug INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" ./integration_test/ai_integration_test --test-threads=1 --nocapture huggingface_test
+          TEST_EXIT_CODE=$?
+
+          # Stop monitoring
+          kill $MONITOR_PID
+
+          # Print monitoring results
+          echo "Resource monitoring results:"
+          cat monitoring.log
+
+          # Upload monitoring log as an artifact
+          echo "monitoring-log=$(pwd)/monitoring.log" >> $GITHUB_OUTPUT
+
+          exit $TEST_EXIT_CODE
+
+      - name: Upload monitoring logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: huggingface-test-monitoring
+          path: monitoring.log
 
       - name: Run Beta functionality embedding tests
         env:
