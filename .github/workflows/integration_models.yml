@@ -125,6 +125,8 @@ jobs:
       - name: Run integration test with profiling
         env:
           SPICE_AI_HF_TOKEN: ${{ secrets.SPICE_SECRET_HF_TOKEN }}
+        id: run_test  # Add an ID to reference this step
+        continue-on-error: true  # Allow this step to fail but continue workflow
         run: |
           if [ -z "$SPICE_AI_HF_TOKEN" ] ; then
             echo "Error: Hugging Face API Token is not defined."
@@ -175,22 +177,40 @@ jobs:
           TEST_EXIT_CODE=$?
 
           # Stop monitoring
-          kill $MONITOR_PID
+          kill $MONITOR_PID || true
 
           # Print monitoring results
           echo "Resource monitoring results:"
           cat monitoring.log
 
-          # Upload monitoring log as an artifact
+          # Always set the output for the log path
           echo "monitoring-log=$(pwd)/monitoring.log" >> $GITHUB_OUTPUT
 
-          exit $TEST_EXIT_CODE
+          # Save the exit code to a file so we can use it later
+          echo $TEST_EXIT_CODE > test_exit_code.txt
 
       - name: Upload monitoring logs
         uses: actions/upload-artifact@v4
+        if: always()  # Run this step regardless of previous step's status
         with:
           name: huggingface-test-monitoring
           path: monitoring.log
+
+      - name: Check test result
+        if: always()  # Always run this step
+        run: |
+          if [ -f test_exit_code.txt ]; then
+            EXIT_CODE=$(cat test_exit_code.txt)
+            if [ "$EXIT_CODE" != "0" ]; then
+              echo "Test failed with exit code $EXIT_CODE"
+              exit $EXIT_CODE
+            else
+              echo "Test passed"
+            fi
+          else
+            echo "Test exit code file not found"
+            exit 1
+          fi
 
       - name: Run Beta functionality embedding tests
         env:
