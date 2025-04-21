@@ -506,7 +506,7 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
 
     test_request_context().scope(async {
         let model = Arc::new(create_hf_model(
-            "huggingface:huggingface.co/Qwen/Qwen2.5-3B-Instruct",
+            "Qwen/Qwen2.5-3B-Instruct",
 None,
         None,
             None,
