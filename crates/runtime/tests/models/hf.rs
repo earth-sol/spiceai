@@ -100,7 +100,7 @@ mod nsql {
                     .with_model(get_huggingface_model(
                         HF_TEST_MODEL,
                         HF_TEST_MODEL_TYPE,
-                        "hf_model",
+                        "hf_nsql_model",
                     ))
                     .build();
 
@@ -134,7 +134,7 @@ mod nsql {
                         name: "hf_with_model",
                         body: json!({
                             "query": "how many records (as 'total_records') are in spice.public.taxi_trips dataset?",
-                            "model": "hf_model",
+                            "model": "hf_nsql_model",
                             "sample_data_enabled": false,
                         }),
                     },
@@ -159,7 +159,7 @@ mod nsql {
                         name: "hf_invalid_dataset_name",
                         body: json!({
                             "query": "how many records (as 'total_records') are in taxi_trips dataset?",
-                            "model": "hf_model",
+                            "model": "hf_nsql_model",
                             "datasets": ["dataset_not_in_spice"],
                             "sample_data_enabled": false,
                         }),
@@ -506,8 +506,8 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
 
     test_request_context().scope(async {
         let model = Arc::new(create_hf_model(
-            HF_TEST_MODEL,
-        Some(HF_TEST_MODEL_TYPE),
+            "huggingface:huggingface.co/Qwen/Qwen2.5-3B-Instruct",
+None,
         None,
             None,
         )?);
