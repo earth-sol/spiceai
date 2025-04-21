@@ -36,6 +36,7 @@ use spicepod::component::{
 };
 
 use llms::chat::Chat;
+use tokio::time::sleep;
 
 use crate::models::embedding::run_beta_functionality_criteria_test;
 use crate::{
@@ -171,6 +172,11 @@ mod nsql {
                 }
 
                 drop(llm_init_lock);
+
+                rt.shutdown().await;
+                drop(rt);
+
+                sleep(duration::Duration::from_secs(10)).await;
 
                 Ok(())
             })
@@ -353,7 +359,13 @@ mod search {
                 for ts in test_cases {
                     run_search_test(http_base_url.as_str(), &ts).await?;
                 }
+                rt.shutdown().await;
+                drop(rt);
+                sleep(duration::Duration::from_secs(10)).await;
+
                 Ok(())
+
+
             })
             .await
     }
@@ -558,6 +570,10 @@ None,
         insta::assert_snapshot!("chat_1_response_choices", format!("{:?}", response.choices));
 
         drop(llm_init_lock);
+
+        rt.shutdown().await;
+        drop(rt);
+        sleep(duration::Duration::from_secs(10)).await;
 
         Ok(())
     })
