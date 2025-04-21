@@ -506,8 +506,8 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
 
     test_request_context().scope(async {
         let model = Arc::new(create_hf_model(
-            "huggingface:meta-llama/Llama-3.2-3B-Instruct",
-        Some("llama"),
+            HF_TEST_MODEL,
+        Some(HF_TEST_MODEL_TYPE),
         None,
             None,
         )?);
