@@ -75,7 +75,7 @@ mod nsql {
         let _tracing = init_tracing(None);
 
         if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
-            verify_env_secret_exists("SPICE_HF_TOKEN")
+            verify_env_secret_exists("SPICE_AI_HF_TOKEN")
                 .await
                 .map_err(anyhow::Error::msg)?;
         }
@@ -499,14 +499,9 @@ async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
 // #[ignore] // https://github.com/spiceai/spiceai/issues/4943
 async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
     if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
-        verify_env_secret_exists("SPICE_HF_TOKEN")
+        verify_env_secret_exists("SPICE_AI_HF_TOKEN")
             .await
             .map_err(anyhow::Error::msg)?;
-    }
-
-    let original_token = std::env::var("SPICE_HF_TOKEN").ok();
-    unsafe {
-        std::env::remove_var("SPICE_HF_TOKEN");
     }
 
     test_request_context().scope(async {
@@ -564,12 +559,6 @@ None,
 
         drop(llm_init_lock);
 
-        if let Some(token) = original_token {
-            unsafe {
-                std::env::set_var("SPICE_HF_TOKEN", token);
-            }
-        }
-
         Ok(())
     })
     .await
@@ -585,9 +574,10 @@ fn get_huggingface_model(
         .params
         .insert("model_type".to_string(), model_type.into().into());
 
-    model
-        .params
-        .insert("hf_token".to_string(), "${ secrets:SPICE_HF_TOKEN }".into());
+    model.params.insert(
+        "hf_token".to_string(),
+        "${ secrets:SPICE_AI_HF_TOKEN }".into(),
+    );
 
     model
 }
