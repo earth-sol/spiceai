@@ -125,21 +125,20 @@ jobs:
       - name: Run integration test with profiling
         env:
           SPICE_AI_HF_TOKEN: ${{ secrets.SPICE_SECRET_HF_TOKEN }}
-        id: run_test  # Add an ID to reference this step
-        continue-on-error: true  # Allow this step to fail but continue workflow
+        id: run_test
+        continue-on-error: true
         run: |
           if [ -z "$SPICE_AI_HF_TOKEN" ] ; then
             echo "Error: Hugging Face API Token is not defined."
             exit 1
           fi
 
-          # Set up monitoring script in background
-          echo "Starting resource monitoring..."
-
-          # Create monitoring script
+          # Create monitoring script that can attach to other processes
           cat > monitor.sh << 'EOF'
           #!/bin/bash
-          echo "Resource monitoring started at $(date)"
+          PID=$1
+
+          echo "Resource monitoring started for PID $PID at $(date)"
           echo "-------------------------------------"
 
           # Print system info
@@ -150,51 +149,76 @@ jobs:
           echo "-------------------------------------"
 
           # Monitor loop
-          while true; do
-            echo "$(date +%T) | Memory: $(ps -o rss= -p $1 | awk '{print $1/1024 " MB"}') | CPU: $(ps -o %cpu= -p $1)%"
+          while ps -p $PID > /dev/null 2>&1; do
+            echo "$(date +%T) | Memory: $(ps -o rss= -p $PID 2>/dev/null | awk '{print $1/1024 " MB"}') | CPU: $(ps -o %cpu= -p $PID 2>/dev/null)%"
 
             # Get process threads
-            echo "Thread count: $(ps -M $1 | wc -l)"
+            echo "Thread count: $(ps -M $PID 2>/dev/null | grep -v USER | wc -l | tr -d ' ')"
 
-            # On macOS, check for GPU info
+            # Get open file descriptors
+            echo "Open FDs: $(lsof -p $PID 2>/dev/null | wc -l | tr -d ' ')"
+
+            # Show top child processes by memory
+            echo "Child processes:"
+            ps -o pid,%cpu,%mem,command -p $(pgrep -P $PID) 2>/dev/null | head -n 5
+
+            # Check Metal info
             if command -v system_profiler &>/dev/null; then
-              system_profiler SPDisplaysDataType | grep -A 3 "Metal:"
+              METAL_INFO=$(system_profiler SPDisplaysDataType 2>/dev/null | grep -A 3 "Metal:")
+              if [ ! -z "$METAL_INFO" ]; then
+                echo "Metal Info: $METAL_INFO"
+              fi
             fi
 
             echo "-------------------------------------"
             sleep 5
           done
+
+          echo "Process $PID no longer exists as of $(date)"
           EOF
 
           chmod +x monitor.sh
 
-          # Start test with monitoring
-          ./monitor.sh $$ > monitoring.log &
+          # Launch the test and capture its PID
+          echo "Starting integration test..."
+          RUST_LOG=debug INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" ./integration_test/ai_integration_test --test-threads=1 --nocapture huggingface_test > test_output.log 2>&1 &
+          TEST_PID=$!
+
+          echo "Test process started with PID: $TEST_PID"
+
+          # Start monitoring the test process
+          ./monitor.sh $TEST_PID > monitoring.log &
           MONITOR_PID=$!
 
-          echo "Running test with profiling..."
-          RUST_LOG=debug INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" ./integration_test/ai_integration_test --test-threads=1 --nocapture huggingface_test
+          # Wait for test to complete
+          wait $TEST_PID
           TEST_EXIT_CODE=$?
 
           # Stop monitoring
           kill $MONITOR_PID || true
 
+          # Print test output
+          echo "Test output:"
+          cat test_output.log
+
           # Print monitoring results
           echo "Resource monitoring results:"
           cat monitoring.log
 
-          # Always set the output for the log path
+          # Upload both logs
           echo "monitoring-log=$(pwd)/monitoring.log" >> $GITHUB_OUTPUT
+          echo "test-output-log=$(pwd)/test_output.log" >> $GITHUB_OUTPUT
 
-          # Save the exit code to a file so we can use it later
           echo $TEST_EXIT_CODE > test_exit_code.txt
 
       - name: Upload monitoring logs
         uses: actions/upload-artifact@v4
-        if: always()  # Run this step regardless of previous step's status
+        if: always()
         with:
           name: huggingface-test-monitoring
-          path: monitoring.log
+          path: |
+            monitoring.log
+            test_output.log
 
       - name: Check test result
         if: always()  # Always run this step
