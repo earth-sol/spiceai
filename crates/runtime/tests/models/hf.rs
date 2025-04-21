@@ -504,6 +504,11 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
             .map_err(anyhow::Error::msg)?;
     }
 
+    let original_token = std::env::var("SPICE_HF_TOKEN").ok();
+    unsafe {
+        std::env::remove_var("SPICE_HF_TOKEN");
+    }
+
     test_request_context().scope(async {
         let model = Arc::new(create_hf_model(
             "huggingface:huggingface.co/Qwen/Qwen2.5-3B-Instruct",
@@ -558,6 +563,12 @@ None,
         insta::assert_snapshot!("chat_1_response_choices", format!("{:?}", response.choices));
 
         drop(llm_init_lock);
+
+        if let Some(token) = original_token {
+            unsafe {
+                std::env::set_var("SPICE_HF_TOKEN", token);
+            }
+        }
 
         Ok(())
     })
