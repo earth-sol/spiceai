@@ -26,6 +26,7 @@ use arrow_flight::{
 use arrow_ipc::{reader::StreamReader, writer::StreamWriter};
 use arrow_schema::SchemaRef;
 use arrow_tools::record_batch::record_to_param_values;
+use bytes::Bytes;
 use datafusion::{
     common::ParamValues,
     sql::sqlparser::{
@@ -71,9 +72,11 @@ pub(crate) async fn do_action_create_prepared_statement(
             .map_err(to_tonic_err)?;
 
     let dataset_schema = Service::serialize_schema(&dataset_schema)?;
-    let parameter_schema = Service::serialize_schema(
-        &parameter_schema.ok_or(Status::internal("no parameter schema"))?,
-    )?;
+    let parameter_schema = if let Some(schema) = &parameter_schema {
+        Service::serialize_schema(schema)?
+    } else {
+        Bytes::default()
+    };
 
     let stmt = PreparedStatement {
         query: query.to_string(),
