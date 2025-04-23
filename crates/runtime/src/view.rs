@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 use ::datafusion::sql::{TableReference, parser, sqlparser::ast};
+use datafusion::{datasource::ViewTable, error::Result, prelude::SessionContext};
 use std::collections::HashSet;
 
 pub(crate) fn get_dependent_table_names(statement: &parser::Statement) -> Vec<TableReference> {
@@ -68,4 +69,13 @@ pub(crate) fn get_dependent_table_names(statement: &parser::Statement) -> Vec<Ta
         .into_iter()
         .filter(|name| !cte_names.contains(name))
         .collect()
+}
+
+pub(crate) async fn create_view_table(
+    ctx: &SessionContext,
+    statement: &parser::Statement,
+    view: impl Into<String>,
+) -> Result<ViewTable> {
+    let plan = ctx.state().statement_to_plan(statement.clone()).await?;
+    ViewTable::try_new(plan, Some(view.into()))
 }

@@ -21,6 +21,7 @@ use arrow::{
 };
 use arrow_schema::SchemaRef;
 use async_stream::stream;
+use datafusion::datasource::TableType;
 use datafusion::logical_expr::dml::InsertOp;
 use datafusion_table_providers::util::retriable_error::{
     check_and_mark_retriable_error, is_retriable_error,
@@ -320,13 +321,26 @@ impl RefreshTask {
         let dataset_name = self.dataset_name.clone();
         let filter_converter = self.get_filter_converter(refresh);
 
-        if is_spice_internal_dataset(&dataset_name) {
-            tracing::debug!("Loading data for dataset {dataset_name}");
+        let component_type = if self.is_view_acceleration() {
+            "view"
         } else {
-            tracing::info!("Loading data for dataset {dataset_name}");
+            "dataset"
+        };
+
+        if is_spice_internal_dataset(&dataset_name) {
+            tracing::debug!("Loading data for {component_type} {dataset_name}");
+        } else {
+            tracing::info!("Loading data for {component_type} {dataset_name}");
         }
-        self.runtime_status
-            .update_dataset(&dataset_name, status::ComponentStatus::Refreshing);
+
+        if self.is_view_acceleration() {
+            self.runtime_status
+                .update_view(&dataset_name, status::ComponentStatus::Refreshing);
+        } else {
+            self.runtime_status
+                .update_dataset(&dataset_name, status::ComponentStatus::Refreshing);
+        }
+
         let refresh = refresh.clone();
         let mut filters = vec![];
         if let Some(converter) = filter_converter.as_ref() {
@@ -410,6 +424,13 @@ impl RefreshTask {
         }
     }
 
+    fn is_view_acceleration(&self) -> bool {
+        match &*self.federated {
+            FederatedTable::Immediate(provider) => provider.table_type() == TableType::View,
+            FederatedTable::Deferred(_) => false,
+        }
+    }
+
     async fn trace_dataset_loaded(
         &self,
         start_time: SystemTime,
@@ -425,17 +446,23 @@ impl RefreshTask {
                 String::new()
             };
 
+            let component_type = if self.is_view_acceleration() {
+                "view"
+            } else {
+                "dataset"
+            };
+
             if is_spice_internal_dataset(&self.dataset_name) {
                 tracing::debug!(
-                    "Loaded {num_rows} rows{memory_size} for dataset {dataset_name} in {elapsed}.",
+                    "Loaded {num_rows} rows{memory_size} for {component_type} {dataset_name} in {elapsed}.",
                 );
             } else {
                 tracing::info!(
-                    "Loaded {num_rows} rows{memory_size} for dataset {dataset_name} in {elapsed}."
+                    "Loaded {num_rows} rows{memory_size} for {component_type} {dataset_name} in {elapsed}."
                 );
                 for synchronized_table in self.sink.read().await.synchronized_tables() {
                     tracing::info!(
-                        "Loaded {num_rows} rows{memory_size} for dataset {} in {elapsed}.",
+                        "Loaded {num_rows} rows{memory_size} for {component_type} {} in {elapsed}.",
                         synchronized_table.child_dataset_name()
                     );
                 }
@@ -726,7 +753,11 @@ impl RefreshTask {
         let dataset_names = self.get_dataset_names().await;
 
         for dataset_name in dataset_names {
-            self.runtime_status.update_dataset(&dataset_name, status);
+            if self.is_view_acceleration() {
+                self.runtime_status.update_view(&dataset_name, status);
+            } else {
+                self.runtime_status.update_dataset(&dataset_name, status);
+            }
 
             if status == status::ComponentStatus::Error {
                 let labels = [KeyValue::new("dataset", dataset_name.to_string())];

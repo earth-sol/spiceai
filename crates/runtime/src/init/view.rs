@@ -82,15 +82,16 @@ impl Runtime {
 
     fn load_view(&self, view: &View) -> Result<()> {
         let df = Arc::clone(&self.df);
-        df.register_view(view.name.clone(), view.sql.clone())
-            .context(UnableToAttachViewSnafu)
-            .inspect_err(|_| {
-                self.status
-                    .update_view(&view.name, status::ComponentStatus::Error);
-            })?;
-
-        self.status
-            .update_view(&view.name, status::ComponentStatus::Ready);
+        df.register_view(
+            view.name.clone(),
+            view.sql.clone(),
+            view.acceleration.clone(),
+        )
+        .context(UnableToAttachViewSnafu)
+        .inspect_err(|_| {
+            self.status
+                .update_view(&view.name, status::ComponentStatus::Error);
+        })?;
         Ok(())
     }
 

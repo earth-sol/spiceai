@@ -21,7 +21,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{dataset::acceleration, Nameable, WithDependsOn};
+use super::{Nameable, WithDependsOn, dataset::acceleration};
 use crate::semantic::Column;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

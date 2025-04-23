@@ -20,7 +20,10 @@ use snafu::prelude::*;
 use spicepod::component::view as spicepod_view;
 use std::{collections::HashMap, fs};
 
-use super::{dataset::{acceleration, Dataset}, validate_identifier};
+use super::{
+    dataset::{Dataset, acceleration},
+    validate_identifier,
+};
 use spicepod::semantic::Column;
 
 /// [`View`] is the internal representation of the [`spicepod_view::View`] spicepod component.
