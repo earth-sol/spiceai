@@ -25,11 +25,10 @@ use crate::{
     },
     dataconnector::DataConnector,
 };
-use std::sync::Arc;
 
 // Format: Dataset taxi_trips registered (s3://spiceai-demo-datasets/taxi_trips/2024/), acceleration (duckdb), results cache enabled.
 pub fn dataset_registered_trace(
-    data_connector: &Arc<dyn DataConnector>,
+    data_connector: &dyn DataConnector,
     ds: &Dataset,
     results_cache_enabled: bool,
 ) -> String {
@@ -38,7 +37,7 @@ pub fn dataset_registered_trace(
         if acceleration.enabled {
             info.push_str(&format!(
                 ", acceleration ({})",
-                dataset_acceleration_info(Some(data_connector), acceleration)
+                acceleration_info(Some(data_connector), acceleration)
             ));
         }
     }
@@ -61,7 +60,7 @@ pub fn view_registered_trace(
         if acceleration.enabled {
             info.push_str(&format!(
                 ", acceleration ({})",
-                dataset_acceleration_info(None, acceleration)
+                acceleration_info(None, acceleration)
             ));
         }
     }
@@ -71,8 +70,8 @@ pub fn view_registered_trace(
 }
 
 // Format: sqlite:file, 30s refresh, 1hr retention, fallback on source on empty result
-fn dataset_acceleration_info(
-    data_connector: Option<&Arc<dyn DataConnector>>,
+fn acceleration_info(
+    data_connector: Option<&dyn DataConnector>,
     acceleration: &Acceleration,
 ) -> String {
     let mut info: String = acceleration.engine.to_string();
@@ -133,6 +132,7 @@ mod tests {
     use async_trait::async_trait;
     use datafusion::datasource::TableProvider;
     use std::any::Any;
+    use std::sync::Arc;
     use std::time::Duration;
 
     #[derive(Debug)]
@@ -164,7 +164,7 @@ mod tests {
             .expect("Failed to build dataset");
 
         let test_data_connector: Arc<dyn DataConnector> = Arc::new(TestDataConnector {});
-        let info = dataset_registered_trace(&test_data_connector, &ds, false);
+        let info = dataset_registered_trace(test_data_connector.as_ref(), &ds, false);
         assert_eq!(
             info,
             "Dataset taxi_trips registered (s3://taxi_trips/2024/)."
@@ -189,7 +189,7 @@ mod tests {
         ds.acceleration = Some(acceleration);
 
         let test_data_connector: Arc<dyn DataConnector> = Arc::new(TestDataConnector {});
-        let info = dataset_registered_trace(&test_data_connector, &ds, true);
+        let info = dataset_registered_trace(test_data_connector.as_ref(), &ds, true);
         assert_eq!(
             info,
             "Dataset taxi_trips registered (s3://taxi_trips/2024/), acceleration (arrow), results cache enabled."
@@ -222,7 +222,7 @@ mod tests {
         ds.acceleration = Some(acceleration);
 
         let test_data_connector: Arc<dyn DataConnector> = Arc::new(TestDataConnector {});
-        let info = dataset_registered_trace(&test_data_connector, &ds, false);
+        let info = dataset_registered_trace(test_data_connector.as_ref(), &ds, false);
         assert_eq!(
             info,
             "Dataset taxi_trips registered (s3://taxi_trips/2024/), acceleration (duckdb:file, append, 30s refresh, 1hr retention, fallback on source on empty result)."
