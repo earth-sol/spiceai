@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+#![allow(clippy::implicit_hasher)]
 
 use async_trait::async_trait;
 use secrecy::SecretString;
@@ -66,8 +67,8 @@ pub async fn create_worker(
 }
 
 pub async fn register_all() {
-    register_worker_factory("model", ModelWorkerFactory::new_arc()).await;
-    register_worker_factory("models", ModelWorkerFactory::new_arc()).await;
+    register_worker_factory("model", Arc::new(ModelWorkerFactory)).await;
+    register_worker_factory("models", Arc::new(ModelWorkerFactory)).await;
 }
 
 pub async fn unregister_all() {
@@ -86,17 +87,8 @@ pub trait WorkerFactory: Send + Sync {
 }
 
 /// Factory for creating model workers
+#[derive(Default)]
 pub struct ModelWorkerFactory;
-
-impl ModelWorkerFactory {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    pub fn new_arc() -> Arc<dyn WorkerFactory> {
-        Arc::new(Self::new())
-    }
-}
 
 #[async_trait]
 impl WorkerFactory for ModelWorkerFactory {
@@ -122,20 +114,17 @@ pub async fn load_worker(
     worker_config: &WorkerConfig,
     params: Arc<HashMap<String, SecretString>>,
 ) -> Result<Box<dyn SpiceWorker>> {
-    match create_worker(worker_config, params).await {
-        Some(result) => result.map_err(|e| WorkerError::WorkerCreationFailed {
-            source: workers::Error::InvalidWorkerConfig {
-                message: e.to_string(),
-            },
-        }),
-        None => {
-            // Extract worker type from "from" field
-            let parts: Vec<&str> = worker_config.from.splitn(2, ':').collect();
-            let worker_type = parts.first().map_or("", |s| *s);
+    if let Some(result) = create_worker(worker_config, params).await { result.map_err(|e| WorkerError::WorkerCreationFailed {
+        source: workers::Error::InvalidWorkerConfig {
+            message: e.to_string(),
+        },
+    }) } else {
+        // Extract worker type from "from" field
+        let parts: Vec<&str> = worker_config.from.splitn(2, ':').collect();
+        let worker_type = parts.first().map_or("", |s| *s);
 
-            Err(WorkerError::UnsupportedWorkerType {
-                worker_type: worker_type.to_string(),
-            })
-        }
+        Err(WorkerError::UnsupportedWorkerType {
+            worker_type: worker_type.to_string(),
+        })
     }
 }
