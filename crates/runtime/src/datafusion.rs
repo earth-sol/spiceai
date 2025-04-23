@@ -249,7 +249,6 @@ pub enum Table {
         data_connector: Arc<dyn DataConnector>,
         federated_read_table: FederatedTable,
     },
-    View(String),
 }
 
 struct PendingSinkRegistration {
@@ -433,9 +432,6 @@ impl DataFusion {
                 self.register_federated_table(&dataset, data_connector, federated_read_table)
                     .await?;
             }
-            Table::View(_) => unreachable!(
-                "View registration is not supported in this context. Use `register_view` instead."
-            ),
         }
 
         if matches!(dataset_mode, Mode::ReadWrite) {
@@ -1352,7 +1348,7 @@ impl DataFusion {
                 reason: format!("Failed to create view acceleration: {e}"),
             })?;
 
-        // TODO Extend and refactor (move to helper fucntionality that can be re-used with datasets logic)
+        // TODO Extend and refactor (move to helper functionality that can be re-used with datasets logic)
         let mut refresh = Refresh::new(RefreshMode::Full);
         if let Some(refresh_check_interval) = acceleration.refresh_check_interval {
             refresh = refresh.check_interval(refresh_check_interval);
