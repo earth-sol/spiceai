@@ -115,6 +115,7 @@ jobs:
         uses: ./.github/actions/setup-testoperator-data
         with:
           query_set: ${{ github.event.inputs.query_set }}
+          scale_factor: ${{ github.event.inputs.scale_factor }}
 
       - name: Setup MySQL
         run: |

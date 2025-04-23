@@ -10,6 +10,11 @@ inputs:
       - 'tpch'
       - 'tpcds'
       - 'clickbench'
+  scale_factor:
+    description: 'Scale factor'
+    required: true
+    default: '1'
+    type: string
 
 runs:
   using: 'composite'
@@ -48,6 +53,21 @@ runs:
         mc cp spice-minio/benchmarks/tpch_sf1/partsupp/ ./ --recursive
         mc cp spice-minio/benchmarks/tpch_sf1/region/ ./ --recursive
         mc cp spice-minio/benchmarks/tpch_sf1/supplier/ ./ --recursive
+
+    - name: Download File Connector TPCH Data - SF1000
+      shell: bash
+      if: inputs.query_set == 'tpch' && inputs.scale_factor == '1000'
+      run: |
+        cd /opt/spiced/data
+        mkdir ./sf1000
+        mc cp spice-minio/benchmarks/tpch_sf1000/customer.parquet ./sf1000/customer.parquet
+        mc cp spice-minio/benchmarks/tpch_sf1000/lineitem.parquet ./sf1000/lineitem.parquet
+        mc cp spice-minio/benchmarks/tpch_sf1000/nation.parquet ./sf1000/nation.parquet
+        mc cp spice-minio/benchmarks/tpch_sf1000/orders.parquet ./sf1000/orders.parquet 
+        mc cp spice-minio/benchmarks/tpch_sf1000/part.parquet ./sf1000/part.parquet
+        mc cp spice-minio/benchmarks/tpch_sf1000/partsupp.parquet ./sf1000/partsupp.parquet
+        mc cp spice-minio/benchmarks/tpch_sf1000/region.parquet ./sf1000/region.parquet
+        mc cp spice-minio/benchmarks/tpch_sf1000/supplier.parquet ./sf1000/supplier.parquet
     
     - name: Download File Connector TPCDS Data
       shell: bash
