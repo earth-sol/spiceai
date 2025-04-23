@@ -1,0 +1,31 @@
+version: v1
+kind: Spicepod
+name: file[parquet]-federated
+datasets:
+  - from: file:data/sf1000/customer.parquet
+    name: customer
+    acceleration: &acceleration
+      enabled: true
+      engine: duckdb
+      mode: file
+  - from: file:data/sf1000/lineitem.parquet
+    name: lineitem
+    acceleration: *acceleration
+  - from: file:data/sf1000/nation.parquet
+    name: nation
+    acceleration: *acceleration
+  - from: file:data/sf1000/orders.parquet
+    name: orders
+    acceleration: *acceleration
+  - from: file:data/sf1000/part.parquet
+    name: part
+    acceleration: *acceleration
+  - from: file:data/sf1000/partsupp.parquet
+    name: partsupp
+    acceleration: *acceleration
+  - from: file:data/sf1000/region.parquet
+    name: region
+    acceleration: *acceleration
+  - from: file:data/sf1000/supplier.parquet
+    name: supplier
+    acceleration: *acceleration
