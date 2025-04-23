@@ -17,10 +17,10 @@ use std::sync::Arc;
 
 use app::App;
 use axum::{
+    Extension,
     extract::Query,
     http::status,
     response::{IntoResponse, Json, Response},
-    Extension,
 };
 use csv::Writer;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ pub(crate) struct WorkerResponse {
     data: Vec<Worker>,
 }
 
-#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub(crate) struct Worker {
     /// The source of the worker
@@ -55,6 +55,19 @@ pub(crate) struct Worker {
 
     /// The role of the worker
     role: String,
+}
+
+impl From<&spicepod::component::worker::Worker> for Worker {
+    fn from(value: &spicepod::component::worker::Worker) -> Self {
+        let spicepod::component::worker::Worker {
+            from, name, role, ..
+        } = value;
+        Worker {
+            from: from.clone(),
+            name: name.clone(),
+            role: role.clone(),
+        }
+    }
 }
 
 /// List Workers
@@ -106,15 +119,7 @@ pub(crate) async fn get(
     Query(params): Query<WorkersQueryParams>,
 ) -> Response {
     let workers = match app.read().await.as_ref() {
-        Some(a) => a
-            .workers
-            .iter()
-            .map(|w| Worker {
-                from: w.from.clone(),
-                name: w.name.clone(),
-                role: w.role.clone(),
-            })
-            .collect::<Vec<Worker>>(),
+        Some(a) => a.workers.iter().map(Into::into).collect::<Vec<Worker>>(),
         None => {
             return (
                 status::StatusCode::INTERNAL_SERVER_ERROR,

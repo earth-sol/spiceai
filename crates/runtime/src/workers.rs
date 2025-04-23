@@ -114,11 +114,13 @@ pub async fn load_worker(
     worker_config: &WorkerConfig,
     params: Arc<HashMap<String, SecretString>>,
 ) -> Result<Box<dyn SpiceWorker>> {
-    if let Some(result) = create_worker(worker_config, params).await { result.map_err(|e| WorkerError::WorkerCreationFailed {
-        source: workers::Error::InvalidWorkerConfig {
-            message: e.to_string(),
-        },
-    }) } else {
+    if let Some(result) = create_worker(worker_config, params).await {
+        result.map_err(|e| WorkerError::WorkerCreationFailed {
+            source: workers::Error::InvalidWorkerConfig {
+                message: e.to_string(),
+            },
+        })
+    } else {
         // Extract worker type from "from" field
         let parts: Vec<&str> = worker_config.from.splitn(2, ':').collect();
         let worker_type = parts.first().map_or("", |s| *s);

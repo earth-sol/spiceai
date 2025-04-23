@@ -19,7 +19,7 @@ limitations under the License.
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{get_params_with_secrets, metrics, status, timing::TimeMeasurement, workers, Runtime};
+use crate::{Runtime, get_params_with_secrets, metrics, status, timing::TimeMeasurement, workers};
 use opentelemetry::KeyValue;
 use snafu::prelude::*;
 
@@ -144,6 +144,15 @@ impl Runtime {
         current_app: &Arc<app::App>,
         new_app: &Arc<app::App>,
     ) {
+        // Remove workers that are no longer in the app
+        for worker in &current_app.workers {
+            if !new_app.workers.iter().any(|w| w.name == worker.name) {
+                self.status
+                    .update_worker(&worker.name, status::ComponentStatus::Disabled);
+                self.remove_worker(worker).await;
+            }
+        }
+
         for worker in &new_app.workers {
             if let Some(current_worker) = current_app.workers.iter().find(|w| w.name == worker.name)
             {
@@ -158,15 +167,6 @@ impl Runtime {
                     self.status
                         .update_worker(&worker.name, status::ComponentStatus::Error);
                 }
-            }
-        }
-
-        // Remove workers that are no longer in the app
-        for worker in &current_app.workers {
-            if !new_app.workers.iter().any(|w| w.name == worker.name) {
-                self.status
-                    .update_worker(&worker.name, status::ComponentStatus::Disabled);
-                self.remove_worker(worker).await;
             }
         }
     }
