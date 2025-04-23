@@ -52,7 +52,7 @@ use datafusion::logical_expr::dml::InsertOp;
 use datafusion::physical_plan::collect;
 use datafusion::sql::parser::DFParser;
 use datafusion::sql::sqlparser::dialect::PostgreSqlDialect;
-use datafusion::sql::{TableReference, sqlparser};
+use datafusion::sql::{ResolvedTableReference, TableReference, sqlparser};
 use datafusion_federation::FederatedTableProviderAdaptor;
 use error::find_datafusion_root;
 use itertools::Itertools;
@@ -1293,7 +1293,9 @@ impl DataFusion {
         acceleration: acceleration::Acceleration,
         dependent_tables: &[TableReference],
     ) -> Result<()> {
-        tracing::debug!("Creating accelerated view {table:?}");
+        tracing::debug!(
+            "Creating accelerated view {table:?} with dependent tables {dependent_tables:?}"
+        );
 
         // If accelerated view depends on other tables, wait until they are ready; this is required to complete
         // initial data load and avoid errors indicating that the load can't be completed because tables are still loading or connecting
@@ -1304,15 +1306,24 @@ impl DataFusion {
             .max_duration(Some(Duration::from_secs(10)))
             .build();
         let runtime_status = self.runtime_status();
+        let dependent_tables = dependent_tables
+            .iter()
+            .cloned()
+            .map(resolve_table_reference)
+            .collect::<Vec<_>>();
 
         let _ = retry(retry_strategy, || async {
-            let statuses = runtime_status.get_dataset_statuses();
+            let statuses = runtime_status
+                .get_dataset_statuses()
+                .into_iter()
+                .map(|(key, value)| (resolve_table_reference(key), value))
+                .collect::<std::collections::HashMap<_, _>>();
 
-            if !dependent_tables.iter().all(|dependent_table| {
-                statuses.get(&dependent_table.to_string()) == Some(&status::ComponentStatus::Ready)
+            if let Some(not_ready_table) = dependent_tables.iter().find(|dependent_table| {
+                statuses.get(dependent_table) != Some(&status::ComponentStatus::Ready)
             }) {
-                tracing::trace!(
-                    "Waiting for dependent tables to be ready for view {table}. Retrying..."
+                tracing::debug!(
+                    "Dependent table {not_ready_table} is not ready for view {table}. Retrying..."
                 );
 
                 return Err(RetryError::transient(()));
@@ -1469,6 +1480,12 @@ pub fn is_spice_internal_dataset(dataset: &TableReference) -> bool {
         (None, Some(schema)) => is_spice_internal_schema(SPICE_DEFAULT_CATALOG, schema),
         _ => false,
     }
+}
+
+// Normalizes a table reference to a full table reference with catalog, schema, and table name
+// so it can be used for comparison.
+fn resolve_table_reference(table: TableReference) -> ResolvedTableReference {
+    table.resolve(SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA)
 }
 
 #[must_use]

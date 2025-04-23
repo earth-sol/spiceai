@@ -225,7 +225,7 @@ impl RuntimeStatus {
 
     /// Returns the status of all registered datasets.
     #[must_use]
-    pub fn get_dataset_statuses(&self) -> HashMap<String, ComponentStatus> {
+    pub fn get_dataset_statuses(&self) -> HashMap<TableReference, ComponentStatus> {
         let statuses = match self.statuses.read() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
@@ -233,10 +233,7 @@ impl RuntimeStatus {
 
         statuses
             .iter()
-            .filter_map(|(k, v)| {
-                k.strip_prefix("dataset:")
-                    .map(|name| (name.to_string(), *v))
-            })
+            .filter_map(|(k, v)| k.strip_prefix("dataset:").map(|name| (name.into(), *v)))
             .collect()
     }
 
