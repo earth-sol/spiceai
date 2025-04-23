@@ -616,11 +616,6 @@ impl Runtime {
                 self.status
                     .update_tool_catalog(tool_catalog.name(), ComponentStatus::Initializing);
             }
-
-            for model in &app.models {
-                self.status
-                    .update_model(&model.name, ComponentStatus::Initializing);
-            }
         }
 
         let valid_catalogs = Self::get_valid_catalogs(app, LogErrors(false));
