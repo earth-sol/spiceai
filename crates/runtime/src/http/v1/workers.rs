@@ -30,21 +30,24 @@ use crate::Runtime;
 
 use super::Format;
 
-#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::IntoParams))]
 pub struct WorkersQueryParams {
     /// The format of the response (e.g., `json` or `csv`).
     #[serde(default)]
     pub format: Format,
 }
 
-#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub(crate) struct WorkerResponse {
     object: String,
     data: Vec<Worker>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub(crate) struct Worker {
     /// The source of the worker
