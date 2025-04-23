@@ -40,6 +40,7 @@ const (
 	modelKeyFlag        = "model"
 	httpEndpointKeyFlag = "http-endpoint"
 	userAgentKeyFlag    = "user-agent"
+	temperatureFlag     = "temperature"
 )
 
 type Message struct {
@@ -52,6 +53,38 @@ type ChatRequestBody struct {
 	Model         string         `json:"model"`
 	Stream        bool           `json:"stream"`
 	StreamOptions *StreamOptions `json:"stream_options"`
+	ChatRequestOptions
+}
+
+// ChatRequestOptions contains all optional fields for chat requests
+type ChatRequestOptions struct {
+	Temperature *float32 `json:"temperature,omitempty"`
+}
+
+func NewChatRequestBody(messages []Message, model string, stream bool, streamOptions *StreamOptions) *ChatRequestBody {
+	return &ChatRequestBody{
+		Messages:      messages,
+		Model:         model,
+		Stream:        stream,
+		StreamOptions: streamOptions,
+	}
+}
+
+func ApplyChatOptions(body *ChatRequestBody, cmd *cobra.Command) (*ChatRequestBody, error) {
+	if cmd.Flags().Changed("temperature") {
+		temperature, err := cmd.Flags().GetFloat32("temperature")
+		if err != nil {
+			slog.Error("could not get temperature flag", "error", err)
+			os.Exit(1)
+		}
+		if temperature < 0 {
+			slog.Error("temperature must be greater than or equal to 0")
+			os.Exit(1)
+		}
+		body.Temperature = &temperature
+	}
+
+	return body, nil
 }
 
 type StreamOptions struct {
@@ -97,27 +130,39 @@ type OpenAIErrorResponse struct {
 }
 
 var chatCmd = &cobra.Command{
-	Use:   "chat",
+	Use:   "chat [flags] [message]",
 	Short: "Chat with the Spice.ai LLM agent",
+	Long: `Chat with the Spice.ai LLM agent.
+	With no message argument: starts an interactive chat session.
+	With one message argument: sends the message and exits.`,
 	Example: `
 # Start a chat session with local spiced instance
 spice chat --model <model>
 
 # Start a chat session with spiced instance in spice.ai cloud
 spice chat --model <model> --cloud
+
+# Send a single prompt and receive a response
+spice chat --model <model> "What is Spice.ai?"
 `,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		cloud, _ := cmd.Flags().GetBool(cloudKeyFlag)
 		rtcontext := context.NewContext().WithCloud(cloud)
-		err := rtcontext.Init()
+		err := rtcontext.Init(cmd.Flags())
 		if err != nil {
-			slog.Error("could not initialize runtime context", "error", err)
+			slog.Error("failed to initialize runtime context", "error", err)
 			os.Exit(1)
 		}
 
-		apiKey, _ := cmd.Flags().GetString("api-key")
-		if apiKey != "" {
-			rtcontext.SetApiKey(apiKey)
+		temperature, err := cmd.Flags().GetFloat32("temperature")
+		if err != nil {
+			slog.Error("could not get temperature flag", "error", err)
+			os.Exit(1)
+		}
+		if temperature < 0 {
+			slog.Error("temperature must be greater than or equal to 0")
+			os.Exit(1)
 		}
 
 		userAgent, _ := cmd.Flags().GetString(userAgentKeyFlag)
@@ -136,25 +181,26 @@ spice chat --model <model> --cloud
 			slog.Error("could not get model flag", "error", err)
 			os.Exit(1)
 		}
+
+		models, err := api.GetDataSingle[api.ModelResponse](rtcontext, "/v1/models?status=true")
+		if err != nil {
+			slog.Error("could not list models", "error", err)
+			os.Exit(1)
+		}
+
+		if len(models.Data) == 0 {
+			slog.Error("No models found")
+			os.Exit(1)
+		}
+
+		availableModels := []string{}
+		for _, model := range models.Data {
+			if model.Status == "Ready" {
+				availableModels = append(availableModels, model.Id)
+			}
+		}
+
 		if model == "" {
-			models, err := api.GetDataSingle[api.ModelResponse](rtcontext, "/v1/models?status=true")
-			if err != nil {
-				slog.Error("could not list models", "error", err)
-				os.Exit(1)
-			}
-
-			if len(models.Data) == 0 {
-				slog.Error("No models found")
-				os.Exit(1)
-			}
-
-			availableModels := []string{}
-			for _, model := range models.Data {
-				if model.Status == "Ready" {
-					availableModels = append(availableModels, model.Id)
-				}
-			}
-
 			if len(availableModels) == 0 {
 				slog.Error("No models are ready")
 				os.Exit(1)
@@ -178,52 +224,47 @@ spice chat --model <model> --cloud
 
 			cmd.Printf("Using model: %s\n", selectedModel)
 			model = selectedModel
-		}
-
-		httpEndpoint, err := cmd.Flags().GetString("http-endpoint")
-		if err != nil {
-			slog.Error("could not get http-endpoint flag", "error", err)
-			os.Exit(1)
-		}
-		if httpEndpoint != "" {
-			rtcontext.SetHttpEndpoint(httpEndpoint)
-		}
-
-		var messages []Message = []Message{}
-
-		line := liner.NewLiner()
-		line.SetCtrlCAborts(true)
-		defer line.Close()
-		for {
-			message, err := line.Prompt("chat> ")
-			if err == liner.ErrPromptAborted {
-				break
-			} else if err != nil {
-				slog.Error("reading input line", "error", err)
-				continue
+		} else {
+			modelIsAvailable := false
+			for _, availableModel := range availableModels {
+				if availableModel == model {
+					modelIsAvailable = true
+					break
+				}
 			}
 
-			line.AppendHistory(message)
-			messages = append(messages, Message{Role: "user", Content: message})
-
-			done := make(chan bool)
-			go func() {
-				util.ShowSpinner(done)
-			}()
-
-			body := &ChatRequestBody{
-				Messages:      messages,
-				Model:         model,
-				Stream:        true,
-				StreamOptions: &StreamOptions{IncludeUsage: true},
+			if !modelIsAvailable {
+				slog.Error("Requested model is not available", "model", model)
+				slog.Info("Available models", "models", strings.Join(availableModels, ", "))
+				os.Exit(1)
 			}
+		}
+
+		getChatResponse := func(messages []Message, useSpinner bool) ([]Message, error) {
+			// Only create these variables if using spinner
+			var done chan bool
+			var doneLoading bool
+
+			if useSpinner {
+				done = make(chan bool)
+				doneLoading = false
+				go func() {
+					util.ShowSpinner(done)
+				}()
+			}
+
+			body := NewChatRequestBody(messages, model, true, &StreamOptions{
+				IncludeUsage: true,
+			})
+			body, _ = ApplyChatOptions(body, cmd)
+
 			var timeAtCompletion time.Time
 			var timeAtFirstToken time.Time
 			startTime := time.Now()
 			response, err := sendChatRequest(rtcontext, body)
 			if err != nil {
 				slog.Error("failed to send chat request to spiced", "error", err)
-				continue
+				return messages, fmt.Errorf("failed to send chat request: %w", err)
 			}
 
 			scanner := bufio.NewScanner(response.Body)
@@ -231,7 +272,10 @@ spice chat --model <model> --cloud
 
 			/// Usage for the entire stream, and related timing.
 			var usage Usage
-			doneLoading := false
+
+			if useSpinner {
+				doneLoading = false
+			}
 
 			for scanner.Scan() {
 				chunk := scanner.Text()
@@ -256,14 +300,14 @@ spice chat --model <model> --cloud
 				}
 				chunk = strings.TrimPrefix(chunk, "data: ")
 
-				var chatResponse ChatCompletion = ChatCompletion{}
+				var chatResponse = ChatCompletion{}
 				err = json.Unmarshal([]byte(chunk), &chatResponse)
 				if err != nil {
 					slog.Error("failed to unmarshal chat response", "error", err)
 					continue
 				}
 
-				if !doneLoading {
+				if useSpinner && !doneLoading {
 					done <- true
 					doneLoading = true
 				}
@@ -283,12 +327,11 @@ spice chat --model <model> --cloud
 			}
 
 			if err := scanner.Err(); err != nil {
-				slog.Error("error occurred while processing the input stream", "error", err)
+				slog.Error("error occurred while processing the response stream", "error", err)
 			}
 
-			if !doneLoading {
+			if useSpinner && !doneLoading {
 				done <- true
-				doneLoading = true
 			}
 
 			if responseMessage != "" {
@@ -302,6 +345,50 @@ spice chat --model <model> --cloud
 				))
 			} else {
 				cmd.Print("\n\n")
+			}
+
+			return messages, nil
+		}
+
+		if len(args) > 0 {
+			userMessage := args[0]
+
+			var messages = []Message{
+				{Role: "user", Content: userMessage},
+			}
+
+			_, err = getChatResponse(messages, false)
+			if err != nil {
+				os.Exit(1)
+			}
+
+			return
+		}
+
+		var messages = []Message{}
+
+		line := liner.NewLiner()
+		line.SetCtrlCAborts(true)
+		defer func() {
+			if err := line.Close(); err != nil {
+				slog.Error("closing line", "error", err)
+			}
+		}()
+		for {
+			message, err := line.Prompt("chat> ")
+			if err == liner.ErrPromptAborted {
+				break
+			} else if err != nil {
+				slog.Error("reading input line", "error", err)
+				continue
+			}
+
+			line.AppendHistory(message)
+			messages = append(messages, Message{Role: "user", Content: message})
+
+			messages, err = getChatResponse(messages, true)
+			if err != nil {
+				continue
 			}
 		}
 	},
@@ -361,7 +448,7 @@ func maybeErrorEvent(chunk string, scanner *bufio.Scanner) (*OpenAIError, error)
 		errorMessage := scanner.Text()
 		errorMessage = strings.TrimPrefix(errorMessage, "data: ")
 
-		var errorResponse OpenAIErrorResponse = OpenAIErrorResponse{}
+		var errorResponse = OpenAIErrorResponse{}
 		err := json.Unmarshal([]byte(errorMessage), &errorResponse)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal: %w", err)
@@ -378,6 +465,7 @@ func init() {
 	chatCmd.Flags().String(modelKeyFlag, "", "Model to chat with")
 	chatCmd.Flags().String(httpEndpointKeyFlag, "", "HTTP endpoint for chat (default: http://localhost:8090)")
 	chatCmd.Flags().String(userAgentKeyFlag, "", "User agent to use in all requests")
+	chatCmd.Flags().Float32(temperatureFlag, 1, "Model temperature for chat request")
 
 	RootCmd.AddCommand(chatCmd)
 }

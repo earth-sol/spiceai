@@ -17,8 +17,8 @@ limitations under the License.
 use crate::component::dataset::Dataset;
 use async_trait::async_trait;
 use clickhouse_rs::Options;
-use data_components::clickhouse::ClickhouseTableFactory;
 use data_components::Read;
+use data_components::clickhouse::ClickhouseTableFactory;
 use datafusion::datasource::TableProvider;
 use datafusion_table_providers::sql::db_connection_pool::Error as DbConnectionPoolError;
 use db_connection_pool::clickhousepool::ClickhouseConnectionPool;
@@ -41,25 +41,35 @@ use crate::parameters::{ParamLookup, ParameterSpec};
 
 #[derive(Debug, Snafu)]
 pub enum Error {
-    #[snafu(display("Failed to connect to ClickHouse.\nVerify your connection configuration, and try again.\n{source}"))]
+    #[snafu(display(
+        "Failed to connect to ClickHouse.\nVerify your connection configuration, and try again.\n{source}"
+    ))]
     UnableToCreateClickhouseConnectionPool { source: DbConnectionPoolError },
 
-    #[snafu(display("An invalid connection string value was provided.\nVerify the connection string is valid, and try again.\n{source}"))]
+    #[snafu(display(
+        "An invalid connection string value was provided.\nVerify the connection string is valid, and try again.\n{source}"
+    ))]
     InvalidConnectionStringError {
         source: clickhouse_rs::errors::Error,
     },
 
-    #[snafu(display("Failed to connect to ClickHouse over TLS.\nVerify your TLS configuration, and try again.\n{source}"))]
+    #[snafu(display(
+        "Failed to connect to ClickHouse over TLS.\nVerify your TLS configuration, and try again.\n{source}"
+    ))]
     ConnectionTlsError {
         source: clickhouse_rs::errors::ConnectionError,
     },
 
-    #[snafu(display("An invalid connection string value was provided.\nVerify the connection string is valid, and try again.\n{source}"))]
+    #[snafu(display(
+        "An invalid connection string value was provided.\nVerify the connection string is valid, and try again.\n{source}"
+    ))]
     UnableToParseConnectionString { source: url::ParseError },
 
     // from url::Url: If this URL is cannot-be-a-base or does not have a host, do nothing and return Err.
     // so, this error is only possible if the URL is not a valid URL.
-    #[snafu(display("Failed to sanitize the connection string.\nVerify the connection string is valid, and try again."))]
+    #[snafu(display(
+        "Failed to sanitize the connection string.\nVerify the connection string is valid, and try again."
+    ))]
     UnableToSanitizeConnectionString,
 
     #[snafu(display(
@@ -69,28 +79,37 @@ pub enum Error {
         source: clickhouse_rs::errors::Error,
     },
 
-    #[snafu(display("Unable to connect to ClickHouse on {host}:{port}.\nEnsure that the host and port are correctly configured, and that the host is reachable."))]
+    #[snafu(display(
+        "Unable to connect to ClickHouse on {host}:{port}.\nEnsure that the host and port are correctly configured, and that the host is reachable."
+    ))]
     InvalidHostOrPortError {
         source: Box<dyn std::error::Error + Sync + Send>,
         host: String,
         port: String,
     },
 
-    #[snafu(display("Missing required parameter: '{parameter_name}'. Specify a value.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/clickhouse#configuration"))]
+    #[snafu(display(
+        "Missing required parameter: '{parameter_name}'. Specify a value.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/clickhouse#configuration"
+    ))]
     MissingRequiredParameterForConnection { parameter_name: String },
 
-    #[snafu(display("An invalid value was provided for the parameter '{parameter_name}'.\nSpecify a value of 'true' or 'false'.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/clickhouse#configuration"))]
+    #[snafu(display(
+        "An invalid value was provided for the parameter '{parameter_name}'.\nSpecify a value of 'true' or 'false'.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/clickhouse#configuration"
+    ))]
     InvalidSecureParameterValueError {
         parameter_name: String,
         source: ParseBoolError,
     },
 
-    #[snafu(display("An invalid value was provided for the parameter 'clickhouse_connection_timeout'.\nSpecify a valid integer value.\n{source}"))]
+    #[snafu(display(
+        "An invalid value was provided for the parameter 'clickhouse_connection_timeout'.\nSpecify a valid integer value.\n{source}"
+    ))]
     InvalidConnectionTimeoutValue { source: std::num::ParseIntError },
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Debug)]
 pub struct Clickhouse {
     clickhouse_factory: ClickhouseTableFactory,
 }
@@ -112,22 +131,22 @@ impl ClickhouseFactory {
 
 const PARAMETERS: &[ParameterSpec] = &[
     // clickhouse_connection_string
-    ParameterSpec::connector("connection_string").secret()
+    ParameterSpec::component("connection_string").secret()
         .description("The connection string to use to connect to the Clickhouse server. This can be used instead of providing individual connection parameters."),
     // clickhouse_pass
-    ParameterSpec::connector("pass").secret().description("The password to use to connect to the Clickhouse server."),
+    ParameterSpec::component("pass").secret().description("The password to use to connect to the Clickhouse server."),
     // clickhouse_user
-    ParameterSpec::connector("user").description("The username to use to connect to the Clickhouse server."),
+    ParameterSpec::component("user").description("The username to use to connect to the Clickhouse server."),
     // clickhouse_host
-    ParameterSpec::connector("host").description("The hostname of the Clickhouse server."),
+    ParameterSpec::component("host").description("The hostname of the Clickhouse server."),
     // clickhouse_tcp_port
-    ParameterSpec::connector("tcp_port").description("The port of the Clickhouse server."),
+    ParameterSpec::component("tcp_port").description("The port of the Clickhouse server."),
     // clickhouse_db
-    ParameterSpec::connector("db").description("The database to use on the Clickhouse server."),
+    ParameterSpec::component("db").description("The database to use on the Clickhouse server."),
     // clickhouse_secure
-    ParameterSpec::connector("secure").description("Whether to use a secure connection to the Clickhouse server."),
+    ParameterSpec::component("secure").description("Whether to use a secure connection to the Clickhouse server."),
     // connection_timeout
-    ParameterSpec::runtime("connection_timeout").description("The connection timeout in milliseconds."),
+    ParameterSpec::runtime("connection_timeout").description("The connection timeout in milliseconds.")
 ];
 
 impl DataConnectorFactory for ClickhouseFactory {

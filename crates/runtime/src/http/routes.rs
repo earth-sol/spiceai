@@ -14,39 +14,48 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::embeddings::vector_search;
+use crate::model::ModelContextLayer;
+use crate::{embeddings::vector_search, status::RuntimeStatus};
 
+use crate::Runtime;
 #[cfg(feature = "openapi")]
 use crate::http::v1::{
-    datasets::{DatasetFilter, DatasetQueryParams},
     Format,
+    datasets::{DatasetFilter, DatasetQueryParams},
 };
 use crate::request::Protocol;
-use crate::Runtime;
 use crate::{config, request::RequestContext};
 
 use app::App;
-use axum::routing::patch;
+use axum::{extract::State, routing::patch};
+use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use opentelemetry::KeyValue;
 use spicepod::component::runtime::CorsConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 #[cfg(feature = "openapi")]
-use utoipa::OpenApi;
+use utoipa::{
+    OpenApi,
+    openapi::{HttpMethod, path::Operation},
+};
 
 #[cfg(feature = "dev")]
 use utoipa_swagger_ui::SwaggerUi;
 
 use super::{metrics, v1};
+
+#[cfg(feature = "mcp")]
+use super::v1::mcp::McpState;
+
 use axum::{
+    Extension,
     body::Body,
     extract::MatchedPath,
     http::{HeaderValue, Method, Request},
     middleware::{self, Next},
     response::IntoResponse,
-    routing::{get, post, Router},
-    Extension,
+    routing::{Router, get, post},
 };
 use runtime_auth::layer::http::AuthLayer;
 use tokio::time::Instant;
@@ -78,6 +87,8 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
         v1::search::post,
         v1::chat::post,
         v1::models::get,
+        #[cfg(feature = "mcp")]
+        v1::mcp::event,
         v1::nsql::post,
         v1::eval::list,
         v1::eval::post,
@@ -90,7 +101,32 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
     components(schemas(DatasetQueryParams, DatasetFilter, Format)) // These schemas, for some reason, weren't getting picked up.
 )]
-pub struct ApiDoc;
+pub(crate) struct ApiDoc;
+
+/// Returns the `OpenAPI` documentation for the HTTP API. Adds MCP endpoints if the feature is enabled.
+#[cfg(feature = "openapi")]
+#[must_use]
+pub fn get_api_doc() -> utoipa::openapi::OpenApi {
+    let mut openai = ApiDoc::openapi();
+
+    #[cfg(feature = "mcp")]
+    {
+        openai.paths.add_path_operation(
+            "/v1/mcp/sse",
+            vec![HttpMethod::Get],
+            Operation::builder()
+                .operation_id(Some("operation_id"))
+                .tag("mcp")
+                .summary(Some("Establish an MCP SSE Connection"))
+                .description(Some(
+                    "Initiates a Server-Sent Events (SSE) connection using the Model Context Protocol (MCP) to interact with Spice tools.\n\n
+             Once connected, clients can send messages via `POST /v1/mcp/event` and receive responses through this SSE stream.",
+                ))
+                .build(),
+        );
+    }
+    openai
+}
 
 pub(crate) fn routes(
     rt: &Arc<Runtime>,
@@ -137,7 +173,7 @@ pub(crate) fn routes(
     #[cfg(feature = "dev")]
     {
         authenticated_router = authenticated_router
-            .merge(SwaggerUi::new("/docs").url("/docs/openapi.json", ApiDoc::openapi()));
+            .merge(SwaggerUi::new("/docs").url("/docs/openapi.json", get_api_doc()));
     }
 
     if cfg!(feature = "models") {
@@ -145,8 +181,11 @@ pub(crate) fn routes(
             .route("/v1/models", get(v1::models::get))
             .route("/v1/models/:name/predict", get(v1::inference::get))
             .route("/v1/predict", post(v1::inference::post))
-            .route("/v1/nsql", post(v1::nsql::post))
-            .route("/v1/chat/completions", post(v1::chat::post))
+            .route("/v1/nsql", post(v1::nsql::post).layer(ModelContextLayer))
+            .route(
+                "/v1/chat/completions",
+                post(v1::chat::post).layer(ModelContextLayer),
+            )
             .route("/v1/embeddings", post(v1::embeddings::post))
             .route("/v1/search", post(v1::search::post))
             .route("/v1/tools", get(v1::tools::list))
@@ -161,6 +200,15 @@ pub(crate) fn routes(
             .layer(Extension(vector_search))
             .layer(Extension(Arc::clone(&rt.embeds)));
     }
+
+    #[cfg(feature = "mcp")]
+    {
+        authenticated_router = authenticated_router
+            .route("/v1/mcp/sse", get(v1::mcp::sse))
+            .route("/v1/mcp/sse", post(v1::mcp::event))
+            .layer(Extension(Arc::new(McpState::default())));
+    }
+
     authenticated_router = authenticated_router
         .layer(Extension(Arc::clone(&rt.app)))
         .layer(Extension(Arc::clone(&rt.df)))
@@ -181,6 +229,7 @@ pub(crate) fn routes(
 
     unauthenticated_router
         .merge(authenticated_router)
+        .route_layer(middleware::from_fn_with_state(rt.status(), check_shutdown))
         .route_layer(middleware::from_fn(track_metrics))
         .layer(Extension(Arc::clone(&rt.app)))
         .layer(cors_layer(cors_config))
@@ -257,6 +306,28 @@ fn cors_layer(cors_config: &CorsConfig) -> CorsLayer {
         cors_config.allowed_origins
     );
 
-    cors.allow_methods([Method::GET, Method::POST, Method::PATCH])
+    cors.allow_methods([Method::GET, Method::POST, Method::PATCH, Method::OPTIONS])
+        .allow_headers([ACCEPT, CONTENT_TYPE, AUTHORIZATION])
         .allow_origin(allowed_origins)
+}
+
+async fn check_shutdown(
+    State(status): State<Arc<RuntimeStatus>>,
+    req: axum::http::Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    // Allow /health to bypass shutdown check
+    if req.uri().path() == "/health" {
+        return next.run(req).await;
+    }
+
+    if status.is_shutdown() {
+        return (
+            http::StatusCode::SERVICE_UNAVAILABLE,
+            "Runtime is shutting down",
+        )
+            .into_response();
+    }
+
+    next.run(req).await
 }

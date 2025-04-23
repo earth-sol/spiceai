@@ -17,8 +17,8 @@ limitations under the License.
 use async_trait::async_trait;
 
 use crate::component::dataset::Dataset;
-use data_components::spark_connect::SparkConnect;
 use data_components::Read;
+use data_components::spark_connect::SparkConnect;
 use datafusion::datasource::TableProvider;
 use datafusion::sql::TableReference;
 use snafu::prelude::*;
@@ -57,6 +57,12 @@ pub struct Spark {
     read_provider: Arc<dyn Read>,
 }
 
+impl std::fmt::Debug for Spark {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Spark").finish_non_exhaustive()
+    }
+}
+
 impl Spark {
     async fn new(params: Parameters) -> Result<Self> {
         let conn = params.get("remote").expose().ok();
@@ -89,7 +95,7 @@ impl SparkFactory {
     }
 }
 
-const PARAMETERS: &[ParameterSpec] = &[ParameterSpec::connector("remote").secret().required()];
+const PARAMETERS: &[ParameterSpec] = &[ParameterSpec::component("remote").secret().required()];
 
 impl DataConnectorFactory for SparkFactory {
     fn as_any(&self) -> &dyn Any {

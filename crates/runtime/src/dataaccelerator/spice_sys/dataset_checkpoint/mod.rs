@@ -21,8 +21,11 @@ limitations under the License.
 //!     `updated_at` TIMESTAMP DEFAULT `CURRENT_TIMESTAMP` ON UPDATE `CURRENT_TIMESTAMP`,
 //! );
 
-use super::{acceleration_connection, AccelerationConnection, Result};
+use std::{sync::Arc, time::SystemTime};
+
+use super::{AccelerationConnection, Result, acceleration_connection};
 use crate::component::dataset::Dataset;
+use async_trait::async_trait;
 use datafusion::arrow::datatypes::{Schema, SchemaRef};
 use serde_json;
 
@@ -37,19 +40,46 @@ mod postgres;
 #[cfg(feature = "sqlite")]
 mod sqlite;
 
+#[async_trait]
+pub trait DatasetCheckpointer: Send + Sync {
+    async fn exists(&self) -> bool;
+    async fn checkpoint(&self, schema: &SchemaRef) -> Result<()>;
+    async fn get_schema(&self) -> Result<Option<SchemaRef>>;
+    async fn last_checkpoint_time(&self) -> Result<Option<SystemTime>>;
+}
+
+#[async_trait]
+impl DatasetCheckpointer for DatasetCheckpoint {
+    async fn exists(&self) -> bool {
+        self.exists().await
+    }
+
+    async fn checkpoint(&self, schema: &SchemaRef) -> Result<()> {
+        self.checkpoint(schema).await
+    }
+
+    async fn get_schema(&self) -> Result<Option<SchemaRef>> {
+        self.get_schema().await
+    }
+
+    async fn last_checkpoint_time(&self) -> Result<Option<SystemTime>> {
+        self.last_checkpoint_time().await
+    }
+}
+
 pub struct DatasetCheckpoint {
     dataset_name: String,
     acceleration_connection: AccelerationConnection,
 }
 
 impl DatasetCheckpoint {
-    pub async fn try_new(dataset: &Dataset) -> Result<Self> {
+    pub async fn try_new(dataset: &Dataset) -> Result<Arc<dyn DatasetCheckpointer>> {
         let acceleration_connection = acceleration_connection(dataset, true).await?;
         Self::init(&acceleration_connection).await?;
-        Ok(Self {
+        Ok(Arc::new(Self {
             dataset_name: dataset.name.to_string(),
             acceleration_connection,
-        })
+        }) as Arc<dyn DatasetCheckpointer>)
     }
 
     async fn init(connection: &AccelerationConnection) -> Result<()> {
@@ -103,6 +133,21 @@ impl DatasetCheckpoint {
             }
             #[cfg(not(any(feature = "sqlite", feature = "duckdb", feature = "postgres")))]
             _ => false,
+        }
+    }
+
+    pub async fn last_checkpoint_time(&self) -> Result<Option<SystemTime>> {
+        match &self.acceleration_connection {
+            #[cfg(feature = "duckdb")]
+            AccelerationConnection::DuckDB(pool) => self.last_checkpoint_time_duckdb(pool),
+            #[cfg(feature = "postgres")]
+            AccelerationConnection::Postgres(pool) => {
+                self.last_checkpoint_time_postgres(pool).await
+            }
+            #[cfg(feature = "sqlite")]
+            AccelerationConnection::SQLite(conn) => self.last_checkpoint_time_sqlite(conn).await,
+            #[cfg(not(any(feature = "sqlite", feature = "duckdb", feature = "postgres")))]
+            _ => Err("No acceleration connection available".into()),
         }
     }
 

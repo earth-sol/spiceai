@@ -36,18 +36,19 @@ use async_openai::types::{
 
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
+use pin_project::pin_project;
 use serde_json::Value;
 
 use tokio::sync::mpsc;
 use tracing::{Instrument, Span};
 
-use crate::request::{AsyncMarker, RequestContext};
-use crate::tools::builtin::list_datasets::ListDatasetsTool;
-use crate::tools::SpiceModelTool;
 use crate::Runtime;
+use crate::request::{AsyncMarker, RequestContext};
+use crate::tools::SpiceModelTool;
+use crate::tools::builtin::list_datasets::ListDatasetsTool;
 
 pub struct ToolUsingChat {
-    inner_chat: Arc<Box<dyn Chat>>,
+    inner_chat: Arc<dyn Chat>,
     rt: Arc<Runtime>,
     tools: Vec<Arc<dyn SpiceModelTool>>,
     recursion_limit: Option<usize>,
@@ -56,7 +57,7 @@ pub struct ToolUsingChat {
 impl ToolUsingChat {
     #[must_use]
     pub fn new(
-        inner_chat: Arc<Box<dyn Chat>>,
+        inner_chat: Arc<dyn Chat>,
         rt: Arc<Runtime>,
         tools: Vec<Arc<dyn SpiceModelTool>>,
         recursion_limit: Option<usize>,
@@ -77,7 +78,7 @@ impl ToolUsingChat {
                 r#type: ChatCompletionToolType::Function,
                 function: FunctionObject {
                     strict: t.strict(),
-                    name: t.name().to_string(),
+                    name: encode_tool_name(t.name().to_string().as_str()),
                     description: t.description().map(|d| d.to_string()),
                     parameters: t.parameters(),
                 },
@@ -85,17 +86,12 @@ impl ToolUsingChat {
             .collect_vec()
     }
 
-    #[must_use]
-    pub fn tool_exists(&self, name: &str) -> bool {
-        self.tools.iter().any(|t| t.name() == name)
-    }
-
     /// Create a new [`CreateChatCompletionRequest`] with the system prompt injected as the first message.
     async fn prepare_req(
         &self,
         mut req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionRequest, OpenAIError> {
-        if self.tool_exists("list_datasets") {
+        if self.tools.iter().any(|t| t.name() == "list_datasets") {
             // Add messages to start of message list to pretend it has already asked to list the available datasets.
             let mut list_dataset_messages = self.create_list_dataset_messages().await?;
             list_dataset_messages.extend_from_slice(req.messages.as_slice());
@@ -137,7 +133,9 @@ impl ToolUsingChat {
 
     /// Check if a tool call is a spiced runtime tool.
     fn is_spiced_tool(&self, t: &ChatCompletionMessageToolCall) -> bool {
-        self.tools.iter().any(|tool| tool.name() == t.function.name)
+        self.tools
+            .iter()
+            .any(|tool| encode_tool_name(tool.name().as_ref()) == t.function.name)
     }
 
     /// Call a spiced runtime tool.
@@ -201,7 +199,7 @@ impl ToolUsingChat {
                 .into();
 
         let mut tool_and_response_content = vec![];
-        for t in spiced_tools {
+        for t in spiced_tools.clone() {
             let content = self.call_tool(&t.function).await;
             tool_and_response_content.push((t, content));
         }
@@ -225,6 +223,14 @@ impl ToolUsingChat {
         let mut messages = original_messages.clone();
         messages.push(assistant_message);
         messages.extend(tool_messages);
+
+        if !messages.is_empty() {
+            let used_tools = spiced_tools.len();
+            if used_tools > 0 {
+                let context = RequestContext::current(AsyncMarker::new().await);
+                crate::model::add_tools_used(&context, used_tools);
+            }
+        }
 
         Ok(Some(messages))
     }
@@ -359,8 +365,12 @@ impl Chat for ToolUsingChat {
         &self,
         req: CreateChatCompletionRequest,
     ) -> Result<ChatCompletionResponseStream, OpenAIError> {
+        let context = RequestContext::current(AsyncMarker::new().await);
         let inner_req = self.prepare_req(req).await?;
-        self.chat_stream_inner(inner_req).await
+
+        // wrap the completion stream to track the `ai_inferences_with_spice_count` when it is ready.
+        let stream = self.chat_stream_inner(inner_req).await?;
+        Ok(Box::pin(InferenceTrackingStream::new(stream, context)))
     }
 
     async fn chat_request(
@@ -368,8 +378,15 @@ impl Chat for ToolUsingChat {
         req: CreateChatCompletionRequest,
     ) -> Result<CreateChatCompletionResponse, OpenAIError> {
         let inner_req = self.prepare_req(req).await?;
-        self.chat_request_inner(inner_req, self.recursion_limit)
-            .await
+        let response = self
+            .chat_request_inner(inner_req, self.recursion_limit)
+            .await;
+
+        // track ai_inferences_with_spice_count metric
+        let context = RequestContext::current(AsyncMarker::new().await);
+        crate::model::track_ai_inferences_with_spice_count(&context);
+
+        response
     }
 
     fn as_sql(&self) -> Option<&dyn SqlGeneration> {
@@ -694,4 +711,45 @@ fn make_a_stream(
             .instrument(span),
     );
     Box::pin(CustomStream { receiver }) as ChatCompletionResponseStream
+}
+
+// OpenAI tools must satisfy '^[a-zA-Z0-9_-]+$'. Commonly external tools may have '/' in their name.
+fn encode_tool_name(name: &str) -> String {
+    if name.contains('/') {
+        name.replace('_', "__").replace('/', "_")
+    } else {
+        name.to_string()
+    }
+}
+
+#[pin_project]
+struct InferenceTrackingStream<S> {
+    #[pin]
+    stream: S,
+    context: Arc<RequestContext>,
+}
+
+impl<S: Stream> InferenceTrackingStream<S> {
+    pub fn new(stream: S, context: Arc<RequestContext>) -> Self {
+        InferenceTrackingStream { stream, context }
+    }
+}
+
+impl<S: Stream> Stream for InferenceTrackingStream<S> {
+    type Item = S::Item;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut this = self.project();
+        let stream = &mut this.stream;
+        let context = this.context;
+
+        match stream.as_mut().poll_next(cx) {
+            Poll::Ready(None) => {
+                let context = Arc::clone(context);
+                crate::model::track_ai_inferences_with_spice_count(&context);
+                Poll::Ready(None)
+            }
+            Poll::Ready(Some(item)) => Poll::Ready(Some(item)),
+            Poll::Pending => Poll::Pending,
+        }
+    }
 }

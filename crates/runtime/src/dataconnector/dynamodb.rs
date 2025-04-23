@@ -28,11 +28,12 @@ use super::{
     ParameterSpec, Parameters,
 };
 
+#[derive(Debug)]
 pub struct DynamoDB {
     params: Parameters,
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Debug, Copy, Clone)]
 pub struct DynamoDBFactory {}
 
 impl DynamoDBFactory {
@@ -49,17 +50,17 @@ impl DynamoDBFactory {
 
 const PARAMETERS: &[ParameterSpec] = &[
     // Connector parameters
-    ParameterSpec::connector("aws_region")
+    ParameterSpec::component("aws_region")
         .description("The AWS region to use for DynamoDB.")
         .required()
         .secret(),
-    ParameterSpec::connector("aws_access_key_id")
+    ParameterSpec::component("aws_access_key_id")
         .description("The AWS access key ID to use for DynamoDB.")
         .secret(),
-    ParameterSpec::connector("aws_secret_access_key")
+    ParameterSpec::component("aws_secret_access_key")
         .description("The AWS secret access key to use for DynamoDB.")
         .secret(),
-    ParameterSpec::connector("aws_session_token")
+    ParameterSpec::component("aws_session_token")
         .description("The AWS session token to use for DynamoDB.")
         .secret(),
 ];
@@ -145,7 +146,7 @@ impl DataConnector for DynamoDB {
                     "DynamoDBTableProvider",
                 );
 
-                aws_config::defaults(BehaviorVersion::v2024_03_28())
+                aws_config::defaults(BehaviorVersion::v2025_01_17())
                     .region(Region::new(region))
                     .credentials_provider(credentials)
                     .load()
@@ -153,7 +154,7 @@ impl DataConnector for DynamoDB {
             }
             _ => {
                 // This will automatically load AWS credentials from the environment, via IAM roles if configured.
-                aws_config::defaults(BehaviorVersion::v2024_03_28())
+                aws_config::defaults(BehaviorVersion::v2025_01_17())
                     .region(Region::new(region))
                     .load()
                     .await

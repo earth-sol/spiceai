@@ -20,8 +20,8 @@ use super::DataConnector;
 use super::DataConnectorFactory;
 use super::ParameterSpec;
 use async_trait::async_trait;
-use data_components::snowflake::SnowflakeTableFactory;
 use data_components::Read;
+use data_components::snowflake::SnowflakeTableFactory;
 use datafusion_table_providers::sql::db_connection_pool::DbConnectionPool;
 
 use crate::component::dataset::Dataset;
@@ -45,6 +45,7 @@ pub enum Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Debug)]
 pub struct Snowflake {
     table_factory: SnowflakeTableFactory,
 }
@@ -65,14 +66,14 @@ impl SnowflakeFactory {
 }
 
 const PARAMETERS: &[ParameterSpec] = &[
-    ParameterSpec::connector("username").secret(),
-    ParameterSpec::connector("password").secret(),
-    ParameterSpec::connector("private_key_path").secret(),
-    ParameterSpec::connector("private_key_passphrase").secret(),
-    ParameterSpec::connector("account").secret(),
-    ParameterSpec::connector("warehouse").secret(),
-    ParameterSpec::connector("role").secret(),
-    ParameterSpec::connector("auth_type"),
+    ParameterSpec::component("username").secret(),
+    ParameterSpec::component("password").secret(),
+    ParameterSpec::component("private_key_path").secret(),
+    ParameterSpec::component("private_key_passphrase").secret(),
+    ParameterSpec::component("account").secret(),
+    ParameterSpec::component("warehouse").secret(),
+    ParameterSpec::component("role").secret(),
+    ParameterSpec::component("auth_type"),
 ];
 
 impl DataConnectorFactory for SnowflakeFactory {

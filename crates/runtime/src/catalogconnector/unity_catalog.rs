@@ -18,17 +18,17 @@ use super::CatalogConnector;
 use super::ConnectorComponent;
 use super::ParameterSpec;
 use super::Parameters;
+use crate::Runtime;
 use crate::component::catalog::Catalog;
 use crate::dataconnector::ConnectorParams;
 use crate::get_params_with_secrets;
-use crate::Runtime;
 use async_trait::async_trait;
-use data_components::delta_lake::DeltaTableFactory;
-use data_components::unity_catalog::provider::UnityCatalogProvider;
-use data_components::unity_catalog::UCTable;
-use data_components::unity_catalog::UnityCatalog as UnityCatalogClient;
 use data_components::Read;
 use data_components::RefreshableCatalogProvider;
+use data_components::delta_lake::DeltaTableFactory;
+use data_components::unity_catalog::UCTable;
+use data_components::unity_catalog::UnityCatalog as UnityCatalogClient;
+use data_components::unity_catalog::provider::UnityCatalogProvider;
 use datafusion::sql::TableReference;
 use secrecy::SecretString;
 use snafu::ResultExt;
@@ -51,43 +51,43 @@ impl UnityCatalog {
 }
 
 pub(crate) const PARAMETERS: &[ParameterSpec] = &[
-    ParameterSpec::connector("token").secret().description(
+    ParameterSpec::component("token").secret().description(
         "The personal access token used to authenticate against the Unity Catalog API.",
     ),
     // S3 storage options
-    ParameterSpec::connector("aws_region")
+    ParameterSpec::component("aws_region")
         .description("The AWS region to use for S3 storage.")
         .secret(),
-    ParameterSpec::connector("aws_access_key_id")
+    ParameterSpec::component("aws_access_key_id")
         .description("The AWS access key ID to use for S3 storage.")
         .secret(),
-    ParameterSpec::connector("aws_secret_access_key")
+    ParameterSpec::component("aws_secret_access_key")
         .description("The AWS secret access key to use for S3 storage.")
         .secret(),
-    ParameterSpec::connector("aws_endpoint")
+    ParameterSpec::component("aws_endpoint")
         .description("The AWS endpoint to use for S3 storage.")
         .secret(),
     // Azure storage options
-    ParameterSpec::connector("azure_storage_account_name")
+    ParameterSpec::component("azure_storage_account_name")
         .description("The storage account to use for Azure storage.")
         .secret(),
-    ParameterSpec::connector("azure_storage_account_key")
+    ParameterSpec::component("azure_storage_account_key")
         .description("The storage account key to use for Azure storage.")
         .secret(),
-    ParameterSpec::connector("azure_storage_client_id")
+    ParameterSpec::component("azure_storage_client_id")
         .description("The service principal client id for accessing the storage account.")
         .secret(),
-    ParameterSpec::connector("azure_storage_client_secret")
+    ParameterSpec::component("azure_storage_client_secret")
         .description("The service principal client secret for accessing the storage account.")
         .secret(),
-    ParameterSpec::connector("azure_storage_sas_key")
+    ParameterSpec::component("azure_storage_sas_key")
         .description("The shared access signature key for accessing the storage account.")
         .secret(),
-    ParameterSpec::connector("azure_storage_endpoint")
+    ParameterSpec::component("azure_storage_endpoint")
         .description("The endpoint for the Azure Blob storage account.")
         .secret(),
     // GCS storage options
-    ParameterSpec::connector("google_service_account")
+    ParameterSpec::component("google_service_account")
         .description("Filesystem path to the Google service account JSON key file.")
         .secret(),
 ];
@@ -100,7 +100,7 @@ impl CatalogConnector for UnityCatalog {
 
     async fn refreshable_catalog_provider(
         self: Arc<Self>,
-        runtime: &Runtime,
+        runtime: Arc<Runtime>,
         catalog: &Catalog,
     ) -> super::Result<Arc<dyn RefreshableCatalogProvider>> {
         let Some(catalog_id) = catalog.catalog_id.clone() else {
@@ -173,7 +173,7 @@ impl CatalogConnector for UnityCatalog {
                     connector: "unity_catalog".to_string(),
                     connector_component: ConnectorComponent::from(catalog),
                     source: Box::new(e),
-                })
+                });
             }
         };
 

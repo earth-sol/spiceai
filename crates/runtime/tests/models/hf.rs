@@ -25,10 +25,10 @@ use async_openai::types::{
 };
 use llms::chat::create_hf_model;
 use runtime::{
+    Runtime,
     auth::EndpointAuth,
     model::ToolUsingChat,
     tools::{options::SpiceToolsOptions, utils::get_tools},
-    Runtime,
 };
 use spicepod::component::{
     embeddings::{ColumnEmbeddingConfig, Embeddings},
@@ -42,7 +42,7 @@ use crate::{
     init_tracing, init_tracing_with_task_history,
     models::{
         create_api_bindings_config,
-        embedding::{run_embedding_tests, EmbeddingTestCase},
+        embedding::{EmbeddingTestCase, run_embedding_tests},
         get_taxi_trips_dataset, get_tpcds_dataset, normalize_chat_completion_response,
         send_chat_completions_request,
     },
@@ -64,7 +64,7 @@ mod nsql {
     use serde_json::json;
 
     use crate::{
-        models::nsql::{run_nsql_test, TestCase},
+        models::nsql::{TestCase, run_nsql_test},
         utils::verify_env_secret_exists,
     };
 
@@ -123,7 +123,7 @@ mod nsql {
                     () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
                         return Err(anyhow::anyhow!("Timed out waiting for components to load"));
                     }
-                    () = rt.load_components() => {}
+                    () = Arc::clone(&rt).load_components() => {}
                 }
 
                 drop(llm_init_lock);
@@ -181,11 +181,12 @@ mod search {
     use serde_json::json;
     use spicepod::component::embeddings::EmbeddingChunkConfig;
 
-    use crate::models::search::{run_search_test, TestCase};
+    use crate::models::search::{TestCase, run_search_test};
 
     use super::*;
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn huggingface_test_search() -> Result<(), anyhow::Error> {
         let _tracing = init_tracing(None);
 
@@ -200,7 +201,7 @@ mod search {
                 }];
 
                 let mut ds_tpcds_cp_with_chunking =
-                    get_tpcds_dataset("catalog_page", Some("catalog_page_with_chunking"), Some("select cp_description, cp_catalog_page_sk from catalog_page_with_chunking limit 20"));
+                    get_tpcds_dataset("catalog_page", Some("catalog_page_with_chunking"), Some("select cp_description, cp_catalog_page_sk, cp_department, cp_catalog_number from catalog_page_with_chunking limit 20"));
                 ds_tpcds_cp_with_chunking.embeddings = vec![ColumnEmbeddingConfig {
                     column: "cp_description".to_string(),
                     model: "hf_minilm".to_string(),
@@ -213,9 +214,24 @@ mod search {
                     }),
                 }];
 
+                let mut ds_tpcds_cp_with_chunking_no_pk =
+                    get_tpcds_dataset("catalog_page", Some("catalog_page_with_chunking_no_pk"), Some("select cp_description, cp_catalog_page_sk, cp_department, cp_catalog_number from catalog_page_with_chunking_no_pk limit 20"));
+                ds_tpcds_cp_with_chunking_no_pk.embeddings = vec![ColumnEmbeddingConfig {
+                    column: "cp_description".to_string(),
+                    model: "hf_minilm".to_string(),
+                    primary_keys: None,
+                    chunking: Some(EmbeddingChunkConfig {
+                        enabled: true,
+                        target_chunk_size: 512,
+                        overlap_size: 128,
+                        trim_whitespace: false,
+                    }),
+                }];
+
                 let app = AppBuilder::new("text-to-sql")
                     .with_dataset(ds_tpcds_item)
                     .with_dataset(ds_tpcds_cp_with_chunking)
+                    .with_dataset(ds_tpcds_cp_with_chunking_no_pk)
                     .with_embedding(get_huggingface_embeddings(
                         "sentence-transformers/all-MiniLM-L6-v2",
                         "hf_minilm",
@@ -237,7 +253,7 @@ mod search {
                     () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                         return Err(anyhow::anyhow!("Timed out waiting for components to load"));
                     }
-                    () = rt.load_components() => {}
+                    () = Arc::clone(&rt).load_components() => {}
                 }
 
                 runtime_ready_check(&rt).await;
@@ -264,6 +280,70 @@ mod search {
                         body: json!({
                             "text": "friends",
                             "datasets": ["catalog_page_with_chunking"],
+                            "limit": 1,
+                        }),
+                    },
+                    TestCase {
+                        name: "hf_chunking_with_extra_columns",
+                        body: json!({
+                            "text": "friends",
+                            "datasets": ["catalog_page_with_chunking"],
+                            "additional_columns": ["cp_department"],
+                            "limit": 1,
+                        }),
+                    },
+                    TestCase {
+                        name: "hf_chunking_with_extra_columns2",
+                        body: json!({
+                            "text": "friends",
+                            "datasets": ["catalog_page_with_chunking"],
+                            "additional_columns": ["cp_catalog_page_sk", "cp_department", "cp_description"],
+                            "limit": 1,
+                        }),
+                    },
+                    TestCase {
+                        name: "hf_chunking_with_extra_columns_and_where",
+                        body: json!({
+                            "text": "friends",
+                            "datasets": ["catalog_page_with_chunking"],
+                            "additional_columns": ["cp_department"],
+                            "where": "cp_catalog_number>0",
+                            "limit": 1,
+                        }),
+                    },
+                    TestCase {
+                        name: "hf_chunking_no_pk",
+                        body: json!({
+                            "text": "friends",
+                            "datasets": ["catalog_page_with_chunking_no_pk"],
+                            "limit": 1,
+                        }),
+                    },
+                    TestCase {
+                        name: "hf_chunking_with_extra_column_no_pk",
+                        body: json!({
+                            "text": "friends",
+                            "datasets": ["catalog_page_with_chunking_no_pk"],
+                            "additional_columns": ["cp_department"],
+                            "limit": 1,
+                        }),
+                    },
+                    TestCase {
+                        name: "hf_chunking_with_extra_column_no_pk2",
+                        body: json!({
+                            "text": "friends",
+                            "datasets": ["catalog_page_with_chunking_no_pk"],
+                            "additional_columns": ["cp_catalog_page_sk", "cp_department", "cp_description"],
+                            "limit": 1,
+                        }),
+                    },
+                    TestCase {
+                        name: "hf_chunking_with_extra_columns_and_where_no_pk",
+                        body: json!({
+                            "text": "friends",
+                            "datasets": ["catalog_page_with_chunking_no_pk"],
+                            "additional_columns": ["cp_department"],
+                            "where": "cp_catalog_number>0",
                             "limit": 1,
                         }),
                     },
@@ -351,6 +431,7 @@ async fn huggingface_test_embeddings() -> Result<(), anyhow::Error> {
 }
 
 #[tokio::test]
+#[ignore] // https://github.com/spiceai/spiceai/issues/4943
 async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
     let _tracing = init_tracing(None);
 
@@ -387,7 +468,7 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
             () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
                 return Err(anyhow::anyhow!("Timed out waiting for components to load"));
             }
-            () = rt.load_components() => {}
+            () = Arc::clone(&rt).load_components() => {}
         }
 
         drop(llm_init_lock);
@@ -414,6 +495,7 @@ async fn huggingface_test_chat_completion() -> Result<(), anyhow::Error> {
 }
 
 #[tokio::test]
+#[ignore] // https://github.com/spiceai/spiceai/issues/4943
 async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
     if HF_TEST_MODEL_REQUIRES_HF_API_KEY {
         verify_env_secret_exists("SPICE_HF_TOKEN")
@@ -442,7 +524,7 @@ async fn huggingface_test_chat_messages() -> Result<(), anyhow::Error> {
             () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
                 return Err(anyhow::anyhow!("Timed out waiting for components to load"));
             }
-            () = rt.load_components() => {}
+            () = Arc::clone(&rt).load_components() => {}
         }
 
         drop(llm_init_lock);

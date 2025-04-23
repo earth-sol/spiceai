@@ -21,7 +21,9 @@ use tokio::sync::RwLock;
 use workers::WorkerRegistry;
 
 use crate::{
-    catalogconnector, dataaccelerator, dataconnector,
+    Runtime, catalogconnector,
+    dataaccelerator::AcceleratorEngineRegistry,
+    dataconnector,
     datafusion::DataFusion,
     datasets_health_monitor::DatasetsHealthMonitor,
     extension::{Extension, ExtensionFactory},
@@ -30,8 +32,10 @@ use crate::{
     secrets::{self, Secrets},
     status,
     timing::TimeMeasurement,
-    tools, tracers, Runtime,
+    tools, tracers,
 };
+
+type DatafusionConfigurationCallback = fn(&mut DataFusion);
 
 pub struct RuntimeBuilder {
     app: Option<Arc<app::App>>,
@@ -41,9 +45,10 @@ pub struct RuntimeBuilder {
     datasets_health_monitor_enabled: bool,
     metrics_endpoint: Option<SocketAddr>,
     prometheus_registry: Option<prometheus::Registry>,
-    datafusion: Option<Arc<DataFusion>>,
-    runtime_status: Option<Arc<status::RuntimeStatus>>,
+    runtime_status: Arc<status::RuntimeStatus>,
     rate_limits: Option<Arc<RateLimits>>,
+    accelerator_engine_registry: Arc<AcceleratorEngineRegistry>,
+    datafusion_configuration_fn: Option<DatafusionConfigurationCallback>,
 }
 
 impl RuntimeBuilder {
@@ -55,10 +60,11 @@ impl RuntimeBuilder {
             datasets_health_monitor_enabled: false,
             metrics_endpoint: None,
             prometheus_registry: None,
-            datafusion: None,
             autoload_extensions: HashMap::new(),
-            runtime_status: None,
+            runtime_status: status::RuntimeStatus::new(),
             rate_limits: None,
+            accelerator_engine_registry: Arc::new(AcceleratorEngineRegistry::new()),
+            datafusion_configuration_fn: None,
         }
     }
 
@@ -116,13 +122,12 @@ impl RuntimeBuilder {
         self
     }
 
-    pub fn with_datafusion(mut self, datafusion: Arc<DataFusion>) -> Self {
-        self.datafusion = Some(datafusion);
-        self
-    }
-
-    pub fn with_runtime_status(mut self, runtime_status: Arc<status::RuntimeStatus>) -> Self {
-        self.runtime_status = Some(runtime_status);
+    /// Used to configure `DataFusion` in integration tests & test CI
+    pub fn with_datafusion_configuration_fn(
+        mut self,
+        callback: DatafusionConfigurationCallback,
+    ) -> Self {
+        self.datafusion_configuration_fn = Some(callback);
         self
     }
 
@@ -132,21 +137,23 @@ impl RuntimeBuilder {
     }
 
     pub async fn build(self) -> Runtime {
+        self.accelerator_engine_registry.register_all().await;
         dataconnector::register_all().await;
         catalogconnector::register_all().await;
-        dataaccelerator::register_all().await;
         tools::factory::register_all_factories().await;
         document_parse::register_all().await;
 
-        let status = match self.runtime_status {
-            Some(status) => status,
-            None => status::RuntimeStatus::new(),
-        };
+        let mut df = DataFusion::builder(
+            Arc::clone(&self.runtime_status),
+            Arc::clone(&self.accelerator_engine_registry),
+        )
+        .build();
 
-        let df = match self.datafusion {
-            Some(df) => df,
-            None => Arc::new(DataFusion::builder(Arc::clone(&status)).build()),
-        };
+        if let Some(callback) = self.datafusion_configuration_fn {
+            callback(&mut df);
+        }
+
+        let df = Arc::new(df);
 
         let datasets_health_monitor = if self.datasets_health_monitor_enabled {
             let is_task_history_enabled = self
@@ -187,7 +194,9 @@ impl RuntimeBuilder {
             metrics_endpoint: self.metrics_endpoint,
             prometheus_registry: self.prometheus_registry,
             rate_limits: self.rate_limits.unwrap_or_default(),
-            status,
+            status: self.runtime_status,
+            runtime_tasks: Arc::new(RwLock::new(HashMap::new())),
+            accelerator_engine_registry: self.accelerator_engine_registry,
             workers: Arc::new(RwLock::new(WorkerRegistry::new())),
         };
 

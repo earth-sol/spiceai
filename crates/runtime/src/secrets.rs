@@ -148,7 +148,7 @@ impl Secrets {
         // Append the remaining text after the last match
         result.push_str(&param_str.0[last_end..]);
 
-        SecretString::new(result)
+        SecretString::from(result)
     }
 
     /// Gets a secret key from the connected secret stores in precedence order.
@@ -368,7 +368,7 @@ mod tests {
         secrets.load_from(&[]).await.expect("to load successfully"); // Will automatically load `env` as the default
 
         let key = &format!("MY_SECRET_KEY_{}", rand::random::<u64>());
-        std::env::set_var(key, "super_secret");
+        unsafe { std::env::set_var(key, "super_secret") };
 
         let result = secrets
             .inject_secrets(
@@ -376,10 +376,7 @@ mod tests {
                 super::ParamStr(&format!("This is a secret: ${{ env:{key} }}! 🫡")),
             )
             .await;
-        assert_eq!(
-            "This is a secret: super_secret! 🫡",
-            result.expose_secret().as_str()
-        );
+        assert_eq!("This is a secret: super_secret! 🫡", result.expose_secret());
     }
 
     #[tokio::test]
@@ -390,7 +387,7 @@ mod tests {
         let key = &format!("MY_SECRET_KEY_{}", rand::random::<u64>());
 
         // Ensure `MY_SECRET_KEY` is not set from other tests.
-        std::env::remove_var(key);
+        unsafe { std::env::remove_var(key) };
 
         let result = secrets
             .inject_secrets(
@@ -398,6 +395,6 @@ mod tests {
                 super::ParamStr(&format!("This is a secret: ${{ env:{key} }}! 🫡")),
             )
             .await;
-        assert_eq!("This is a secret: ! 🫡", result.expose_secret().as_str());
+        assert_eq!("This is a secret: ! 🫡", result.expose_secret());
     }
 }

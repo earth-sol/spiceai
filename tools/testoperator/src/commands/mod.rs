@@ -21,6 +21,8 @@ use test_framework::{
     anyhow, app::App, spiced::StartRequest, spicepod::Spicepod, spicepod_utils::from_app,
 };
 
+#[cfg(feature = "append")]
+pub(crate) mod append;
 pub(crate) mod bench;
 pub(crate) mod data_consistency;
 pub(crate) mod dispatch;
@@ -29,9 +31,15 @@ pub(crate) mod http;
 pub(crate) mod load;
 pub(crate) mod throughput;
 mod util;
+pub(crate) mod vector_search;
 pub(crate) type RowCounts = BTreeMap<String, usize>;
 
 pub(crate) fn get_app_and_start_request(args: &CommonArgs) -> anyhow::Result<(App, StartRequest)> {
+    if !args.metrics {
+        // call the meter to set telemetry to no-op, because the OnceLock hasn't been set yet
+        test_framework::telemetry::METER_PROVIDER.meter("benchmarks_telemetry");
+    }
+
     let spicepod = Spicepod::load_exact(args.spicepod_path.clone())?;
     let app = test_framework::app::AppBuilder::new(spicepod.name.clone())
         .with_spicepod(spicepod)
@@ -58,5 +66,22 @@ pub(crate) fn env_export(args: &CommonArgs) -> anyhow::Result<()> {
         tempdir_path.to_string_lossy()
     );
 
+    // Wait for input before exiting
+    println!("Press Enter to exit...");
+    std::io::stdin().read_line(&mut String::new())?;
+
     Ok(())
+}
+
+#[macro_export]
+macro_rules! wait_test_and_memory {
+    ($test:expr, $memory_token:expr, $memory_readings:expr) => {
+        match $test.wait().await {
+            Ok(test) => test,
+            Err(e) => {
+                observe_memory($memory_token, $memory_readings).await?;
+                return Err(e);
+            }
+        }
+    };
 }

@@ -17,15 +17,29 @@ limitations under the License.
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use match_::MatchScorer;
+use snafu::Snafu;
 use tokio::sync::RwLock;
 
 use super::{DatasetInput, DatasetOutput};
 
+#[cfg(feature = "models")]
+pub mod embed;
+#[cfg(feature = "models")]
+pub use embed::EmbedScorer;
+#[cfg(feature = "models")]
 pub mod fuzzy_match;
+#[cfg(feature = "models")]
 pub mod includes;
+#[cfg(feature = "models")]
 pub mod json_match;
+#[cfg(feature = "models")]
+pub mod levenshtein;
+#[cfg(feature = "models")]
 pub mod match_;
+#[cfg(feature = "models")]
+pub mod modelgraded;
+#[cfg(feature = "models")]
+pub use modelgraded::ModelGradedScorer;
 
 #[async_trait]
 pub trait Scorer: Sync + Send {
@@ -34,11 +48,29 @@ pub trait Scorer: Sync + Send {
         input: &DatasetInput,
         actual: &DatasetOutput,
         ideal: &DatasetOutput,
-    ) -> f32;
+    ) -> Result<f32>;
 
     /// Compute the relevant metrics for this [`Scorer`], given a precomputed scores.
     fn metrics(&self, scores: &[f32]) -> Vec<(String, f32)>;
 }
+
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display(
+        "Could not score case [input={input:?}, actual={actual:?}, expected={ideal:?}]. Error: {source}"
+    ))]
+    ErrorScoringCase {
+        input: DatasetInput,
+        actual: DatasetOutput,
+        ideal: DatasetOutput,
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[snafu(display("Scorer failed: {} - {}", name, source))]
+    ScorerFailed { name: String, source: Box<Error> },
+}
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub type EvalScorerRegistry = Arc<RwLock<HashMap<String, Arc<dyn Scorer>>>>;
 
@@ -48,11 +80,18 @@ pub(crate) async fn score_results(
     actual: &[DatasetOutput],
     expected: &[DatasetOutput],
     scorers: &HashMap<String, Arc<dyn Scorer>>,
-) -> HashMap<String, Vec<f32>> {
+) -> Result<HashMap<String, Vec<f32>>> {
     let mut aggregate: HashMap<String, Vec<f32>> = HashMap::with_capacity(actual.len());
     for ((input, actual), expected) in input.iter().zip(actual.iter()).zip(expected.iter()) {
         for (name, scorer) in scorers {
-            let s = scorer.score(input, actual, expected).await;
+            let s =
+                scorer
+                    .score(input, actual, expected)
+                    .await
+                    .map_err(|e| Error::ScorerFailed {
+                        name: name.clone(),
+                        source: Box::new(e),
+                    })?;
             if let Some(scorer_results) = aggregate.get_mut(name) {
                 scorer_results.push(s);
             } else {
@@ -60,17 +99,25 @@ pub(crate) async fn score_results(
             };
         }
     }
-    aggregate
+    Ok(aggregate)
 }
 
 #[must_use]
 pub fn builtin_scorer() -> Vec<(&'static str, Arc<dyn Scorer>)> {
-    vec![
-        ("match", Arc::new(MatchScorer {})),
-        ("json_match", Arc::new(json_match::JsonMatch {})),
-        ("includes", Arc::new(includes::Includes {})),
-        ("fuzzy_match", Arc::new(fuzzy_match::FuzzyMatch {})),
-    ]
+    #[cfg(feature = "models")]
+    {
+        vec![
+            ("levenshtein", Arc::new(levenshtein::Levenshtein {})),
+            ("match", Arc::new(match_::MatchScorer {})),
+            ("json_match", Arc::new(json_match::JsonMatch {})),
+            ("includes", Arc::new(includes::Includes {})),
+            ("fuzzy_match", Arc::new(fuzzy_match::FuzzyMatch {})),
+        ]
+    }
+    #[cfg(not(feature = "models"))]
+    {
+        vec![]
+    }
 }
 
 #[allow(clippy::cast_precision_loss)]
@@ -81,4 +128,14 @@ fn mean(values: &[f32]) -> f32 {
     }
 
     values.iter().sum::<f32>() / n as f32
+}
+
+fn extract_text(output: &DatasetOutput) -> String {
+    match output {
+        DatasetOutput::AssistantResponse(text) => text.clone(),
+        DatasetOutput::Choices(choices) => choices
+            .first()
+            .map(|choice| choice.message.content.clone().unwrap_or_default())
+            .unwrap_or_default(),
+    }
 }

@@ -19,8 +19,8 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 use app::App;
 use arrow::array::{LargeStringArray, RecordBatch, StringArray, StringViewArray};
 use arrow::error::ArrowError;
-use arrow::util::pretty::pretty_format_batches;
 use arrow_schema::{Schema, SchemaRef};
+use arrow_tools::format::to_markdown_documents;
 use async_openai::types::EmbeddingInput;
 use datafusion::common::utils::quote_identifier;
 use datafusion::sql::sqlparser;
@@ -55,7 +55,9 @@ pub enum Error {
     #[snafu(display("Failed to find table '{}'. An internal error occurred during vector search.\nReport a bug on GitHub: https://github.com/spiceai/spiceai/issues", table.to_quoted_string()))]
     DataSourceNotFound { table: TableReference },
 
-    #[snafu(display("Vector search failed: No tables with embeddings are available. Ensure embeddings are configured and try again."))]
+    #[snafu(display(
+        "Vector search failed: No tables with embeddings are available. Ensure embeddings are configured and try again."
+    ))]
     NoTablesWithEmbeddingsFound {},
 
     #[snafu(display("Vector search cannot be run on {}.", data_source.to_quoted_string()))]
@@ -127,7 +129,12 @@ impl Display for RetrievalLimit {
     }
 }
 
+// Distance column name for the vector search query.
 static VECTOR_DISTANCE_COLUMN_NAME: &str = "dist";
+// Surrogate unique identifier name to use when no primary keys are provided.
+static VSS_TEMP_GEN_ID_COLUMN: &str = "vss_temp_gen_id";
+// Temporary table name to provide surrogate unique id for vector search query when no primary keys are provided.
+static VSS_TEMP_TABLE_NAME: &str = "vss_temp_table";
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -291,7 +298,7 @@ impl SearchRequest {
         additional_columns
             .iter()
             .map(|c| {
-                let select_statement = format!("{c} FROM testing");
+                let select_statement = format!("SELECT {c} FROM testing");
                 let parser = Parser::new(&GenericDialect);
                 let mut parser = parser.try_with_sql(&select_statement).map_err(|err| {
                     tracing::trace!("vector_search additional column parsing failed. {err}");
@@ -447,7 +454,7 @@ pub struct VectorSearchTableResult {
 impl VectorSearchTableResult {
     /// Return the underlying [`RecordBatch`]s as a pretty formatted table.
     pub fn to_pretty(&self) -> Result<impl Display, ArrowError> {
-        pretty_format_batches(&self.data)
+        to_markdown_documents(&self.data, &self.embedding_column)
     }
 
     /// Return the primary keys of the [`VectorSearch::individual_search`] as an array of JSON objects.
@@ -685,14 +692,73 @@ impl VectorSearch {
         where_cond: &str,
         n: usize,
     ) -> String {
-        let pks = if primary_keys.is_empty() {
-            // If the dataset has no true primary keys, the only known unique key is the embedding column.
-            vec![quote_identifier(embedding_column).to_string()]
+        let (pks, distances_cte, proj_table) = if primary_keys.is_empty() {
+            // If the dataset has no primary keys, we use an additional surrogate temp table and a generated primary key.
+            // An alternative approach is using the full content as the primary key, but it is less efficient as primary keys
+            // are duplicated along with unnest, resulting in large memory allocation and inefficient final selection (join condition).
+
+            // embedding_column is always added so we must filter it out from the projection if it is duplicated in the additional columns.
+            let additional_columns = {
+                let filtered: Vec<_> = projection
+                    .iter()
+                    .filter(|&c| c != embedding_column)
+                    .collect();
+
+                if filtered.is_empty() {
+                    String::new()
+                } else {
+                    format!("{},", filtered.iter().join(", "))
+                }
+            };
+
+            let distances_table =  format!(
+                    "WITH {VSS_TEMP_TABLE_NAME} AS (
+                        SELECT 
+                            ROW_NUMBER() OVER () AS {VSS_TEMP_GEN_ID_COLUMN},
+                            {additional_columns}     
+                            {embedding_column},
+                            {embed_col_offset},
+                            {embed_col_embedding}
+                        FROM {table_name}
+                        {where_cond}
+                    ), 
+                    distances as (
+                        SELECT
+                            {VSS_TEMP_GEN_ID_COLUMN},
+                            unnest({embed_col_offset}) AS offset,
+                            cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS {VECTOR_DISTANCE_COLUMN_NAME}
+                        FROM {VSS_TEMP_TABLE_NAME}
+                    )",
+                    embed_col_offset=quote_identifier(&offset_col!(embedding_column)),
+                    embed_col_embedding=quote_identifier(&embedding_col!(embedding_column))
+                );
+
+            (
+                vec![VSS_TEMP_GEN_ID_COLUMN.to_string()],
+                distances_table,
+                VSS_TEMP_TABLE_NAME.to_string(),
+            )
         } else {
-            primary_keys
+            let pks = primary_keys
                 .iter()
                 .map(|s| quote_identifier(s).to_string())
-                .collect_vec()
+                .collect_vec();
+
+            let distances_table =  format!(
+                    "WITH distances as (
+                        SELECT
+                            {pks},
+                            unnest({embed_col_offset}) AS offset,
+                            cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS {VECTOR_DISTANCE_COLUMN_NAME}
+                        FROM {table_name}
+                        {where_cond}
+                    )",
+                    pks = pks.iter().join(", "),
+                    embed_col_offset=quote_identifier(&offset_col!(embedding_column)),
+                    embed_col_embedding=quote_identifier(&embedding_col!(embedding_column))
+                );
+
+            (pks, distances_table, table_name.to_string())
         };
 
         let final_projection_str = if projection.is_empty() {
@@ -706,14 +772,7 @@ impl VectorSearch {
         };
 
         format!(
-            "WITH distances as (
-                SELECT
-                    {pks},
-                    unnest({embed_col_offset}) AS offset,
-                    cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS {VECTOR_DISTANCE_COLUMN_NAME}
-                FROM {table_name}
-                {where_cond}
-            ),
+            "{distances_cte},
             ranks as (
                 SELECT
                     {pks},
@@ -730,14 +789,13 @@ impl VectorSearch {
                 LIMIT {n}
             )
             SELECT
-                substring(t.{embed_col}, rd.offset[1], rd.offset[2] - rd.offset[1]) AS {embed_col}_chunk,
+                substring(t.{embed_col}, rd.offset[1], rd.offset[2] - rd.offset[1]) AS {chunk_col},
                 {projection_str}
                 rd.{VECTOR_DISTANCE_COLUMN_NAME}
             FROM ranked_docs rd
-            JOIN {table_name} t ON {join_on_conditions}",
-                embed_col=quote_identifier(embedding_column).to_string(),
-                embed_col_offset=offset_col!(quote_identifier(embedding_column).to_string()),
-                embed_col_embedding=embedding_col!(quote_identifier(embedding_column).to_string()),
+            JOIN {proj_table} t ON {join_on_conditions}",
+                embed_col=quote_identifier(embedding_column),
+                chunk_col=quote_identifier(&format!("{embedding_column}_chunk")),
                 pks = pks.iter().join(", "),
                 projection_str = final_projection_str,
                 join_on_conditions = pks
@@ -790,13 +848,11 @@ impl VectorSearch {
             let mut chunked_projection = projection.clone();
             let c = quote_identifier(embedding_column);
             if !additional_columns.contains(&c.to_string()) {
-                if let Some(index) = chunked_projection.iter().enumerate().find_map(|(i, col)| {
-                    if col == &c {
-                        Some(i)
-                    } else {
-                        None
-                    }
-                }) {
+                if let Some(index) = chunked_projection
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, col)| if col == &c { Some(i) } else { None })
+                {
                     chunked_projection.remove(index);
                 }
             }
@@ -841,12 +897,9 @@ impl VectorSearch {
             .context(DataFusionSnafu)?;
 
         let embedding_column = if is_chunked {
-            format!(
-                "{embed_col}_chunk",
-                embed_col = quote_identifier(embedding_column)
-            )
+            format!("{embedding_column}_chunk")
         } else {
-            quote_identifier(embedding_column).to_string()
+            embedding_column.to_string()
         };
 
         Ok(VectorSearchTableResult {
@@ -896,61 +949,67 @@ impl VectorSearch {
                 .get_primary_keys_with_overrides(&self.explicit_primary_keys, &tables)
                 .await?;
 
-            let mut response: VectorSearchResult = HashMap::new();
-            let keywords = keywords.iter().map(std::string::String::as_str).collect::<Vec<&str>>();
+            let keywords = keywords.iter().map(String::as_str).collect::<Vec<&str>>();
 
-            for (tbl, search_vectors) in per_table_embeddings {
-                tracing::debug!("Running vector search for table {:#?}", tbl);
+            let search_futures = per_table_embeddings.into_iter().map(|(tbl, search_vectors)| {
+                let keywords = keywords.clone();
                 let primary_keys = table_primary_keys.get(&tbl).map_or(&[] as &[String], |v| v.as_slice());
 
-                // Only support one embedding column per table.
-                let table_provider = self
-                    .df
-                    .get_table(&tbl)
-                    .await
-                    .ok_or(Error::DataSourcesNotFound {
-                        data_source: vec![tbl.clone()],
-                    })?;
+                async move {
+                    tracing::debug!("Running vector search for table {:#?}", tbl);
 
-                let Some(embedding_table) = get_embedding_table(&table_provider).await else {
-                    return Err(Error::CannotVectorSearchDataset {
-                        data_source: tbl.clone()
-                    });
-                };
+                    // Only support one embedding column per table.
+                    let table_provider = self
+                        .df
+                        .get_table(&tbl)
+                        .await
+                        .ok_or(Error::DataSourcesNotFound {
+                            data_source: vec![tbl.clone()],
+                        })?;
 
-                let embedding_columns = embedding_table.get_embedding_columns();
-                let Some(embedding_column) = embedding_columns.first() else {
-                    return Err(Error::NoEmbeddingColumns {
-                        data_source: tbl.clone(),
-                    });
-                };
+                    let Some(embedding_table) = get_embedding_table(&table_provider).await else {
+                        return Err(Error::CannotVectorSearchDataset {
+                            data_source: tbl.clone()
+                        });
+                    };
 
-                if search_vectors.len() != 1 {
-                    return Err(Error::IncorrectNumberOfEmbeddingColumns {
-                        data_source: tbl.clone(),
-                        num_embeddings: search_vectors.len(),
-                    });
-                }
-                match search_vectors.first() {
-                    None => unreachable!(),
-                    Some(embedding) => {
-                        let result = self
-                            .individual_search(
-                                &tbl,
-                                embedding.clone(),
-                                primary_keys,
-                                embedding_column,
-                                embedding_table.is_chunked(embedding_column),
-                                additional_columns,
-                                where_cond.as_ref(),
-                                &keywords,
-                                *limit,
-                            )
-                            .await?;
-                        response.insert(tbl.clone(), result);
+                    let embedding_columns = embedding_table.get_embedding_columns();
+                    let Some(embedding_column) = embedding_columns.first() else {
+                        return Err(Error::NoEmbeddingColumns {
+                            data_source: tbl.clone(),
+                        });
+                    };
+
+                    if search_vectors.len() != 1 {
+                        return Err(Error::IncorrectNumberOfEmbeddingColumns {
+                            data_source: tbl.clone(),
+                            num_embeddings: search_vectors.len(),
+                        });
                     }
-                };
-            }
+                    match search_vectors.first() {
+                        None => unreachable!("Vector search can only be performed on one embedding column, and the column exists"),
+                        Some(embedding) => {
+                            let result = self
+                                .individual_search(
+                                    &tbl,
+                                    embedding.clone(),
+                                    primary_keys,
+                                    embedding_column,
+                                    embedding_table.is_chunked(embedding_column),
+                                    additional_columns,
+                                    where_cond.as_ref(),
+                                    &keywords,
+                                    *limit,
+                                )
+                                .await?;
+                            Ok::<_, Error>((tbl.clone(), result))
+                        }
+                    }
+                }
+            }).collect::<Vec<_>>();
+
+            let results = futures::future::try_join_all(search_futures).await?;
+            let response: VectorSearchResult = results.into_iter().collect();
             tracing::info!(target: "task_history", captured_output = ?response);
             Ok(response)
         }.instrument(span.clone()).await;
@@ -1135,12 +1194,15 @@ impl VectorSearch {
 
 /// Convert a list of column names to a list of column indices. If a column name is not found in the schema, it is ignored.
 fn get_projection(schema: &SchemaRef, column_names: &[String]) -> Vec<usize> {
+    tracing::trace!("vector search result schema: {schema:?}");
+    tracing::trace!("vector search projection column names: {column_names:?}");
     column_names
         .iter()
         .filter_map(|name| {
             schema
                 .index_of(quote_identifier(name).to_string().as_str())
                 .ok()
+                .or(schema.index_of(name.as_str()).ok())
         })
         .collect_vec()
 }
@@ -1358,9 +1420,9 @@ pub(crate) mod tests {
             let mut additional_columns = vec!["column1".to_string()];
             for i in 0..100 {
                 let start = std::time::Instant::now();
-                let result = SearchRequest::parse_additional_columns(&additional_columns);
+                let _ = SearchRequest::parse_additional_columns(&additional_columns)
+                    .expect("to parse additional columns");
                 timings.push(start.elapsed());
-                assert!(result.is_ok());
                 additional_columns.push(format!("column{}", i + 2));
             }
         }
@@ -1420,5 +1482,51 @@ pub(crate) mod tests {
             average_time_ns < 1_000_000,
             "Average time: {average_time_ns}ns"
         ); // less than 1ms
+    }
+
+    #[test]
+    fn test_quoting_embedding_columns() {
+        // lowercase
+        assert_eq!(offset_col!("embedding"), "embedding_offset");
+        assert_eq!(embedding_col!("embedding"), "embedding_embedding");
+        assert_eq!(
+            quote_identifier(&offset_col!("embedding")),
+            "embedding_offset"
+        );
+        assert_eq!(
+            quote_identifier(&embedding_col!("embedding")),
+            "embedding_embedding"
+        );
+        assert_eq!(
+            offset_col!(quote_identifier("embedding")),
+            "embedding_offset"
+        );
+        assert_eq!(
+            embedding_col!(quote_identifier("embedding")),
+            "embedding_embedding"
+        );
+
+        // mixed case
+        assert_eq!(offset_col!("Embedding"), "Embedding_offset");
+        assert_eq!(embedding_col!("Embedding"), "Embedding_embedding");
+        assert_eq!(
+            quote_identifier(&offset_col!("Embedding")),
+            "\"Embedding_offset\""
+        );
+
+        assert_eq!(
+            quote_identifier(&embedding_col!("Embedding")),
+            "\"Embedding_embedding\""
+        );
+
+        assert_eq!(
+            offset_col!(quote_identifier("Embedding")),
+            "\"Embedding\"_offset"
+        );
+
+        assert_eq!(
+            embedding_col!(quote_identifier("Embedding")),
+            "\"Embedding\"_embedding"
+        );
     }
 }

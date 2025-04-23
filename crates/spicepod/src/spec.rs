@@ -29,9 +29,9 @@ use crate::component::runtime::Runtime;
 use crate::component::secret::Secret;
 use crate::component::tool::Tool;
 use crate::component::{
-    dataset::Dataset, extension::Extension, model::Model, view::View, worker::Worker,
-    ComponentOrReference,
+    ComponentOrReference, dataset::Dataset, model::Model, view::View, worker::Worker,
 };
+use crate::extension::Extension;
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "schemars", derive(JsonSchema))]

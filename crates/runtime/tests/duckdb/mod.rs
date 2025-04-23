@@ -14,7 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::{init_tracing, utils::test_request_context, RecordBatch};
+use std::sync::Arc;
+
+use crate::configure_test_datafusion;
+use crate::{RecordBatch, init_tracing, utils::test_request_context};
 use app::AppBuilder;
 use datafusion::assert_batches_eq;
 use futures::TryStreamExt;
@@ -83,14 +86,19 @@ async fn duckdb_from_functions() -> Result<(), String> {
         ))
         .build();
 
-            let rt = Runtime::builder().with_app(app).build().await;
+            let rt = Runtime::builder()
+                .with_app(app)
+                .with_datafusion_configuration_fn(configure_test_datafusion)
+                .build()
+                .await;
+            let cloned_rt = Arc::new(rt.clone());
 
             // Set a timeout for the test
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                     return Err("Timed out waiting for datasets to load".to_string());
                 }
-                () = rt.load_components() => {}
+                () = cloned_rt.load_components() => {}
             }
 
             let queries = vec![

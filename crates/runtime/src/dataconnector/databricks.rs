@@ -16,10 +16,10 @@ limitations under the License.
 
 use crate::component::dataset::Dataset;
 use async_trait::async_trait;
+use data_components::Read;
 use data_components::databricks_delta::DatabricksDelta;
 use data_components::databricks_spark::DatabricksSparkConnect;
 use data_components::unity_catalog::Endpoint;
-use data_components::Read;
 use datafusion::datasource::TableProvider;
 use datafusion::sql::TableReference;
 use secrecy::ExposeSecret;
@@ -36,18 +36,26 @@ use super::{
 
 #[derive(Debug, Snafu)]
 pub enum Error {
-    #[snafu(display("Missing required parameter: {parameter}. Specify a value.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"))]
+    #[snafu(display(
+        "Missing required parameter: {parameter}. Specify a value.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
+    ))]
     MissingParameter { parameter: String },
 
-    #[snafu(display("Invalid `databricks_use_ssl` value: '{value}'. Use 'true' or 'false'.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"))]
+    #[snafu(display(
+        "Invalid `databricks_use_ssl` value: '{value}'. Use 'true' or 'false'.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
+    ))]
     InvalidUsessl { value: String },
 
-    #[snafu(display("Failed to connect to Databricks Spark.\n{source}\nVerify the connector configuration, and try again.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"))]
+    #[snafu(display(
+        "Failed to connect to Databricks Spark.\n{source}\nVerify the connector configuration, and try again.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
+    ))]
     UnableToConstructDatabricksSpark {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
-    #[snafu(display("Invalid `mode` value: '{value}'. Use 'delta_lake' or 'spark_connect'.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"))]
+    #[snafu(display(
+        "Invalid `mode` value: '{value}'. Use 'delta_lake' or 'spark_connect'.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
+    ))]
     InvalidMode { value: String },
 }
 
@@ -55,6 +63,12 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct Databricks {
     read_provider: Arc<dyn Read>,
+}
+
+impl std::fmt::Debug for Databricks {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Databricks").finish_non_exhaustive()
+    }
 }
 
 impl Databricks {
@@ -89,7 +103,7 @@ impl Databricks {
                             return InvalidUsesslSnafu {
                                 value: databricks_use_ssl_value,
                             }
-                            .fail()
+                            .fail();
                         }
                     };
                 }
@@ -135,11 +149,11 @@ impl DatabricksFactory {
 }
 
 const PARAMETERS: &[ParameterSpec] = &[
-    ParameterSpec::connector("endpoint")
+    ParameterSpec::component("endpoint")
         .required()
         .secret()
         .description("The endpoint of the Databricks instance."),
-    ParameterSpec::connector("token")
+    ParameterSpec::component("token")
         .required()
         .secret()
         .description("The personal access token used to authenticate against the DataBricks API."),
@@ -148,45 +162,45 @@ const PARAMETERS: &[ParameterSpec] = &[
         .default("spark_connect"),
     ParameterSpec::runtime("client_timeout")
         .description("The timeout setting for object store client."),
-    ParameterSpec::connector("cluster_id").description("The ID of the compute cluster in Databricks to use for the query. Only valid when mode is spark_connect."),
-    ParameterSpec::connector("use_ssl").description("Use a TLS connection to connect to the Databricks Spark Connect endpoint.").default("true"),
+    ParameterSpec::component("cluster_id").description("The ID of the compute cluster in Databricks to use for the query. Only valid when mode is spark_connect."),
+    ParameterSpec::component("use_ssl").description("Use a TLS connection to connect to the Databricks Spark Connect endpoint.").default("true"),
 
     // S3 storage options
-    ParameterSpec::connector("aws_region")
+    ParameterSpec::component("aws_region")
         .description("The AWS region to use for S3 storage.")
         .secret(),
-    ParameterSpec::connector("aws_access_key_id")
+    ParameterSpec::component("aws_access_key_id")
         .description("The AWS access key ID to use for S3 storage.")
         .secret(),
-    ParameterSpec::connector("aws_secret_access_key")
+    ParameterSpec::component("aws_secret_access_key")
         .description("The AWS secret access key to use for S3 storage.")
         .secret(),
-    ParameterSpec::connector("aws_endpoint")
+    ParameterSpec::component("aws_endpoint")
         .description("The AWS endpoint to use for S3 storage.")
         .secret(),
 
     // Azure storage options
-    ParameterSpec::connector("azure_storage_account_name")
+    ParameterSpec::component("azure_storage_account_name")
         .description("The storage account to use for Azure storage.")
         .secret(),
-    ParameterSpec::connector("azure_storage_account_key")
+    ParameterSpec::component("azure_storage_account_key")
         .description("The storage account key to use for Azure storage.")
         .secret(),
-    ParameterSpec::connector("azure_storage_client_id")
+    ParameterSpec::component("azure_storage_client_id")
         .description("The service principal client id for accessing the storage account.")
         .secret(),
-    ParameterSpec::connector("azure_storage_client_secret")
+    ParameterSpec::component("azure_storage_client_secret")
         .description("The service principal client secret for accessing the storage account.")
         .secret(),
-    ParameterSpec::connector("azure_storage_sas_key")
+    ParameterSpec::component("azure_storage_sas_key")
         .description("The shared access signature key for accessing the storage account.")
         .secret(),
-    ParameterSpec::connector("azure_storage_endpoint")
+    ParameterSpec::component("azure_storage_endpoint")
         .description("The endpoint for the Azure Blob storage account.")
         .secret(),
 
     // GCS storage options
-    ParameterSpec::connector("google_service_account")
+    ParameterSpec::component("google_service_account")
         .description("Filesystem path to the Google service account JSON key file.")
         .secret(),
 ];

@@ -24,11 +24,11 @@ use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use url::Url;
 
-use super::{
-    listing::{self, ListingTableConnector},
-    DataConnector, DataConnectorFactory, DataConnectorResult, ParameterSpec, Parameters,
-};
 use super::{ConnectorComponent, ConnectorParams};
+use super::{
+    DataConnector, DataConnectorFactory, DataConnectorResult, ParameterSpec, Parameters,
+    listing::{self, ListingTableConnector},
+};
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -39,6 +39,7 @@ pub enum Error {
     },
 }
 
+#[derive(Debug)]
 pub struct SFTP {
     params: Parameters,
 }
@@ -67,9 +68,9 @@ impl SFTPFactory {
 static PARAMETERS: LazyLock<Vec<ParameterSpec>> = LazyLock::new(|| {
     let mut all_parameters = Vec::new();
     all_parameters.extend_from_slice(&[
-        ParameterSpec::connector("user").secret(),
-        ParameterSpec::connector("pass").secret(),
-        ParameterSpec::connector("port").description("The port to connect to."),
+        ParameterSpec::component("user").secret(),
+        ParameterSpec::component("pass").secret(),
+        ParameterSpec::component("port").description("The port to connect to."),
         ParameterSpec::runtime("client_timeout")
             .description("The timeout setting for SFTP client."),
     ]);
@@ -112,13 +113,18 @@ impl ListingTableConnector for SFTP {
         &self.params
     }
 
-    fn get_object_store_url(&self, dataset: &Dataset) -> DataConnectorResult<Url> {
+    fn get_object_store_url(
+        &self,
+        dataset: &Dataset,
+        url: Option<&str>,
+    ) -> DataConnectorResult<Url> {
+        let url = url.unwrap_or(dataset.from.as_str());
         let mut ftp_url =
-            Url::parse(&dataset.from)
+            Url::parse(url)
                 .boxed()
                 .context(super::InvalidConfigurationSnafu {
                     dataconnector: format!("{self}"),
-                    message: format!("The specified URL is not valid: {}.\nEnsure the URL is valid and try again.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/ftp", dataset.from),
+                    message: format!("The specified URL is not valid: {url}.\nEnsure the URL is valid and try again.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/ftp"),
                     connector_component: ConnectorComponent::from(dataset)
                 })?;
 

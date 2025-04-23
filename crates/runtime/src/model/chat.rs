@@ -21,23 +21,27 @@ use llms::{
     xai::Xai,
 };
 use llms::{config::GenericAuthMechanism, openai::DEFAULT_LLM_MODEL};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::SecretString;
 use serde_json::Value;
 use spicepod::component::model::{Model, ModelFileType, ModelSource};
 use std::{collections::HashMap, path::PathBuf, str::FromStr, sync::Arc};
 
 use super::{tool_use::ToolUsingChat, wrapper::ChatWrapper};
 use crate::{
-    tools::{options::SpiceToolsOptions, utils::get_tools},
     Runtime,
+    tools::{options::SpiceToolsOptions, utils::get_tools},
 };
 
-pub type LLMModelStore = HashMap<String, Box<dyn Chat>>;
+pub type LLMModelStore = HashMap<String, Arc<dyn Chat>>;
+
+// Default recursion limit for tool usage to prevent infinite loops.
+// This limit can be adjusted using the `tool_recursion_limit` model parameter.
+const DEFAULT_SPICE_TOOL_RECURSION_LIMIT: usize = 10;
 
 /// Extract a secret from a hashmap of secrets, if it exists.
 macro_rules! extract_secret {
     ($params:expr, $key:expr) => {
-        $params.get($key).map(|s| s.expose_secret().as_str())
+        $params.get($key).map(secrecy::ExposeSecret::expose_secret)
     };
 }
 
@@ -46,7 +50,7 @@ pub async fn try_to_chat_model(
     component: &Model,
     params: &HashMap<String, SecretString>,
     rt: Arc<Runtime>,
-) -> Result<Box<dyn Chat>, LlmError> {
+) -> Result<Arc<dyn Chat>, LlmError> {
     let model = construct_model(component, params)?;
 
     // Handle tool usage
@@ -65,11 +69,13 @@ pub async fn try_to_chat_model(
                 .into(),
             })
         })
-        .transpose()?;
+        .transpose()?
+        // Prevent infinite recursion in case of circular tool calls.
+        .or(Some(DEFAULT_SPICE_TOOL_RECURSION_LIMIT));
 
     let tool_model = match spice_tool_opt {
-        Some(opts) if opts.can_use_tools() => Box::new(ToolUsingChat::new(
-            Arc::new(model),
+        Some(opts) if opts.can_use_tools() => Arc::new(ToolUsingChat::new(
+            model,
             Arc::clone(&rt),
             get_tools(Arc::clone(&rt), &opts).await,
             spice_recursion_limit,
@@ -82,7 +88,7 @@ pub async fn try_to_chat_model(
 pub fn construct_model(
     component: &spicepod::component::model::Model,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Chat>, LlmError> {
+) -> Result<Arc<dyn Chat>, LlmError> {
     let model_id = component.get_model_id();
     let prefix = component.get_source().ok_or(LlmError::UnknownModelSource {
         from: component.from.clone(),
@@ -96,6 +102,7 @@ pub fn construct_model(
         ModelSource::Azure => azure(model_id, component.name.as_str(), params),
         ModelSource::Xai => xai(model_id.as_deref(), params),
         ModelSource::OpenAi => openai(model_id, params),
+        ModelSource::Databricks => databricks(model_id, params),
         ModelSource::SpiceAI => Err(LlmError::UnsupportedTaskForModel {
             from: "spiceai".into(),
             task: "llm".into(),
@@ -105,48 +112,55 @@ pub fn construct_model(
     let system_prompt = match component.params.get("system_prompt") {
         Some(Value::String(s)) => Some(s.as_str()),
         Some(v) => {
-            return Err(LlmError::InvalidParamError {
+            return Err(LlmError::InvalidParamValueError {
                 param: "system_prompt".to_string(),
                 message: format!("Expected a string, got: {v:?}"),
             });
         }
         None => None,
     };
-    let wrapper = ChatWrapper::new(
+    let mut wrapper = ChatWrapper::new(
         model,
         component.name.as_str(),
         system_prompt,
         component.get_openai_request_overrides(),
     );
-    Ok(Box::new(wrapper))
+
+    if let Some(Value::String(s)) = component.params.get("parameterized_prompt") {
+        if matches!(s.as_str(), "enabled") {
+            wrapper = wrapper.allowed_to_parameterise();
+        }
+    }
+
+    Ok(Arc::new(wrapper))
 }
 
 fn xai(
     model_id: Option<&str>,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Chat>, LlmError> {
+) -> Result<Arc<dyn Chat>, LlmError> {
     let Some(api_key) = extract_secret!(params, "xai_api_key") else {
         return Err(LlmError::FailedToLoadModel {
             source: "No `xai_api_key` provided for xAI model.".into(),
         });
     };
-    Ok(Box::new(Xai::new(model_id, api_key)) as Box<dyn Chat>)
+    Ok(Arc::new(Xai::new(model_id, api_key)) as Arc<dyn Chat>)
 }
 
 fn perplexity(
     model_id: Option<&str>,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Chat>, LlmError> {
+) -> Result<Arc<dyn Chat>, LlmError> {
     let model = PerplexitySonar::from_params(model_id, params)
         .map_err(|source| LlmError::FailedToLoadModel { source })?;
 
-    Ok(Box::new(model) as Box<dyn Chat>)
+    Ok(Arc::new(model) as Arc<dyn Chat>)
 }
 
 fn anthropic(
     model_id: Option<&str>,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Chat>, LlmError> {
+) -> Result<Arc<dyn Chat>, LlmError> {
     let api_base = extract_secret!(params, "endpoint");
     let api_key = extract_secret!(params, "anthropic_api_key");
     let auth_token = extract_secret!(params, "anthropic_auth_token");
@@ -168,14 +182,14 @@ fn anthropic(
         }
     })?;
 
-    Ok(Box::new(anthropic) as Box<dyn Chat>)
+    Ok(Arc::new(anthropic) as Arc<dyn Chat>)
 }
 
 fn huggingface(
     model_id: Option<String>,
     component: &spicepod::component::model::Model,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Chat>, LlmError> {
+) -> Result<Arc<dyn Chat>, LlmError> {
     let Some(id) = model_id else {
         return Err(LlmError::FailedToLoadModel {
             source: "No model id for Huggingface model".to_string().into(),
@@ -208,10 +222,39 @@ fn huggingface(
     llms::chat::create_hf_model(&id, model_type, gguf_path, hf_token)
 }
 
+fn databricks(
+    model_id: Option<String>,
+    params: &HashMap<String, SecretString>,
+) -> Result<Arc<dyn Chat>, LlmError> {
+    let Some(endpoint) = extract_secret!(params, "databricks_endpoint") else {
+        return Err(LlmError::MissingParamError {
+            param_key: "databricks_endpoint",
+        });
+    };
+    let Some(token) = extract_secret!(params, "databricks_token") else {
+        return Err(LlmError::MissingParamError {
+            param_key: "databricks_token",
+        });
+    };
+    let Some(model_id) = model_id else {
+        return Err(LlmError::ModelNotProvided {
+            model_source: "databricks".to_string(),
+        });
+    };
+
+    Ok(Arc::new(llms::openai::new_openai_client(
+        model_id,
+        Some(format!("https://{endpoint}/serving-endpoints").as_str()),
+        Some(token),
+        None,
+        None,
+    )) as Arc<dyn Chat>)
+}
+
 fn openai(
     model_id: Option<String>,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Chat>, LlmError> {
+) -> Result<Arc<dyn Chat>, LlmError> {
     let api_base = extract_secret!(params, "endpoint");
     let api_key = extract_secret!(params, "openai_api_key");
     let org_id = extract_secret!(params, "openai_org_id");
@@ -221,35 +264,35 @@ fn openai(
         match temperature_str.parse::<f64>() {
             Ok(temperature) => {
                 if temperature < 0.0 {
-                    return Err(LlmError::InvalidParamError {
+                    return Err(LlmError::InvalidParamValueError {
                         param: "openai_temperature".to_string(),
                         message: "Ensure it is a non-negative number.".to_string(),
                     });
                 }
             }
             Err(_) => {
-                return Err(LlmError::InvalidParamError {
+                return Err(LlmError::InvalidParamValueError {
                     param: "openai_temperature".to_string(),
                     message: "Ensure it is a non-negative number.".to_string(),
-                })
+                });
             }
         }
     }
 
-    Ok(Box::new(llms::openai::new_openai_client(
+    Ok(Arc::new(llms::openai::new_openai_client(
         model_id.unwrap_or(DEFAULT_LLM_MODEL.to_string()),
         api_base,
         api_key,
         org_id,
         project_id,
-    )) as Box<dyn Chat>)
+    )) as Arc<dyn Chat>)
 }
 
 fn azure(
     model_id: Option<String>,
     model_name: &str,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Chat>, LlmError> {
+) -> Result<Arc<dyn Chat>, LlmError> {
     let Some(model_name) = model_id else {
         return Err(LlmError::FailedToLoadModel {
             source: format!(
@@ -289,20 +332,20 @@ fn azure(
         });
     }
 
-    Ok(Box::new(llms::openai::new_azure_client(
+    Ok(Arc::new(llms::openai::new_azure_client(
         model_name,
         api_base,
         api_version,
         deployment_name,
         entra_token,
         api_key,
-    )) as Box<dyn Chat>)
+    )) as Arc<dyn Chat>)
 }
 
 fn file(
     component: &spicepod::component::model::Model,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Chat>, LlmError> {
+) -> Result<Arc<dyn Chat>, LlmError> {
     let model_weights = component.find_all_file_path(ModelFileType::Weights);
     if model_weights.is_empty() {
         return Err(LlmError::FailedToLoadModel {
@@ -317,7 +360,7 @@ fn file(
 
     let chat_template_literal = params
         .get("chat_template")
-        .map(|s| s.expose_secret().as_str());
+        .map(secrecy::ExposeSecret::expose_secret);
 
     llms::chat::create_local_model(
         model_weights.as_slice(),

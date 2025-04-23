@@ -72,10 +72,9 @@ nsql> How much money have I made in each country?
 
 		cloud, _ := cmd.Flags().GetBool(cloudKeyFlag)
 		rtcontext := context.NewContext().WithCloud(cloud)
-
-		apiKey, _ := cmd.Flags().GetString("api-key")
-		if apiKey != "" {
-			rtcontext.SetApiKey(apiKey)
+		if err := rtcontext.Init(cmd.Flags()); err != nil {
+			slog.Error("failed to initialize runtime context", "error", err)
+			os.Exit(1)
 		}
 
 		userAgent, _ := cmd.Flags().GetString("user-agent")
@@ -127,21 +126,16 @@ nsql> How much money have I made in each country?
 			model = selectedModel
 		}
 
-		httpEndpoint, err := cmd.Flags().GetString(httpEndpointKeyFlag)
-		if err != nil {
-			slog.Error("getting http-endpoint flag", "error", err)
-			os.Exit(1)
-		}
-		if httpEndpoint != "" {
-			rtcontext.SetHttpEndpoint(httpEndpoint)
-		}
-
 		cmd.Println("")
 		cmd.Println("Enter a query in natural language.")
 
 		line := liner.NewLiner()
 		line.SetCtrlCAborts(true)
-		defer line.Close()
+		defer func() {
+			if err := line.Close(); err != nil {
+				slog.Error("closing line", "error", err)
+			}
+		}()
 		for {
 			message, err := line.Prompt("nsql> ")
 			if err == liner.ErrPromptAborted {

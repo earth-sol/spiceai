@@ -23,8 +23,8 @@ use datafusion::datasource::TableProvider;
 use datafusion_table_providers::postgres::PostgresTableFactory;
 use datafusion_table_providers::sql::db_connection_pool::dbconnection;
 use datafusion_table_providers::sql::db_connection_pool::{
-    postgrespool::{self, PostgresConnectionPool},
     Error as DbConnectionPoolError,
+    postgrespool::{self, PostgresConnectionPool},
 };
 use snafu::prelude::*;
 use std::any::Any;
@@ -47,6 +47,12 @@ pub struct Postgres {
     postgres_factory: PostgresTableFactory,
 }
 
+impl std::fmt::Debug for Postgres {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Postgres").finish_non_exhaustive()
+    }
+}
+
 #[derive(Default, Copy, Clone)]
 pub struct PostgresFactory {}
 
@@ -63,14 +69,14 @@ impl PostgresFactory {
 }
 
 const PARAMETERS: &[ParameterSpec] = &[
-    ParameterSpec::connector("connection_string").secret(),
-    ParameterSpec::connector("user").secret(),
-    ParameterSpec::connector("pass").secret(),
-    ParameterSpec::connector("host"),
-    ParameterSpec::connector("port"),
-    ParameterSpec::connector("db"),
-    ParameterSpec::connector("sslmode"),
-    ParameterSpec::connector("sslrootcert"),
+    ParameterSpec::component("connection_string").secret(),
+    ParameterSpec::component("user").secret(),
+    ParameterSpec::component("pass").secret(),
+    ParameterSpec::component("host"),
+    ParameterSpec::component("port"),
+    ParameterSpec::component("db"),
+    ParameterSpec::component("sslmode"),
+    ParameterSpec::component("sslrootcert"),
     ParameterSpec::runtime("connection_pool_size")
         .description("The maximum number of connections created in the connection pool")
         .default("10"),

@@ -22,7 +22,7 @@ use arrow::array::{
     StructArray, TimestampNanosecondBuilder,
 };
 use arrow::datatypes::{
-    ArrowPrimitiveType, DataType, Field, Int16Type, Int32Type, Int64Type, Int8Type, Schema,
+    ArrowPrimitiveType, DataType, Field, Int8Type, Int16Type, Int32Type, Int64Type, Schema,
     SchemaRef, TimeUnit,
 };
 use arrow::error::ArrowError;
@@ -34,9 +34,9 @@ use datafusion::sql::TableReference;
 use datafusion_table_providers::sql::db_connection_pool::dbconnection::{
     self, AsyncDbConnection, DbConnection,
 };
-use futures::stream;
 use futures::StreamExt;
 use futures::TryStreamExt;
+use futures::stream;
 use snafu::prelude::*;
 use snowflake_api::SnowflakeApi;
 
@@ -436,7 +436,7 @@ fn parse_schema_from_json(resp: &serde_json::Value) -> Result<SchemaRef, Error> 
 
         let is_nullable = column[4]
             .as_str()
-            .map_or(true, |s| s.to_uppercase() == "TRUE");
+            .is_none_or(|s| s.to_uppercase() == "TRUE");
 
         fields.push(Field::new(column_name, data_type, is_nullable));
     }
