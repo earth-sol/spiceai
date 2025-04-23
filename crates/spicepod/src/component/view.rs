@@ -21,8 +21,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{Nameable, WithDependsOn, dataset::acceleration};
-use crate::semantic::Column;
+use super::{Nameable, WithDependsOn};
+use crate::{acceleration::Acceleration, semantic::Column};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "schemars", derive(JsonSchema))]
@@ -47,7 +47,7 @@ pub struct View {
     pub sql_ref: Option<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub acceleration: Option<acceleration::Acceleration>,
+    pub acceleration: Option<Acceleration>,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(rename = "dependsOn", default)]
