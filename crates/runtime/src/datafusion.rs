@@ -1169,6 +1169,7 @@ impl DataFusion {
         table: TableReference,
         view: String,
         acceleration: Option<acceleration::Acceleration>,
+        secrets: Arc<TokioRwLock<Secrets>>,
     ) -> Result<()> {
         tracing::info!("Initializing view {table}");
 
@@ -1259,6 +1260,7 @@ impl DataFusion {
                             view_table,
                             acceleration,
                             &dependent_table_names,
+                            secrets,
                         )
                         .await
                     {
@@ -1288,6 +1290,7 @@ impl DataFusion {
         view_table: ViewTable,
         acceleration: acceleration::Acceleration,
         dependent_tables: &[TableReference],
+        secrets: Arc<TokioRwLock<Secrets>>,
     ) -> Result<()> {
         tracing::debug!(
             "Creating accelerated view {table:?} with dependent tables {dependent_tables:?}"
@@ -1332,17 +1335,9 @@ impl DataFusion {
         let schema = view_table.schema();
         let federated_table = FederatedTable::new(Arc::new(view_table) as Arc<dyn TableProvider>);
 
-        // TODO Add secrets support
         let accelerated_table_provider = self
             .accelerator_engine_registry()
-            .create_accelerator_table(
-                table.clone(),
-                schema,
-                None,
-                &acceleration,
-                Arc::new(TokioRwLock::new(Secrets::new())),
-                None,
-            )
+            .create_accelerator_table(table.clone(), schema, None, &acceleration, secrets, None)
             .await
             .map_err(|e| Error::UnableToCreateView {
                 reason: format!("Failed to create view acceleration: {e}"),
