@@ -21,7 +21,7 @@ use data_components::{
     token_provider::{StaticTokenProvider, TokenProvider},
 };
 use datafusion::datasource::TableProvider;
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use snafu::ResultExt;
 use std::{any::Any, future::Future, pin::Pin, sync::Arc};
 use url::Url;
@@ -31,11 +31,12 @@ use super::{
     InvalidConfigurationSnafu, ParameterSpec, Parameters,
 };
 
+#[derive(Debug)]
 pub struct GraphQL {
     params: Parameters,
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Debug, Copy, Clone)]
 pub struct GraphQLFactory {}
 
 impl GraphQLFactory {
@@ -52,16 +53,16 @@ impl GraphQLFactory {
 
 const PARAMETERS: &[ParameterSpec] = &[
     // Connector parameters
-    ParameterSpec::connector("auth_token")
+    ParameterSpec::component("auth_token")
         .description("The bearer token to use in the GraphQL requests.")
         .secret(),
-    ParameterSpec::connector("auth_user")
+    ParameterSpec::component("auth_user")
         .description("The username to use for HTTP Basic Auth.")
         .secret(),
-    ParameterSpec::connector("auth_pass")
+    ParameterSpec::component("auth_pass")
         .description("The password to use for HTTP Basic Auth.")
         .secret(),
-    ParameterSpec::connector("query")
+    ParameterSpec::component("query")
         .description("The GraphQL query to execute.")
         .required(),
     // Runtime parameters

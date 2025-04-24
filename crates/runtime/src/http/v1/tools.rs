@@ -17,15 +17,16 @@ limitations under the License.
 use std::sync::Arc;
 
 use axum::{
+    Extension, Json,
     extract::Path,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Extension, Json,
 };
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{tools::Tooling, Runtime};
+use crate::Runtime;
 
 /// Summary of a tool available to run, and the schema of its input parameters.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash, Default, Deserialize)]
@@ -55,18 +56,15 @@ struct ListToolElement {
     )
 ))]
 pub(crate) async fn list(Extension(rt): Extension<Arc<Runtime>>) -> Response {
-    let tools = &*rt.tools.read().await;
-    let tools = tools
-        .iter()
-        .filter_map(|(name, tool)| match tool {
-            Tooling::Tool(tool) => Some(ListToolElement {
-                name: name.clone(),
-                description: tool.description().map(|d| d.to_string()),
-                parameters: tool.parameters(),
-            }),
-            Tooling::Catalog(_) => None,
+    let tools = rt
+        .list_all_tools()
+        .map(|tool| ListToolElement {
+            name: tool.name().to_string(),
+            description: tool.description().map(|d| d.to_string()),
+            parameters: tool.parameters(),
         })
-        .collect::<Vec<_>>();
+        .collect::<Vec<_>>()
+        .await;
 
     (StatusCode::OK, Json(tools)).into_response()
 }
@@ -121,14 +119,8 @@ pub(crate) async fn post(
     Path(tool_name): Path<String>,
     body: String,
 ) -> Response {
-    let tools = &*rt.tools.read().await;
-
-    let Some(Tooling::Tool(tool)) = tools.get(&tool_name) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(json!({"message": format!("Tool {tool_name} not found")})),
-        )
-            .into_response();
+    let Some(tool) = rt.get_tool(tool_name.as_str()).await else {
+        return not_found(format!("Tool '{tool_name}' not found").as_str());
     };
 
     match tool.call(body.as_str(), Arc::clone(&rt)).await {
@@ -139,4 +131,8 @@ pub(crate) async fn post(
         )
             .into_response(),
     }
+}
+
+fn not_found(message: &str) -> Response {
+    (StatusCode::NOT_FOUND, Json(json!({"message": message}))).into_response()
 }

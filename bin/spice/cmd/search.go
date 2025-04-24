@@ -72,6 +72,11 @@ spice search --cloud
 	Run: func(cmd *cobra.Command, args []string) {
 		cloud, _ := cmd.Flags().GetBool(cloudKeyFlag)
 		rtcontext := context.NewContext().WithCloud(cloud)
+		err := rtcontext.Init(cmd.Flags())
+		if err != nil {
+			slog.Error("failed to initialize runtime context", "error", err)
+			os.Exit(1)
+		}
 
 		if !cloud {
 			rtcontext.RequireModelsFlavor(cmd)
@@ -92,20 +97,6 @@ spice search --cloud
 			}
 		}
 
-		httpEndpoint, err := cmd.Flags().GetString("http-endpoint")
-		if err != nil {
-			slog.Error("could not get http-endpoint flag", "error", err)
-			os.Exit(1)
-		}
-		if httpEndpoint != "" {
-			rtcontext.SetHttpEndpoint(httpEndpoint)
-		}
-
-		apiKey, _ := cmd.Flags().GetString("api-key")
-		if apiKey != "" {
-			rtcontext.SetApiKey(apiKey)
-		}
-
 		matches := map[string][]SearchMatch{}
 
 		limit, err := cmd.Flags().GetUint(limitKeyFlag)
@@ -116,7 +107,11 @@ spice search --cloud
 
 		line := liner.NewLiner()
 		line.SetCtrlCAborts(true)
-		defer line.Close()
+		defer func() {
+			if err := line.Close(); err != nil {
+				slog.Error("closing line", "error", err)
+			}
+		}()
 		for {
 			message, err := line.Prompt("search> ")
 			if err == liner.ErrPromptAborted {
@@ -171,7 +166,7 @@ spice search --cloud
 				continue
 			}
 
-			var searchResponse SearchResponse = SearchResponse{}
+			var searchResponse = SearchResponse{}
 			err = json.Unmarshal([]byte(raw), &searchResponse)
 			if err != nil {
 				slog.Error("parsing response from spiced", "error", err)

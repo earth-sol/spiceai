@@ -21,14 +21,14 @@ use async_openai::{
         FunctionCall,
     },
 };
-use schemars::{schema_for, JsonSchema};
+use schemars::{JsonSchema, schema_for};
 use serde::Serialize;
 use serde_json::Value;
 use std::sync::Arc;
 
 use crate::Runtime;
 
-use super::{options::SpiceToolsOptions, SpiceModelTool};
+use super::{SpiceModelTool, Tooling, options::SpiceToolsOptions};
 
 /// Creates the messages that would be sent and received if a language model were to request the `tool`
 /// to be called (via an assistant message), with defined `arg`, and the response from running the
@@ -86,11 +86,21 @@ pub async fn get_tools(rt: Arc<Runtime>, opts: &SpiceToolsOptions) -> Vec<Arc<dy
     let all_tools = rt.tools.read().await;
 
     let mut tools = vec![];
-
     let mut missing_tools = vec![];
 
     for tt in opts.tools_by_name() {
-        if let Some(tool) = all_tools.get(tt) {
+        if let Some((catalog_name, catalog_tool)) = tt.split_once(':') {
+            if let Some(Tooling::Catalog(catalog)) = all_tools.get(catalog_name) {
+                if let Some(t) = catalog.get(catalog_tool).await {
+                    tools.push(t);
+                } else {
+                    tracing::warn!("Tool '{catalog_tool}' is not found in '{catalog_name}'.");
+                    missing_tools.push(tt);
+                }
+            } else {
+                missing_tools.push(tt);
+            }
+        } else if let Some(tool) = all_tools.get(tt) {
             tools.extend(tool.tools().await);
         } else {
             missing_tools.push(tt);
@@ -104,7 +114,10 @@ pub async fn get_tools(rt: Arc<Runtime>, opts: &SpiceToolsOptions) -> Vec<Arc<dy
             .collect::<Vec<&str>>()
             .join(", ");
 
-        tracing::warn!("The following tools were not found in the registry: {}.\nAvailable tools are: {available_tools}.\nFor details, visit https://spiceai.org/docs/features/large-language-models/tools", missing_tools.join(", "));
+        tracing::warn!(
+            "The following tools were not found in the registry: {}.\nAvailable tools are: {available_tools}.\nFor details, visit https://spiceai.org/docs/features/large-language-models/tools",
+            missing_tools.join(", ")
+        );
     }
 
     tools

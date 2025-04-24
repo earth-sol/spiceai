@@ -18,12 +18,12 @@ limitations under the License.
 use bytes::Bytes;
 use itertools::Itertools;
 use llms::embeddings::{
-    candle::{download_hf_file, tei::TeiEmbed},
     Embed, Error as EmbedError,
+    candle::{download_hf_file, tei::TeiEmbed},
 };
-use llms::openai::embed::OpenaiEmbed;
 use llms::openai::DEFAULT_EMBEDDING_MODEL;
-use secrecy::{ExposeSecret, Secret, SecretString};
+use llms::openai::embed::OpenaiEmbed;
+use secrecy::{ExposeSecret, SecretBox, SecretString};
 use snafu::ResultExt;
 use spicepod::component::{embeddings::EmbeddingPrefix, model::ModelFileType};
 use std::path::{Path, PathBuf};
@@ -36,19 +36,19 @@ use url::Url;
 
 use crate::{get_params_with_secrets, secrets::Secrets};
 
-pub type EmbeddingModelStore = HashMap<String, Box<dyn Embed>>;
+pub type EmbeddingModelStore = HashMap<String, Arc<dyn Embed>>;
 
 /// Extract a secret from a hashmap of secrets, if it exists.
 macro_rules! extract_secret {
     ($params:expr, $key:expr) => {
-        $params.get($key).map(|s| s.expose_secret().as_str())
+        $params.get($key).map(secrecy::ExposeSecret::expose_secret)
     };
 }
 
 pub async fn try_to_embedding(
     component: &spicepod::component::embeddings::Embeddings,
     secrets: Arc<RwLock<Secrets>>,
-) -> Result<Box<dyn Embed>, EmbedError> {
+) -> Result<Arc<dyn Embed>, EmbedError> {
     let params = get_params_with_secrets(Arc::clone(&secrets), &component.params).await;
     let model_id = component.get_model_id();
     let prefix = component
@@ -69,12 +69,12 @@ async fn huggingface(
     model_id: Option<String>,
     component: &spicepod::component::embeddings::Embeddings,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Embed>, EmbedError> {
+) -> Result<Arc<dyn Embed>, EmbedError> {
     let hf_token = extract_secret!(params, "hf_token");
     let pooling = extract_secret!(params, "pooling");
     let max_seq_len = max_seq_length_from_params(params)?;
     if let Some(id) = model_id {
-        Ok(Box::new(
+        Ok(Arc::new(
             TeiEmbed::from_hf(&id, None, hf_token, pooling, max_seq_len).await?,
         ))
     } else {
@@ -88,7 +88,7 @@ fn file(
     model_id: Option<&str>,
     component: &spicepod::component::embeddings::Embeddings,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Embed>, EmbedError> {
+) -> Result<Arc<dyn Embed>, EmbedError> {
     let weights_path = model_id
         .map(ToString::to_string)
         .or(component.find_any_file_path(ModelFileType::Weights))
@@ -108,9 +108,12 @@ fn file(
             source: "No 'tokenizer_path' parameter provided".into(),
         })?
         .clone();
-    let pooling = params.get("pooling").map(Secret::expose_secret).cloned();
+    let pooling = params
+        .get("pooling")
+        .map(SecretBox::expose_secret)
+        .map(String::from);
     let max_seq_len = max_seq_length_from_params(params)?;
-    Ok(Box::new(TeiEmbed::from_local(
+    Ok(Arc::new(TeiEmbed::from_local(
         Path::new(&weights_path),
         Path::new(&config_path),
         Path::new(&tokenizer_path),
@@ -123,7 +126,7 @@ fn azure(
     model_id: Option<String>,
     model_name: &str,
     params: &HashMap<String, SecretString>,
-) -> Result<Box<dyn Embed>, EmbedError> {
+) -> Result<Arc<dyn Embed>, EmbedError> {
     let Some(model_name) = model_id else {
         return Err(EmbedError::FailedToInstantiateEmbeddingModel {
             source: format!("For embedding model '{model_name}', model id must be specified in `from:azure:<model_id>`.").into(),
@@ -152,7 +155,7 @@ fn azure(
         });
     }
 
-    Ok(Box::new(OpenaiEmbed::new(llms::openai::new_azure_client(
+    Ok(Arc::new(OpenaiEmbed::new(llms::openai::new_azure_client(
         model_name,
         api_base,
         api_version,
@@ -167,7 +170,7 @@ async fn openai(
     component: &spicepod::component::embeddings::Embeddings,
     params: &HashMap<String, SecretString>,
     secrets: Arc<RwLock<Secrets>>,
-) -> Result<Box<dyn Embed>, EmbedError> {
+) -> Result<Arc<dyn Embed>, EmbedError> {
     // If parameter is from secret store, it will have `openai_` prefix
     let mut embed = OpenaiEmbed::new(llms::openai::new_openai_client(
         model_id.unwrap_or(DEFAULT_EMBEDDING_MODEL.to_string()),
@@ -175,15 +178,15 @@ async fn openai(
         params
             .get("api_key")
             .or(params.get("openai_api_key"))
-            .map(|s| s.expose_secret().as_str()),
+            .map(secrecy::ExposeSecret::expose_secret),
         params
             .get("org_id")
             .or(params.get("openai_org_id"))
-            .map(|s| s.expose_secret().as_str()),
+            .map(secrecy::ExposeSecret::expose_secret),
         params
             .get("project_id")
             .or(params.get("openai_project_id"))
-            .map(|s| s.expose_secret().as_str()),
+            .map(secrecy::ExposeSecret::expose_secret),
     ));
 
     // For OpenAI compatible embedding models, we allow users to
@@ -206,7 +209,7 @@ async fn openai(
 
         embed = embed.try_with_tokenizer_bytes(&bytz)?;
     }
-    Ok(Box::new(embed))
+    Ok(Arc::new(embed))
 }
 
 /// Retrieves [`Bytes`] for a file/url path.
@@ -217,17 +220,28 @@ async fn openai(
 ///   - Huggingface `FssSpec`: `hf://[<repo_type_prefix>]<repo_id>[@<revision>]/<path/in/repo>`.
 async fn get_bytes_for_file(
     url: &str,
-    params: &HashMap<String, Secret<String>>,
+    params: &HashMap<String, SecretString>,
 ) -> Result<Bytes, Box<dyn std::error::Error + Send + Sync>> {
     match url.split('/').collect_vec().as_slice() {
-        ["https:", "", "huggingface.co", org_id, model_id, "blob", branch, file @ ..] => {
+        [
+            "https:",
+            "",
+            "huggingface.co",
+            org_id,
+            model_id,
+            "blob",
+            branch,
+            file @ ..,
+        ] => {
             get_file_from_hf(
                 None,
                 org_id,
                 model_id,
                 Some(branch),
                 file.join("/").as_str(),
-                params.get("hf_token").map(|s| s.expose_secret().as_str()),
+                params
+                    .get("hf_token")
+                    .map(secrecy::ExposeSecret::expose_secret),
             )
             .await
         }
@@ -240,7 +254,9 @@ async fn get_bytes_for_file(
                 model_id,
                 branch,
                 file.join("/").as_str(),
-                params.get("hf_token").map(|s| s.expose_secret().as_str()),
+                params
+                    .get("hf_token")
+                    .map(secrecy::ExposeSecret::expose_secret),
             )
             .await
         }
@@ -252,11 +268,14 @@ async fn get_bytes_for_file(
                 model_id,
                 branch,
                 file.join("/").as_str(),
-                params.get("hf_token").map(|s| s.expose_secret().as_str()),
+                params
+                    .get("hf_token")
+                    .map(secrecy::ExposeSecret::expose_secret),
             )
             .await
         }
-        ["hf:", "", "models", org_id, model_id_revision, file @ ..] => {
+        ["hf:", "", "models", org_id, model_id_revision, file @ ..]
+        | ["hf:", "", org_id, model_id_revision, file @ ..] => {
             let (model_id, branch) = parse_model_id_w_revision(model_id_revision);
             get_file_from_hf(
                 Some("models"),
@@ -264,19 +283,9 @@ async fn get_bytes_for_file(
                 model_id,
                 branch,
                 file.join("/").as_str(),
-                params.get("hf_token").map(|s| s.expose_secret().as_str()),
-            )
-            .await
-        }
-        ["hf:", "", org_id, model_id_revision, file @ ..] => {
-            let (model_id, branch) = parse_model_id_w_revision(model_id_revision);
-            get_file_from_hf(
-                Some("models"),
-                org_id,
-                model_id,
-                branch,
-                file.join("/").as_str(),
-                params.get("hf_token").map(|s| s.expose_secret().as_str()),
+                params
+                    .get("hf_token")
+                    .map(secrecy::ExposeSecret::expose_secret),
             )
             .await
         }
@@ -339,11 +348,12 @@ fn max_seq_length_from_params(
     params
         .get("max_seq_length")
         .map(|s| {
-            s.expose_secret().parse().boxed().map_err(|e| {
-                EmbedError::FailedToInstantiateEmbeddingModel {
+            secrecy::ExposeSecret::expose_secret(s)
+                .parse()
+                .boxed()
+                .map_err(|e| EmbedError::FailedToInstantiateEmbeddingModel {
                     source: format!("Failed to parse 'max_seq_length' parameter: {e}").into(),
-                }
-            })
+                })
         })
         .transpose()
 }

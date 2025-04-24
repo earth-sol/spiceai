@@ -9,27 +9,28 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/spiceai/spiceai/actions/workflows/build_and_release.yml"><img alt="GitHub Actions Workflow Status - build" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/build_and_release.yml?branch=trunk" /></a>
-  <a href="https://github.com/spiceai/spiceai/actions/workflows/spiced_docker_nightly.yml"><img alt="GitHub Actions Workflow Status - docker build" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/spiced_docker_nightly.yml?label=docker%20build" /></a>
-  <a href="https://github.com/spiceai/spiceai/actions/workflows/pr.yml"><img alt="GitHub Actions Workflow Status - unit tests" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/pr.yml?event=merge_group&label=unit%20tests" /></a>
-  <a href="https://github.com/spiceai/spiceai/actions/workflows/integration.yml"><img alt="GitHub Actions Workflow Status - integration tests" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/integration.yml?event=pull_request&label=integration%20tests" /></a>
-  <a href="https://github.com/spiceai/spiceai/actions/workflows/integration_models.yml"><img alt="GitHub Actions Workflow Status - integration tests (models)" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/integration_models.yml?event=pull_request&label=integration%20tests%20(models)" /></a>
-  <a href="https://github.com/spiceai/spiceai/actions/workflows/benchmarks.yml"><img alt="GitHub Actions Workflow Status - benchmark tests" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/benchmarks.yml?branch=trunk&label=benchmark%20tests" /></a>
+  <a href="https://github.com/spiceai/spiceai/actions/workflows/build_and_release.yml?branch=trunk"><img alt="GitHub Actions Workflow Status - build" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/build_and_release.yml?branch=trunk" /></a>
+  <a href="https://github.com/spiceai/spiceai/actions/workflows/spiced_docker_nightly.yml?branch=trunk"><img alt="GitHub Actions Workflow Status - docker build" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/spiced_docker_nightly.yml?branch=trunk&label=docker%20build" /></a>
+  <a href="https://github.com/spiceai/spiceai/actions/workflows/pr.yml?branch=trunk"><img alt="GitHub Actions Workflow Status - unit tests" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/pr.yml?branch=trunk&event=merge_group&label=unit%20tests" /></a>
+  <a href="https://github.com/spiceai/spiceai/actions/workflows/integration.yml?branch=trunk"><img alt="GitHub Actions Workflow Status - integration tests" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/integration.yml?branch=trunk&event=pull_request&label=integration%20tests" /></a>
+  <a href="https://github.com/spiceai/spiceai/actions/workflows/integration_models.yml?branch=trunk"><img alt="GitHub Actions Workflow Status - integration tests (models)" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/integration_models.yml?branch=trunk&event=pull_request&label=integration%20tests%20(models)" /></a>
+  <a href="https://github.com/spiceai/spiceai/actions/workflows/benchmarks.yml?branch=trunk"><img alt="GitHub Actions Workflow Status - benchmark tests" src="https://img.shields.io/github/actions/workflow/status/spiceai/spiceai/testoperator_run_bench.yml?branch=trunk&label=benchmark%20tests" /></a>
 </p>
 
 <p align="center">
-  <a href="https://spiceai.org/docs">Documentation</a> | <a href="#installation">Installation</a> | <a href="https://github.com/spiceai/cookbook">Cookbook</a>
+  <a href="https://spiceai.org/docs">📄 Docs</a> | <a href="#%EF%B8%8F-quickstart-local-machine">⚡️ Quickstart</a> | <a href="https://github.com/spiceai/cookbook">🧑‍🍳 Cookbook</a>
 </p>
 
 **Spice** is a SQL query and AI compute engine, written in Rust, for data-driven apps and agents.
 
 <img width="740" alt="Spice.ai Open Source accelerated data query and LLM-inference engine" src="https://github.com/user-attachments/assets/9db94f9c-10a1-47b0-ab45-05aa964590ff" />
 
-Spice provides three industry standard APIs in a lightweight, portable runtime (single ~140 MB binary):
+Spice provides four industry standard APIs in a lightweight, portable runtime (single binary/container):
 
-1. **SQL Query APIs**: Arrow Flight, Arrow Flight SQL, ODBC, JDBC, and ADBC.
-2. **OpenAI-Compatible APIs**: HTTP APIs compatible the OpenAI SDK, AI SDK with local model serving (CUDA/Metal accelerated) and gateway to hosted models.
-3. **Iceberg Catalog REST APIs**: A unified Iceberg Catalog API.
+1. **SQL Query APIs**: Supports HTTP, Arrow Flight, Arrow Flight SQL, ODBC, JDBC, and ADBC.
+2. **OpenAI-Compatible APIs**: Provides HTTP APIs for OpenAI SDK compatibility, local model serving (CUDA/Metal accelerated), and hosted model gateway.
+3. **Iceberg Catalog REST APIs**: Offers a unified API for Iceberg Catalog.
+4. **MCP HTTP+SSE APIs**: Enables integration with external tools via Model Context Protocol (MCP) using HTTP and Server-Sent Events (SSE).
 
 🎯 Goal: Developers can focus on building data apps and AI agents confidently, knowing they are grounded in data.
 
@@ -41,7 +42,7 @@ Spice is primarily used for:
 
 If you want to build with DataFusion or using DuckDB, Spice provides a simple, flexible, and production-ready engine you can just use.
 
-📣 Read the [Spice.ai OSS announcement blog post](https://blog.spiceai.org/posts/2024/03/28/adding-spice-the-next-generation-of-spice.ai-oss/).
+📣 Read the [Spice.ai 1.0-stable announcement](https://spiceai.org/blog/announcing-1.0-stable).
 
 Spice is built-on industry leading technologies including [Apache DataFusion](https://datafusion.apache.org), Apache Arrow, Arrow Flight, SQLite, and DuckDB.
 
@@ -52,6 +53,7 @@ Spice is built-on industry leading technologies including [Apache DataFusion](ht
 </div>
 
 🎥 [Watch the CMU Databases Accelerating Data and AI with Spice.ai Open-Source](https://www.youtube.com/watch?v=tyM-ec1lKfU)
+🎥 [Watch How to Query Data using Spice, OpenAI, and MCP](https://www.youtube.com/watch?v=TFAu4qxjTPk&list=PLesJrUXEx3U-dQul0PqLV3TGTdUmr3B6e&index=8)
 
 ## Why Spice?
 
@@ -100,7 +102,7 @@ Spice simplifies building data-driven AI applications and agents by making it fa
 | **Unified Data + AI Runtime** | ✅                                   | ―                  | ―          | ―                | ―                             |
 | **Federated Data Query**      | ✅                                   | ―                  | ―          | ―                | ―                             |
 | **Accelerated Data Access**   | ✅                                   | ―                  | ―          | ―                | ―                             |
-| **Tools/Functions**           | ✅                                   | ✅                 | ✅         | Limited          | Limited                       |
+| **Tools/Functions**           | ✅ (MCP HTTP+SSE)                    | ✅                 | ✅         | Limited          | Limited                       |
 | **LLM Memory**                | ✅                                   | ✅                 | ―          | ✅               | ―                             |
 | **Evaluations (Evals)**       | ✅                                   | Limited            | ―          | Limited          | ―                             |
 | **Search**                    | ✅ (VSS)                             | ✅                 | ✅         | Limited          | Limited                       |
@@ -118,7 +120,7 @@ Limited = Partial or restricted support
 - **OpenAI-compatible API**: Connect to hosted models (OpenAI, Anthropic, xAI) or deploy locally (Llama, NVIDIA NIM). [AI Gateway Recipe](https://github.com/spiceai/cookbook/blob/trunk/openai_sdk/README.md)
 - **Federated Data Access**: Query using SQL and NSQL (text-to-SQL) across databases, data warehouses, and data lakes with advanced query push-down for fast retrieval across disparate data sources. [Federated SQL Query Recipe](https://github.com/spiceai/cookbook/blob/trunk/federation/README.md)
 - **Search and RAG**: Search and retrieve context with accelerated embeddings for retrieval-augmented generation (RAG) workflows. [Vector Search over GitHub Files](https://github.com/spiceai/cookbook/blob/trunk/search_github_files/README.md)
-- **LLM Memory and Observability**: Store and retrieve history and context for AI agents while gaining deep visibility into data flows, model performance, and traces. [LLM Memory Recipe](https://github.com/spiceai/cookbook/blob/trunk/llm-memory/README.md) | [Monitoring Features Documentation](https://spiceai.org/docs/features/monitoring)
+- **LLM Memory and Observability**: Store and retrieve history and context for AI agents while gaining deep visibility into data flows, model performance, and traces. [LLM Memory Recipe](https://github.com/spiceai/cookbook/blob/trunk/llm-memory/README.md) | [Observability & Monitoring Features Documentation](https://spiceai.org/docs/features/observability)
 
 ### Database CDN and Query Mesh
 
@@ -139,6 +141,8 @@ Limited = Partial or restricted support
 - **Is Spice a cache?** No specifically; you can think of Spice data acceleration as an _active_ cache, materialization, or data prefetcher. A cache would fetch data on a cache-miss while Spice prefetches and materializes filtered data on an interval, trigger, or as data changes using CDC. In addition to acceleration Spice supports [results caching](https://spiceai.org/docs/features/caching).
 
 - **Is Spice a CDN for databases?** Yes, a common use-case for Spice is as a CDN for different data sources. Using CDN concepts, Spice enables you to ship (load) a working set of your database (or data lake, or data warehouse) where it's most frequently accessed, like from a data-intensive application or for AI context.
+
+[➡️ Docs FAQ](https://spiceai.org/docs/faq)
 
 ### Watch a 30-sec BI dashboard acceleration demo
 
@@ -180,7 +184,7 @@ See more demos on [YouTube](https://www.youtube.com/playlist?list=PLesJrUXEx3U9a
 | `mongodb`                          | MongoDB                               | Coming Soon       |                              |
 | `elasticsearch`                    | ElasticSearch                         | Roadmap           |                              |
 
-[databricks]: https://github.com/spiceai/cookbook/tree/trunk/databricks/delta_lake
+[databricks]: https://github.com/spiceai/cookbook/blob/trunk/databricks/README.md
 [spark]: https://spark.apache.org/docs/latest/spark-connect-overview.html
 [s3]: https://github.com/spiceai/cookbook/tree/trunk/s3#readme
 [spiceai]: https://github.com/spiceai/cookbook/tree/trunk/spiceai#readme
@@ -525,7 +529,7 @@ Spice.ai is designed to be extensible with extension points documented at [EXTEN
 
 ### 🔨 Upcoming Features
 
-🚀 See the [Roadmap to v1.0-stable](https://github.com/spiceai/spiceai/blob/trunk/docs/ROADMAP.md) for upcoming features.
+🚀 See the [Roadmap](https://github.com/spiceai/spiceai/blob/trunk/docs/ROADMAP.md) for upcoming features.
 
 ### 🤝 Connect with us
 
@@ -535,6 +539,6 @@ We greatly appreciate and value your support! You can help Spice in a number of 
 - [File an issue](https://github.com/spiceai/spiceai/issues/new) if you see something not quite working correctly.
 - Join our team ([We’re hiring!](https://spice.ai/careers))
 - Contribute code or documentation to the project (see [CONTRIBUTING.md](CONTRIBUTING.md)).
-- Follow our blog at [blog.spiceai.org](https://blog.spiceai.org)
+- Follow our blog at [spiceai.org/blog](https://spiceai.org/blog)
 
 ⭐️ star this repo! Thank you for your support! 🙏

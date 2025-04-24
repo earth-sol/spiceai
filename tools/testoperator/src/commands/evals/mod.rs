@@ -62,16 +62,18 @@ pub(crate) async fn run(args: &EvalsTestArgs) -> anyhow::Result<()> {
         .send()
         .await?;
 
-    if !response.status().is_success() {
-        return Err(anyhow::anyhow!(
-            "Failed to execute evals: {}",
-            response.text().await?
-        ));
+    let response_status = response.status();
+    let response_msq = response.text().await?;
+
+    if !response_status.is_success() {
+        return Err(anyhow::anyhow!("Failed to execute evals: {response_msq}"));
     }
 
-    println!("Execution completed, retrieving results...");
+    println!("Evals completed:\n{response_msq}");
 
-    let mut flight_client = spiced_instance.flight_client().await?;
+    println!("Retrieving results...");
+
+    let mut flight_client = spiced_instance.flight_client(None).await?;
 
     let eval_result = execute_sql(&mut flight_client, QUERY_EVAL_BENCHMARK_MAIN_METRICS).await?;
     println!("Result:\n{}\n", pretty_format_batches(&eval_result)?);
@@ -260,7 +262,7 @@ static QUERY_EVAL_BENCHMARK_FAILED_TESTS: &str = "
 WITH latest_run AS (
     SELECT id FROM spice.eval.runs ORDER BY created_at DESC LIMIT 1
 )
-SELECT run_id, input, output, actual as expected, value as score
+SELECT run_id, input, expected, actual, value as score
 FROM eval.results
 WHERE run_id = (SELECT id FROM latest_run) and value < 1;
 ";

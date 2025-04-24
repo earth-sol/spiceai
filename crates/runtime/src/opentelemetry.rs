@@ -19,23 +19,25 @@ use std::sync::Arc;
 
 use flight_client::Credentials;
 use flight_client::FlightClient;
-use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_server::MetricsService;
-use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_server::MetricsServiceServer;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceResponse;
-use otel_arrow::proto_to_sdk;
+use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_server::MetricsService;
+use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_server::MetricsServiceServer;
 use otel_arrow::OtelToArrowConverter;
-use runtime_auth::layer::grpc::make_interceptor;
+use otel_arrow::proto_to_sdk;
 use runtime_auth::GrpcAuth;
+use runtime_auth::layer::grpc::make_interceptor;
+use runtime_auth::layer::grpc::make_interceptor;
 use secrecy::ExposeSecret;
 use snafu::prelude::*;
+use tokio_util::sync::CancellationToken;
+use tonic::Request;
+use tonic::Response;
+use tonic::Status;
 use tonic::async_trait;
 use tonic::codec::CompressionEncoding;
 use tonic::service::interceptor;
 use tonic::transport::{Identity, Server, ServerTlsConfig};
-use tonic::Request;
-use tonic::Response;
-use tonic::Status;
 use tonic_health::pb::health_server::Health;
 use tonic_health::pb::health_server::HealthServer;
 
@@ -115,6 +117,7 @@ pub async fn start(
     export_credentials: Option<Credentials>,
     tls_config: Option<Arc<TlsConfig>>,
     grpc_auth: Option<Arc<dyn GrpcAuth + Send + Sync>>,
+    shutdown_signal: Option<CancellationToken>,
 ) -> Result<()> {
     let flight_client = match FlightClient::try_new(
         export_url.unwrap_or("https://telemetry.spiceai.io".into()),
@@ -146,13 +149,21 @@ pub async fn start(
             .context(UnableToConfigureTlsSnafu)?;
     }
 
-    server
+    let server = server
         .layer(interceptor(make_interceptor(grpc_auth)))
         .add_service(create_health_service().await)
-        .add_service(svc)
-        .serve(bind_address)
-        .await
-        .context(UnableToServeSnafu)?;
+        .add_service(svc);
+
+    if let Some(token) = shutdown_signal {
+        server
+            .serve_with_shutdown(bind_address, token.cancelled())
+            .await
+    } else {
+        server.serve(bind_address).await
+    }
+    .context(UnableToServeSnafu)?;
+
+    tracing::debug!("Spice Runtime OpenTelemetry stopped");
 
     Ok(())
 }

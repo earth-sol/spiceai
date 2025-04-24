@@ -11,7 +11,7 @@ version.workspace = true
 [dependencies]
 app = { path = "../app" }
 arrow.workspace = true
-arrow-csv = "53.3.0"
+arrow-csv.workspace = true
 arrow-flight = { workspace = true, features = ["flight-sql-experimental"] }
 arrow-ipc.workspace = true
 arrow-json.workspace = true
@@ -21,7 +21,7 @@ arrow_tools = { path = "../arrow_tools" }
 async-openai.workspace = true
 async-stream.workspace = true
 async-trait.workspace = true
-aws-config = { version = "1.1.10", optional = true }
+aws-config = { version = "1.6.0", optional = true }
 aws-sdk-dynamodb = { version = "1", optional = true }
 aws-sdk-secretsmanager = { version = "1", optional = true }
 aws-sdk-sts = { version = "1", optional = true }
@@ -64,24 +64,29 @@ hyper = "1.6.0"
 hyper-util = { version = "0.1.6", features = ["service"] }
 iceberg.workspace = true
 iceberg-catalog-rest.workspace = true
+iceberg-datafusion.workspace = true
 imap = { workspace = true, optional = true }
 indexmap.workspace = true
 itertools.workspace = true
 jsonwebtoken = "9.3.0"
-keyring = { version = "3.6.1", features = [
+keyring = { version = "3.6.2", features = [
     "apple-native",
     "windows-native",
     "linux-native",
 ], optional = true }
 llms = { path = "../llms" }
 logos = "0.15.0"
+mcp-client = { git = "https://github.com/spiceai/modelcontextprotocol-rust-sdk.git", rev = "a61112adf47ffbcc591bf199d30038f661f6a6bb", package = "mcp-client", optional = true }
+mcp-core = { git = "https://github.com/spiceai/modelcontextprotocol-rust-sdk.git", rev = "a61112adf47ffbcc591bf199d30038f661f6a6bb", package = "mcp-core", optional = true }
+mcp-server = { git = "https://github.com/spiceai/modelcontextprotocol-rust-sdk.git", rev = "a61112adf47ffbcc591bf199d30038f661f6a6bb", package = "mcp-server", optional = true }
 mediatype = "0.19.18"
 model_components = { path = "../model_components" }
+moka.workspace = true
 mysql_async = { workspace = true, optional = true }
-notify = "7.0.0"
+notify = "8.0.0"
 ns_lookup = { path = "../ns_lookup" }
 object_store = { workspace = true, features = ["aws", "http", "azure"] }
-once_cell = "1.19.0"
+once_cell = "1.21.3"
 opentelemetry.workspace = true
 opentelemetry-prometheus.workspace = true
 opentelemetry-proto.workspace = true
@@ -90,19 +95,20 @@ otel-arrow = { path = "../otel-arrow" }
 package = { path = "../package" }
 percent-encoding.workspace = true
 pin-project.workspace = true
+postcard.workspace = true
 prometheus.workspace = true
 prometheus-parse = "0.2.5"
 prost = { version = "0.13.1", default-features = false, features = [
     "prost-derive",
 ] }
-rand = "0.8.5"
+rand = "0.9.0"
 regex.workspace = true
 reqwest.workspace = true
 runtime-auth = { path = "../runtime-auth" }
 rusqlite = { workspace = true, optional = true }
 rustls.workspace = true
 rustls-pemfile.workspace = true
-schemars = "0.8.19"
+schemars = "0.8.22"
 secrecy.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -110,21 +116,23 @@ snafu.workspace = true
 snowflake-api = { workspace = true, optional = true }
 spicepod = { path = "../spicepod" }
 ssh2 = { workspace = true, optional = true }
+strsim = { version = "0.11.1", optional = true }
 suppaftp = { workspace = true, optional = true }
 telemetry = { path = "../telemetry" }
+tera = { version = "1.17" }
 tiberius = { workspace = true, optional = true }
 tokio.workspace = true
 tokio-rusqlite = { workspace = true, optional = true }
 tokio-rustls = "0.26.0"
 tokio-stream.workspace = true
-tokio-util = { workspace = true, optional = true }
+tokio-util.workspace = true
 tonic.workspace = true
 tonic-health.workspace = true
 tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
 tracing-futures.workspace = true
-tract-core = "0.21.0"
+tract-core = "0.21.10"
 url = "2.5.4"
 util = { path = "../util" }
 utoipa = { version = "5", features = ["axum_extras"], optional = true }
@@ -137,14 +145,14 @@ x509-certificate.workspace = true
 anyhow = "1.0.86"
 async-graphql = "7.0.5"
 async-graphql-axum = "=7.0.13"
-azure_core = "0.21.0"
+azure_core = "0.22.0"
 azure_storage = "0.21.0"
 azure_storage_blobs = "0.21.0"
 bollard = "0.18.1"
 dirs = "5.0.1"
 flightrepl = { path = "../flightrepl" }
 hf-hub = { workspace = true }
-insta.workspace = true
+insta = { workspace = true, features = ["json"] }
 jsonpath-rust = "0.7.3"
 opentelemetry_sdk = { workspace = true, features = ["rt-tokio-current-thread"] }
 paste.workspace = true
@@ -173,20 +181,21 @@ databricks = ["data_components/databricks"]
 debezium = ["data_components/debezium"]
 default = ["keyring-secret-store", "aws-secrets-manager", "sharepoint"]
 delta_lake = ["data_components/delta_lake"]
-dev = ["openapi", "otel-arrow/dev"]
+dev = ["openapi", "otel-arrow/dev", "mcp"]
 dremio = []
 duckdb = ["dep:duckdb", "db_connection_pool/duckdb", "data_components/duckdb"]
 dynamodb = ["dep:aws-sdk-dynamodb", "data_components/dynamodb"]
 flightsql = ["data_components/flightsql"]
 ftp = ["dep:suppaftp", "dep:ssh2"]
-keyring-secret-store = ["dep:keyring"]
 imap = ["data_components/imap", "dep:imap"]
+keyring-secret-store = ["dep:keyring"]
+mcp = ["dep:mcp-client", "dep:mcp-core", "dep:mcp-server"]
 metal = ["llms/metal"]
-models = ["model_components/full"]
-mssql = ["dep:tiberius", "dep:tokio-util", "data_components/mssql"]
+models = ["model_components/full", "mcp", "dep:strsim"]
+mssql = ["dep:tiberius", "data_components/mssql"]
 mysql = ["dep:mysql_async", "db_connection_pool/mysql", "data_components/mysql"]
 odbc = ["db_connection_pool/odbc", "data_components/odbc"]
-openapi = ["dep:utoipa-swagger-ui", "dep:utoipa"]
+openapi = ["dep:utoipa-swagger-ui", "dep:utoipa", "mcp"]
 postgres = [
     "db_connection_pool/postgres",
     "data_components/postgres",
@@ -206,10 +215,7 @@ sqlite = [
     "data_components/sqlite",
     "dep:rusqlite",
 ]
-
-[[bench]]
-harness = false
-name = "bench"
+extended_tests = []
 
 [[bench]]
 harness = false

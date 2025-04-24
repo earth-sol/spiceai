@@ -15,9 +15,9 @@ limitations under the License.
 */
 #![allow(clippy::missing_errors_doc)]
 
-use crate::chat::nsql::structured_output::StructuredOutputSqlGeneration;
-use crate::chat::nsql::{json::JsonSchemaSqlGeneration, SqlGeneration};
 use crate::chat::Chat;
+use crate::chat::nsql::structured_output::StructuredOutputSqlGeneration;
+use crate::chat::nsql::{SqlGeneration, json::JsonSchemaSqlGeneration};
 use async_openai::config::Config;
 use async_openai::error::OpenAIError;
 use async_openai::types::{
@@ -66,15 +66,17 @@ impl<C: Config + Send + Sync> Chat for Openai<C> {
             messages: vec![ChatCompletionRequestMessage::User(
                 ChatCompletionRequestUserMessage {
                     name: None,
-                    content: ChatCompletionRequestUserMessageContent::Text("ping.".to_string()),
+                    content: ChatCompletionRequestUserMessageContent::Text(
+                        "Respond with the single letter 'A'. This is a healthcheck.".to_string(),
+                    ),
                 },
             )],
             ..Default::default()
         };
         if self.supports_max_completion_tokens() {
-            req.max_completion_tokens = Some(100);
+            req.max_completion_tokens = Some(150);
         } else {
-            req.max_tokens = Some(100);
+            req.max_tokens = Some(150);
         }
 
         if let Err(e) = self.chat_request(req).instrument(span.clone()).await {

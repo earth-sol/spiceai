@@ -17,8 +17,8 @@ limitations under the License.
 use crate::component::dataset::Dataset;
 use crate::parameters::Parameters;
 use async_trait::async_trait;
-use data_components::odbc::ODBCTableFactory;
 use data_components::Read;
+use data_components::odbc::ODBCTableFactory;
 use datafusion::datasource::TableProvider;
 use datafusion::sql::unparser::dialect::{
     CustomDialect, CustomDialectBuilder, DateFieldExtractStyle, DefaultDialect, Dialect,
@@ -38,17 +38,27 @@ use super::{
 
 #[derive(Debug, Snafu)]
 pub enum Error {
-    #[snafu(display("Failed to setup the ODBC connection pool.\nVerify the ODBC connection details are valid, and try again.\n{source}"))]
+    #[snafu(display(
+        "Failed to setup the ODBC connection pool.\nVerify the ODBC connection details are valid, and try again.\n{source}"
+    ))]
     UnableToCreateODBCConnectionPool {
         source: db_connection_pool::odbcpool::Error,
     },
-    #[snafu(display("Missing required parameter: {param}. Specify a value.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/odbc"))]
+    #[snafu(display(
+        "Missing required parameter: {param}. Specify a value.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/odbc"
+    ))]
     MissingParameter { param: String },
-    #[snafu(display("An ODBC parameter is configured incorrectly: {param}.\n{msg}\nFor details, visit: https://spiceai.org/docs/components/data-connectors/odbc"))]
+    #[snafu(display(
+        "An ODBC parameter is configured incorrectly: {param}.\n{msg}\nFor details, visit: https://spiceai.org/docs/components/data-connectors/odbc"
+    ))]
     InvalidParameter { param: String, msg: String },
-    #[snafu(display("No ODBC driver was specified in the connection string.\nSpecify an installed driver in the connection string.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/odbc"))]
+    #[snafu(display(
+        "No ODBC driver was specified in the connection string.\nSpecify an installed driver in the connection string.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/odbc"
+    ))]
     NoDriverSpecified,
-    #[snafu(display("Accessing an ODBC driver with a file path is not permitted.\nInstall a driver using the system driver manager, and specify the driver name instead.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/odbc"))]
+    #[snafu(display(
+        "Accessing an ODBC driver with a file path is not permitted.\nInstall a driver using the system driver manager, and specify the driver name instead.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/odbc"
+    ))]
     DirectDriverNotPermitted,
 }
 
@@ -59,6 +69,12 @@ where
     'a: 'static,
 {
     odbc_factory: ODBCTableFactory<'a>,
+}
+
+impl std::fmt::Debug for ODBC<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ODBC").finish_non_exhaustive()
+    }
 }
 
 pub struct SQLDialectParam(String);
@@ -159,11 +175,11 @@ impl ODBCFactory {
 }
 
 const PARAMETERS: &[ParameterSpec] = &[
-    ParameterSpec::connector("connection_string").secret(),
-    ParameterSpec::connector("max_binary_size"),
-    ParameterSpec::connector("max_text_size"),
-    ParameterSpec::connector("max_bytes_per_batch"),
-    ParameterSpec::connector("max_num_rows_per_batch"),
+    ParameterSpec::component("connection_string").secret(),
+    ParameterSpec::component("max_binary_size"),
+    ParameterSpec::component("max_text_size"),
+    ParameterSpec::component("max_bytes_per_batch"),
+    ParameterSpec::component("max_num_rows_per_batch"),
     ParameterSpec::runtime("sql_dialect"),
 ];
 

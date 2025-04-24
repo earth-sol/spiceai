@@ -16,7 +16,10 @@ limitations under the License.
 
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
-use datafusion::{datasource::TableProvider, sql::TableReference};
+use datafusion::{
+    datasource::TableProvider,
+    sql::{TableReference, unparser::dialect},
+};
 use datafusion_table_providers::sql::{
     db_connection_pool::DbConnectionPool,
     sql_provider_datafusion::{self, SqlTable},
@@ -44,11 +47,24 @@ pub struct SnowflakeTableFactory {
     pool: Arc<SnowflakeConnectionPool>,
 }
 
+impl std::fmt::Debug for SnowflakeTableFactory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SnowflakeTableFactory")
+            .finish_non_exhaustive()
+    }
+}
+
 impl SnowflakeTableFactory {
     #[must_use]
     pub fn new(pool: Arc<SnowflakeConnectionPool>) -> Self {
         Self { pool }
     }
+}
+
+fn snowflake_dialect() -> dialect::CustomDialect {
+    dialect::CustomDialectBuilder::new()
+        .with_identifier_quote_style('"')
+        .build()
 }
 
 #[async_trait]
@@ -58,19 +74,19 @@ impl Read for SnowflakeTableFactory {
         table_reference: TableReference,
         schema: Option<SchemaRef>,
     ) -> Result<Arc<dyn TableProvider + 'static>, Box<dyn std::error::Error + Send + Sync>> {
+        let dialect = Arc::new(snowflake_dialect());
+
         let pool = Arc::clone(&self.pool);
         let table_provider = match schema {
-            Some(schema) => Arc::new(SqlTable::new_with_schema(
-                "snowflake",
-                &pool,
-                schema,
-                table_reference,
-                None,
-            )),
+            Some(schema) => Arc::new(
+                SqlTable::new_with_schema("snowflake", &pool, schema, table_reference, None)
+                    .with_dialect(dialect),
+            ),
             None => Arc::new(
                 SqlTable::new("snowflake", &pool, table_reference, None)
                     .await
-                    .context(UnableToConstructSQLTableSnafu)?,
+                    .context(UnableToConstructSQLTableSnafu)?
+                    .with_dialect(dialect),
             ),
         };
 

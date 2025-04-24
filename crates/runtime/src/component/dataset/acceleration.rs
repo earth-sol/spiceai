@@ -16,7 +16,7 @@ limitations under the License.
 
 use datafusion_table_providers::util::column_reference::ColumnReference;
 use serde::{Deserialize, Serialize};
-use spicepod::component::{dataset::acceleration as spicepod_acceleration, params::Params};
+use spicepod::{acceleration as spicepod_acceleration, param::Params};
 use std::{collections::HashMap, fmt::Display, time::Duration};
 
 pub mod constraints;
@@ -24,6 +24,7 @@ pub mod on_conflict;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum RefreshMode {
     Disabled,
     Full,
@@ -62,6 +63,33 @@ impl Display for Mode {
         match self {
             Mode::Memory => write!(f, "memory"),
             Mode::File => write!(f, "file"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum RefreshOnStartup {
+    /// Always start a new refresh when Spice starts.
+    Always,
+    /// Only start a refresh if an existing acceleration is not available.
+    #[default]
+    Auto,
+}
+
+impl From<spicepod_acceleration::RefreshOnStartup> for RefreshOnStartup {
+    fn from(refresh_on_startup: spicepod_acceleration::RefreshOnStartup) -> Self {
+        match refresh_on_startup {
+            spicepod_acceleration::RefreshOnStartup::Always => RefreshOnStartup::Always,
+            spicepod_acceleration::RefreshOnStartup::Auto => RefreshOnStartup::Auto,
+        }
+    }
+}
+
+impl Display for RefreshOnStartup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RefreshOnStartup::Always => write!(f, "always"),
+            RefreshOnStartup::Auto => write!(f, "auto"),
         }
     }
 }
@@ -218,6 +246,8 @@ pub struct Acceleration {
 
     pub refresh_mode: Option<RefreshMode>,
 
+    pub refresh_on_startup: RefreshOnStartup,
+
     pub refresh_check_interval: Option<Duration>,
 
     pub refresh_sql: Option<String>,
@@ -332,7 +362,7 @@ impl TryFrom<spicepod_acceleration::Acceleration> for Acceleration {
             .as_mut()
             .and_then(|x| x.data.remove("disable_query_push_down"))
         {
-            Some(spicepod::component::params::ParamValue::Bool(value)) => value,
+            Some(spicepod::param::ParamValue::Bool(value)) => value,
             _ => false,
         };
 
@@ -349,6 +379,7 @@ impl TryFrom<spicepod_acceleration::Acceleration> for Acceleration {
             mode: Mode::from(acceleration.mode),
             engine,
             refresh_mode: acceleration.refresh_mode.map(RefreshMode::from),
+            refresh_on_startup: RefreshOnStartup::from(acceleration.refresh_on_startup),
             refresh_check_interval,
             refresh_sql: acceleration.refresh_sql,
             refresh_data_window: acceleration.refresh_data_window,
@@ -400,6 +431,7 @@ impl Default for Acceleration {
             primary_key: None,
             on_conflict: HashMap::default(),
             disable_query_push_down: false,
+            refresh_on_startup: RefreshOnStartup::default(),
         }
     }
 }

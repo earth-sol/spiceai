@@ -17,9 +17,9 @@ limitations under the License.
 use std::time::SystemTime;
 use std::{any::Any, sync::Arc, time::Duration};
 
-use crate::component::dataset::acceleration::{RefreshMode, ZeroResultsAction};
+use crate::component::dataset::acceleration::{RefreshMode, RefreshOnStartup, ZeroResultsAction};
 use crate::component::dataset::{ReadyState, TimeFormat};
-use crate::dataaccelerator::spice_sys::dataset_checkpoint::DatasetCheckpoint;
+use crate::dataaccelerator::spice_sys::dataset_checkpoint::DatasetCheckpointer;
 use crate::datafusion::error::SpiceExternalError;
 use crate::datafusion::is_spice_internal_dataset;
 use crate::federated_table::FederatedTable;
@@ -36,7 +36,7 @@ use datafusion::error::{DataFusionError, Result as DataFusionResult};
 use datafusion::logical_expr::dml::InsertOp;
 use datafusion::logical_expr::{Operator, TableProviderFilterPushDown};
 use datafusion::physical_plan::union::UnionExec;
-use datafusion::physical_plan::{collect, ExecutionPlan};
+use datafusion::physical_plan::{ExecutionPlan, collect};
 use datafusion::sql::TableReference;
 use datafusion::{
     datasource::{TableProvider, TableType},
@@ -47,16 +47,15 @@ use opentelemetry::KeyValue;
 use refresh::RefreshOverrides;
 use snafu::prelude::*;
 use synchronized_table::SynchronizedTable;
+use tokio::sync::{RwLock, mpsc, oneshot};
 use tokio::task::JoinHandle;
 
-use tokio::sync::{mpsc, oneshot, RwLock};
-
 use crate::datafusion::filter_converter::TimestampFilterConvert;
+use crate::execution_plan::TableScanParams;
 use crate::execution_plan::fallback_on_zero_results::FallbackOnZeroResultsScanExec;
 use crate::execution_plan::schema_cast::SchemaCastScanExec;
 use crate::execution_plan::slice::SliceExec;
 use crate::execution_plan::tee::TeeExec;
-use crate::execution_plan::TableScanParams;
 
 pub mod federation;
 mod metrics;
@@ -68,16 +67,24 @@ mod synchronized_table;
 
 #[derive(Debug, Snafu)]
 pub enum Error {
-    #[snafu(display("Failed to get data from the connector.\n{source}\nEnsure the dataset configuration is valid, and try again."))]
+    #[snafu(display(
+        "Failed to get data from the connector.\n{source}\nEnsure the dataset configuration is valid, and try again."
+    ))]
     UnableToGetDataFromConnector { source: DataFusionError },
 
-    #[snafu(display("Failed to get data from the connector.\n{source}\nEnsure the dataset configuration is valid, and try again."))]
+    #[snafu(display(
+        "Failed to get data from the connector.\n{source}\nEnsure the dataset configuration is valid, and try again."
+    ))]
     FailedToRefreshDataset { source: DataFusionError },
 
-    #[snafu(display("Failed to get data from the connector.\n{source}\nEnsure the dataset configuration is valid, and try again."))]
+    #[snafu(display(
+        "Failed to get data from the connector.\n{source}\nEnsure the dataset configuration is valid, and try again."
+    ))]
     UnableToScanTableProvider { source: DataFusionError },
 
-    #[snafu(display("Failed to get data from the connector.\n{source}\nEnsure the dataset configuration is valid, and try again."))]
+    #[snafu(display(
+        "Failed to get data from the connector.\n{source}\nEnsure the dataset configuration is valid, and try again."
+    ))]
     UnableToCreateMemTableFromUpdate { source: DataFusionError },
 
     #[snafu(display("Failed to refresh the dataset.\n{source}"))]
@@ -85,7 +92,9 @@ pub enum Error {
         source: tokio::sync::mpsc::error::SendError<Option<RefreshOverrides>>,
     },
 
-    #[snafu(display("Manual refresh is not supported for `append` mode.\nOnly `full` refresh mode supports manual refreshes."))]
+    #[snafu(display(
+        "Manual refresh is not supported for `append` mode.\nOnly `full` refresh mode supports manual refreshes."
+    ))]
     ManualRefreshIsNotSupported {},
 
     #[snafu(display(
@@ -93,7 +102,9 @@ pub enum Error {
     ))]
     RefreshNotSupportedForChildTable { parent_dataset: TableReference },
 
-    #[snafu(display("Failed to find latest timestamp in accelerated table.\nIs the 'time_column' parameter correct?"))]
+    #[snafu(display(
+        "Failed to find latest timestamp in accelerated table.\nIs the 'time_column' parameter correct?"
+    ))]
     FailedToQueryLatestTimestamp { source: DataFusionError },
 
     #[snafu(display("{reason}"))]
@@ -105,16 +116,22 @@ pub enum Error {
     #[snafu(display("Failed to write data into accelerated table.\n{source}"))]
     FailedToWriteData { source: DataFusionError },
 
-    #[snafu(display("The accelerated table does not support delete operations.\nUse a different acceleration engine which supports delete operations.\nFor details, visit: https://spiceai.org/docs/components/data-accelerators"))]
+    #[snafu(display(
+        "The accelerated table does not support delete operations.\nUse a different acceleration engine which supports delete operations.\nFor details, visit: https://spiceai.org/docs/components/data-accelerators"
+    ))]
     AcceleratedTableDoesntSupportDelete {},
 
-    #[snafu(display("Expected the schema to have field '{field_name}', but it did not.\nSpice found the schema: {schema}\nIs the primary key configuration correct?"))]
+    #[snafu(display(
+        "Expected the schema to have field '{field_name}', but it did not.\nSpice found the schema: {schema}\nIs the primary key configuration correct?"
+    ))]
     PrimaryKeyExpectedSchemaToHaveField {
         field_name: String,
         schema: SchemaRef,
     },
 
-    #[snafu(display("Expected the field in schema '{field_name}' to have type '{expected_data_type}', but it did not.\nSpice found the schema: {schema}\nIs the primary key configuration correct?"))]
+    #[snafu(display(
+        "Expected the field in schema '{field_name}' to have type '{expected_data_type}', but it did not.\nSpice found the schema: {schema}\nIs the primary key configuration correct?"
+    ))]
     PrimaryKeyArrayDataTypeMismatch {
         field_name: String,
         expected_data_type: String,
@@ -134,13 +151,19 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Snafu)]
 pub enum AcceleratedTableBuilderError {
-    #[snafu(display("A changes stream is required when `refresh_mode` is set to `changes`.\nFor details, visit: https://spiceai.org/docs/features/cdc"))]
+    #[snafu(display(
+        "A changes stream is required when `refresh_mode` is set to `changes`.\nFor details, visit: https://spiceai.org/docs/features/cdc"
+    ))]
     ExpectedChangesStream,
 
-    #[snafu(display("An append stream is required when `refresh_mode` is set to `append` without a `time_column`.\nFor details, visit: https://spiceai.org/docs/components/data-accelerators/data-refresh#append"))]
+    #[snafu(display(
+        "An append stream is required when `refresh_mode` is set to `append` without a `time_column`.\nFor details, visit: https://spiceai.org/docs/components/data-accelerators/data-refresh#append"
+    ))]
     AppendStreamRequired,
 
-    #[snafu(display("A synchronized accelerated table requires full refresh mode.\nSet `refresh_mode` to 'full', and try again."))]
+    #[snafu(display(
+        "A synchronized accelerated table requires full refresh mode.\nSet `refresh_mode` to 'full', and try again."
+    ))]
     SynchronizedAcceleratedTableRequiresFullRefresh,
 }
 
@@ -210,12 +233,13 @@ pub struct Builder {
     refresh: refresh::Refresh,
     retention: Option<Retention>,
     zero_results_action: ZeroResultsAction,
+    refresh_on_startup: RefreshOnStartup,
     ready_state: ReadyState,
     cache_provider: Option<Arc<QueryResultsCacheProvider>>,
     changes_stream: Option<ChangesStream>,
     append_stream: Option<ChangesStream>,
     disable_query_push_down: bool,
-    checkpointer: Option<DatasetCheckpoint>,
+    checkpointer: Option<Arc<dyn DatasetCheckpointer>>,
     synchronize_with: Option<SynchronizedTable>,
     initial_load_complete: bool,
 }
@@ -238,6 +262,7 @@ impl Builder {
             refresh,
             retention: None,
             zero_results_action: ZeroResultsAction::default(),
+            refresh_on_startup: RefreshOnStartup::default(),
             ready_state: ReadyState::default(),
             cache_provider: None,
             changes_stream: None,
@@ -256,6 +281,11 @@ impl Builder {
 
     pub fn zero_results_action(&mut self, zero_results_action: ZeroResultsAction) -> &mut Self {
         self.zero_results_action = zero_results_action;
+        self
+    }
+
+    pub fn refresh_on_startup(&mut self, refresh_on_startup: RefreshOnStartup) -> &mut Self {
+        self.refresh_on_startup = refresh_on_startup;
         self
     }
 
@@ -300,13 +330,16 @@ impl Builder {
     }
 
     /// Set the checkpointer for the accelerated table
-    pub fn checkpointer(&mut self, checkpointer: DatasetCheckpoint) -> &mut Self {
+    pub fn checkpointer(&mut self, checkpointer: Arc<dyn DatasetCheckpointer>) -> &mut Self {
         self.checkpointer = Some(checkpointer);
         self
     }
 
     /// Set the checkpointer for the accelerated table
-    pub fn checkpointer_opt(&mut self, checkpointer: Option<DatasetCheckpoint>) -> &mut Self {
+    pub fn checkpointer_opt(
+        &mut self,
+        checkpointer: Option<Arc<dyn DatasetCheckpointer>>,
+    ) -> &mut Self {
         self.checkpointer = checkpointer;
         self
     }
@@ -407,6 +440,7 @@ impl Builder {
         );
         refresher.cache_provider(self.cache_provider.clone());
         refresher.checkpointer(self.checkpointer);
+        refresher.refresh_on_startup(self.refresh_on_startup);
         refresher.set_initial_load_completed(self.initial_load_complete);
         if let Some(synchronize_with) = &self.synchronize_with {
             refresher.synchronize_with(synchronize_with.clone());
@@ -542,6 +576,7 @@ impl AcceleratedTable {
 
     #[allow(clippy::cast_possible_wrap)]
     #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::too_many_lines)]
     async fn start_retention_check(
         dataset_name: TableReference,
         accelerator: Arc<dyn TableProvider>,
@@ -574,7 +609,9 @@ impl AcceleratedTable {
             retention.time_partition_column.clone(),
             retention.time_partition_format,
         ) else {
-            tracing::error!("[retention] Failed to get the expression time format for {time_column}, check schema and time format");
+            tracing::error!(
+                "[retention] Failed to get the expression time format for {time_column}, check schema and time format"
+            );
             return;
         };
 
@@ -599,7 +636,7 @@ impl AcceleratedTable {
                 };
 
                 if is_spice_internal_dataset(&dataset_name) {
-                    tracing::debug!(
+                    tracing::trace!(
                         "[retention] Evicting data for {dataset_name} where {time_column} < {}...",
                         timestamp
                     );
@@ -610,7 +647,7 @@ impl AcceleratedTable {
                     );
                 }
 
-                tracing::debug!("[retention] Expr {expr:?}");
+                tracing::trace!("[retention] Expr {expr:?}");
 
                 let plan = deleted_table_provider
                     .delete_from(&ctx.state(), &vec![expr])
@@ -630,9 +667,13 @@ impl AcceleratedTable {
                                 });
 
                                 if is_spice_internal_dataset(&dataset_name) {
-                                    tracing::debug!("[retention] Evicted {num_records} records for {dataset_name}");
+                                    tracing::trace!(
+                                        "[retention] Evicted {num_records} records for {dataset_name}"
+                                    );
                                 } else {
-                                    tracing::info!("[retention] Evicted {num_records} records for {dataset_name}");
+                                    tracing::info!(
+                                        "[retention] Evicted {num_records} records for {dataset_name}"
+                                    );
                                 }
 
                                 if num_records > 0 {
@@ -641,7 +682,10 @@ impl AcceleratedTable {
                                             .invalidate_for_table(dataset_name.clone())
                                             .await
                                         {
-                                            tracing::error!("Failed to invalidate cached results for dataset {}: {e}", &dataset_name);
+                                            tracing::error!(
+                                                "Failed to invalidate cached results for dataset {}: {e}",
+                                                &dataset_name
+                                            );
                                         }
                                     }
                                 }

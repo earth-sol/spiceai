@@ -23,7 +23,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spiceai/spiceai/bin/spice/pkg/runtime"
+	"github.com/spiceai/spiceai/bin/spice/pkg/constants"
+	"github.com/spiceai/spiceai/bin/spice/pkg/context"
 	"github.com/spiceai/spiceai/bin/spice/pkg/util"
 )
 
@@ -37,7 +38,14 @@ spice run
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		err := checkLatestCliReleaseVersion()
+		rtcontext := context.NewContext()
+		err := rtcontext.Init(cmd.Flags())
+		if err != nil {
+			slog.Error("failed to initialize runtime context", "error", err)
+			os.Exit(1)
+		}
+
+		err = checkLatestCliReleaseVersion(rtcontext)
 		if err != nil && util.IsDebug() {
 			slog.Error("failed to check for latest CLI release version", "error", err)
 		}
@@ -48,7 +56,25 @@ spice run
 			args = append(args, fmt.Sprintf("-%s", strings.Repeat("v", level)))
 		}
 
-		err = runtime.Run(args)
+		slog.Info("Checking for latest Spice runtime release...")
+
+		_, err = rtcontext.EnsureInstalled(constants.FlavorDefault, false, true)
+		if err != nil {
+			slog.Error("error running Spice.ai", "error", err)
+			os.Exit(1)
+		}
+
+		runCmd, err := rtcontext.GetRunCmd(args)
+		if err != nil {
+			slog.Error("error running Spice.ai", "error", err)
+			os.Exit(1)
+		}
+
+		runCmd.Stderr = os.Stderr
+		runCmd.Stdout = os.Stdout
+
+		slog.Info("Spice.ai runtime starting...")
+		err = util.RunCommand(runCmd)
 		if err != nil {
 			slog.Error("error running Spice.ai", "error", err)
 			os.Exit(1)
@@ -58,4 +84,8 @@ spice run
 
 func init() {
 	RootCmd.AddCommand(runCmd)
+	runCmd.Flags().String("flight-endpoint", "", "Specifies the runtime Flight endpoint. Defaults to http://127.0.0.1:50051")
+	runCmd.Flags().String("http-endpoint", "", "Specifies the runtime HTTP endpoint. Defaults to http://127.0.0.1:8090")
+	runCmd.Flags().String("metrics-endpoint", "", "Specifies the runtime Prometheus metrics endpoint. Defaults to http://127.0.0.1:9090")
+	sqlCmd.Flags().String("captured-output", "truncated", "Specifies the captured output setting for task history. [possible values: truncated, none]. Default: truncated")
 }

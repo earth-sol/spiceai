@@ -17,7 +17,7 @@ limitations under the License.
 
 use std::collections::HashMap;
 
-use async_openai::{error::OpenAIError, Client};
+use async_openai::{Client, error::OpenAIError};
 use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::Error as SseError;
 use secrecy::{ExposeSecret, SecretString};
@@ -56,7 +56,7 @@ impl PerplexitySonar {
             .filter_map(|(k, v)| {
                 if k != "perplexity_auth_token" {
                     if let Some(p) = k.strip_prefix("perplexity_") {
-                        return Some((p.to_string(), v.expose_secret().clone()));
+                        return Some((p.to_string(), v.expose_secret().to_string()));
                     }
                 };
                 None

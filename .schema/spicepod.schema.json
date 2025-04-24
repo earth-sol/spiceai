@@ -124,6 +124,16 @@
             "$ref": "#/definitions/IndexType"
           }
         },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "mode": {
           "default": "memory",
           "allOf": [
@@ -209,6 +219,14 @@
             },
             {
               "type": "null"
+            }
+          ]
+        },
+        "refresh_on_startup": {
+          "default": "auto",
+          "allOf": [
+            {
+              "$ref": "#/definitions/RefreshOnStartup"
             }
           ]
         },
@@ -327,6 +345,13 @@
       },
       "additionalProperties": false
     },
+    "CacheKeyType": {
+      "type": "string",
+      "enum": [
+        "plan",
+        "sql"
+      ]
+    },
     "Catalog": {
       "type": "object",
       "required": [
@@ -368,6 +393,16 @@
         "metadata": {
           "type": "object",
           "additionalProperties": true
+        },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "name": {
           "type": "string"
@@ -631,6 +666,16 @@
           "type": "object",
           "additionalProperties": true
         },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "mode": {
           "$ref": "#/definitions/Mode"
         },
@@ -667,6 +712,22 @@
           ]
         },
         "time_format": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TimeFormat"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "time_partition_column": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "time_partition_format": {
           "anyOf": [
             {
               "$ref": "#/definitions/TimeFormat"
@@ -742,6 +803,16 @@
         "from": {
           "type": "string"
         },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "name": {
           "type": "string"
         },
@@ -776,6 +847,16 @@
             "null"
           ]
         },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "name": {
           "type": "string"
         },
@@ -808,6 +889,35 @@
         "enabled",
         "unique"
       ]
+    },
+    "Metric": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "Metrics": {
+      "type": "object",
+      "required": [
+        "metrics"
+      ],
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Metric"
+          }
+        }
+      }
     },
     "Mode": {
       "type": "string",
@@ -860,6 +970,16 @@
         "metadata": {
           "type": "object",
           "additionalProperties": true
+        },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "name": {
           "type": "string"
@@ -972,6 +1092,24 @@
         "changes"
       ]
     },
+    "RefreshOnStartup": {
+      "oneOf": [
+        {
+          "description": "Always start a new refresh when Spice starts.",
+          "type": "string",
+          "enum": [
+            "always"
+          ]
+        },
+        {
+          "description": "Only start a refresh if an existing acceleration is not available.",
+          "type": "string",
+          "enum": [
+            "auto"
+          ]
+        }
+      ]
+    },
     "Replication": {
       "type": "object",
       "properties": {
@@ -984,6 +1122,14 @@
     "ResultsCache": {
       "type": "object",
       "properties": {
+        "cache_key_type": {
+          "default": "plan",
+          "allOf": [
+            {
+              "$ref": "#/definitions/CacheKeyType"
+            }
+          ]
+        },
         "cache_max_size": {
           "type": [
             "string",
@@ -1046,6 +1192,13 @@
         },
         "telemetry": {
           "$ref": "#/definitions/TelemetryConfig"
+        },
+        "temp_directory": {
+          "description": "Configures where the runtime will store temporary files needed for operations like spilling to disk for queries & accelerations that are larger than memory.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "tls": {
           "description": "If set, the runtime will configure all endpoints to use TLS",
@@ -1170,7 +1323,8 @@
         "timestamptz",
         "unix_seconds",
         "unix_millis",
-        "ISO8601"
+        "ISO8601",
+        "date"
       ]
     },
     "TlsConfig": {
@@ -1233,8 +1387,24 @@
             "null"
           ]
         },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "from": {
           "type": "string"
+        },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "name": {
           "type": "string"
@@ -1287,6 +1457,12 @@
         "name"
       ],
       "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Column"
+          }
+        },
         "dependsOn": {
           "type": "array",
           "items": {

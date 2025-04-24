@@ -17,38 +17,42 @@ limitations under the License.
 use std::{
     collections::HashSet,
     sync::{Arc, RwLock},
+    time::Duration,
 };
 
+use crate::dataaccelerator::AcceleratorEngineRegistry;
 use cache::QueryResultsCacheProvider;
 use datafusion::{
-    catalog_common::{CatalogProvider, MemoryCatalogProvider},
+    catalog::{CatalogProvider, MemoryCatalogProvider},
     execution::SessionStateBuilder,
     optimizer::{
+        AnalyzerRule,
         analyzer::{
             count_wildcard_rule::CountWildcardRule, expand_wildcard_rule::ExpandWildcardRule,
             inline_table_scan::InlineTableScan, resolve_grouping_function::ResolveGroupingFunction,
             type_coercion::TypeCoercion,
         },
-        AnalyzerRule,
     },
     prelude::{SessionConfig, SessionContext},
 };
 use datafusion_federation::FederationAnalyzerRule;
+use moka::future::CacheBuilder;
 use tokio::sync::RwLock as TokioRwLock;
 
 use crate::{embeddings, object_store_registry::default_runtime_env, status};
 
 use super::{
-    extension::{bytes_processed::BytesProcessedOptimizerRule, SpiceQueryPlanner},
-    schema::SpiceSchemaProvider,
     DataFusion, SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA, SPICE_METADATA_SCHEMA,
     SPICE_RUNTIME_SCHEMA,
+    extension::{SpiceQueryPlanner, bytes_processed::BytesProcessedOptimizerRule},
+    schema::SpiceSchemaProvider,
 };
 
 pub struct DataFusionBuilder {
     config: SessionConfig,
     status: Arc<status::RuntimeStatus>,
     cache_provider: Option<Arc<QueryResultsCacheProvider>>,
+    accelerator_engine_registry: Arc<AcceleratorEngineRegistry>,
 }
 
 pub(crate) fn get_df_default_config() -> SessionConfig {
@@ -81,7 +85,10 @@ pub(crate) fn get_df_default_config() -> SessionConfig {
 
 impl DataFusionBuilder {
     #[must_use]
-    pub fn new(status: Arc<status::RuntimeStatus>) -> Self {
+    pub fn new(
+        status: Arc<status::RuntimeStatus>,
+        accelerator_engine_registry: Arc<AcceleratorEngineRegistry>,
+    ) -> Self {
         let mut df_config = get_df_default_config()
             .with_information_schema(true)
             .with_create_default_catalog_and_schema(false);
@@ -93,6 +100,7 @@ impl DataFusionBuilder {
             config: df_config,
             status,
             cache_provider: None,
+            accelerator_engine_registry,
         }
     }
 
@@ -109,6 +117,8 @@ impl DataFusionBuilder {
     /// Panics if the `DataFusion` instance cannot be built due to errors in registering functions or schemas.
     #[must_use]
     pub fn build(self) -> DataFusion {
+        const DEFAULT_CACHED_PLANS_MAX_CAPACITY: u64 = 512;
+
         let mut state = SessionStateBuilder::new()
             .with_config(self.config)
             .with_default_features()
@@ -166,13 +176,19 @@ impl DataFusionBuilder {
 
         ctx.register_catalog(SPICE_DEFAULT_CATALOG, Arc::new(catalog));
 
+        let cached_plans = CacheBuilder::new(DEFAULT_CACHED_PLANS_MAX_CAPACITY)
+            .time_to_live(Duration::from_secs(3600)) // 1 hour TTL
+            .build();
+
         DataFusion {
             runtime_status: self.status,
             ctx: Arc::new(ctx),
             data_writers: RwLock::new(HashSet::new()),
             cache_provider: RwLock::new(self.cache_provider),
             pending_sink_tables: TokioRwLock::new(Vec::new()),
+            cached_plans,
             accelerated_tables: TokioRwLock::new(HashSet::new()),
+            accelerator_engine_registry: self.accelerator_engine_registry,
         }
     }
 }

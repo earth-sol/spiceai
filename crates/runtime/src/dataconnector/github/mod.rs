@@ -18,16 +18,15 @@ use crate::component::dataset::Dataset;
 use arrow::array::{Array, RecordBatch};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use async_trait::async_trait;
-use chrono::{offset::LocalResult, SecondsFormat, TimeZone, Utc};
+use chrono::{SecondsFormat, TimeZone, Utc, offset::LocalResult};
 use commits::CommitsTableArgs;
 use data_components::{
     github::{self, GithubFilesTableProvider, GithubRestClient},
     graphql::{
-        self,
+        self, FilterPushdownResult, GraphQLContext,
         builder::GraphQLClientBuilder,
         client::{GraphQLClient, GraphQLQuery, PaginationParameters},
         provider::GraphQLTableProviderBuilder,
-        FilterPushdownResult, GraphQLContext,
     },
     rate_limit::RateLimiter,
     token_provider::{StaticTokenProvider, TokenProvider},
@@ -56,8 +55,8 @@ use std::{any::Any, future::Future, pin::Pin, str::FromStr, sync::Arc};
 use url::Url;
 
 use super::{
-    graphql::default_spice_client, ConnectorComponent, ConnectorParams, DataConnector,
-    DataConnectorError, DataConnectorFactory, ParameterSpec, Parameters,
+    ConnectorComponent, ConnectorParams, DataConnector, DataConnectorError, DataConnectorFactory,
+    ParameterSpec, Parameters, graphql::default_spice_client,
 };
 
 mod commits;
@@ -67,6 +66,7 @@ mod pull_requests;
 mod rate_limit;
 mod stargazers;
 
+#[derive(Debug)]
 pub struct Github {
     params: Parameters,
     token: Option<Arc<dyn TokenProvider>>,
@@ -281,7 +281,7 @@ fn github_gql_raw_schema_cast(
     RecordBatch::try_new(schema, columns).map_err(std::convert::Into::into)
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Debug, Copy, Clone)]
 pub struct GithubFactory {}
 
 impl GithubFactory {
@@ -297,24 +297,24 @@ impl GithubFactory {
 }
 
 const PARAMETERS: &[ParameterSpec] = &[
-    ParameterSpec::connector("token")
+    ParameterSpec::component("token")
         .description("A Github token.")
         .secret(),
-    ParameterSpec::connector("client_id")
+    ParameterSpec::component("client_id")
         .description("The Github App Client ID.")
         .secret(),
-    ParameterSpec::connector("private_key")
+    ParameterSpec::component("private_key")
         .description("The Github App private key.")
         .secret(),
-    ParameterSpec::connector("installation_id")
+    ParameterSpec::component("installation_id")
         .description("The Github App installation ID.")
         .secret(),
-    ParameterSpec::connector("query_mode")
+    ParameterSpec::component("query_mode")
         .description(
             "Specify what search mode (REST, GraphQL, Search API) to use when retrieving results.",
         )
         .default("auto"),
-    ParameterSpec::connector("endpoint")
+    ParameterSpec::component("endpoint")
         .description("The Github API endpoint.")
         .default("https://api.github.com"),
     ParameterSpec::runtime("include")
@@ -764,7 +764,7 @@ pub(crate) fn filter_pushdown(expr: &Expr) -> FilterPushdownResult {
                                     filter_pushdown: TableProviderFilterPushDown::Unsupported,
                                     expr: expr.clone(),
                                     context: None,
-                                }
+                                };
                             }
                         },
                         _ => {
@@ -772,7 +772,7 @@ pub(crate) fn filter_pushdown(expr: &Expr) -> FilterPushdownResult {
                                 filter_pushdown: TableProviderFilterPushDown::Unsupported,
                                 expr: expr.clone(),
                                 context: None,
-                            }
+                            };
                         }
                     }
                 }

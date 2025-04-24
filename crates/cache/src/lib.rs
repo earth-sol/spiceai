@@ -20,8 +20,8 @@ use std::fmt::Formatter;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -29,8 +29,10 @@ use arrow::array::RecordBatch;
 use arrow::datatypes::Schema;
 use async_trait::async_trait;
 use byte_unit::Byte;
+use datafusion::common::ParamValues;
 use datafusion::execution::SendableRecordBatchStream;
 use datafusion::logical_expr::LogicalPlan;
+use datafusion::scalar::ScalarValue;
 use datafusion::sql::TableReference;
 use fundu::ParseError;
 use lru_cache::LruCache;
@@ -63,20 +65,77 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct QueryResult {
     pub data: SendableRecordBatchStream,
-    pub cache_status: QueryCacheStatus,
+    pub results_cache_status: QueryResultsCacheStatus,
+}
+
+impl std::fmt::Debug for QueryResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QueryResult")
+            .field("data", &"<stream>")
+            .field("results_cache_status", &self.results_cache_status)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum QueryCacheStatus {
-    CacheNotChecked,
+pub enum QueryResultsCacheStatus {
+    // The request was not eligible for caching, and thus the results cache was not checked.
+    CacheDisabled,
+    // The request asked to bypass the cache, i.e. via `Cache-Control: no-cache`.
+    CacheBypass,
+    // The request was a cache hit.
     CacheHit,
+    // The request was a cache miss.
     CacheMiss,
 }
 
+pub enum CacheKey<'a> {
+    LogicalPlan(&'a LogicalPlan),
+    Query(&'a str, Option<&'a ParamValues>),
+}
+
+impl CacheKey<'_> {
+    #[must_use]
+    pub fn as_raw_key(&self) -> RawCacheKey {
+        let mut hasher = DefaultHasher::new();
+        match self {
+            Self::LogicalPlan(logical_plan) => logical_plan.hash(&mut hasher),
+            Self::Query(sql, param_values) => {
+                sql.hash(&mut hasher);
+                if let Some(params) = param_values {
+                    match params {
+                        ParamValues::List(vec) => vec.hash(&mut hasher),
+                        ParamValues::Map(hash_map) => {
+                            // implementing Hash for HashMap
+                            let mut pairs: Vec<(&String, &ScalarValue)> = hash_map.iter().collect();
+                            pairs.sort_by(|a, b| a.0.cmp(b.0)); // Sort by keys
+
+                            for (key, value) in pairs {
+                                key.hash(&mut hasher);
+                                value.hash(&mut hasher);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        RawCacheKey(hasher.finish())
+    }
+}
+
+#[derive(Hash, Clone, Copy, Eq, PartialEq)]
+pub struct RawCacheKey(u64);
+
 impl QueryResult {
     #[must_use]
-    pub fn new(data: SendableRecordBatchStream, cache_status: QueryCacheStatus) -> Self {
-        QueryResult { data, cache_status }
+    pub fn new(
+        data: SendableRecordBatchStream,
+        results_cache_status: QueryResultsCacheStatus,
+    ) -> Self {
+        QueryResult {
+            data,
+            results_cache_status,
+        }
     }
 }
 
@@ -89,9 +148,10 @@ pub struct CachedQueryResult {
 
 #[async_trait]
 pub trait QueryResultCache {
-    async fn get(&self, plan: &LogicalPlan) -> Result<Option<CachedQueryResult>>;
-    async fn put(&self, plan: &LogicalPlan, result: CachedQueryResult) -> Result<()>;
-    async fn put_key(&self, key: u64, result: CachedQueryResult) -> Result<()>;
+    async fn get<'a>(&self, key: CacheKey<'a>) -> Result<Option<CachedQueryResult>>;
+    async fn get_raw_key(&self, raw_key: RawCacheKey) -> Result<Option<CachedQueryResult>>;
+    async fn put<'a>(&self, key: CacheKey<'a>, result: CachedQueryResult) -> Result<()>;
+    async fn put_raw_key(&self, raw_key: RawCacheKey, result: CachedQueryResult) -> Result<()>;
     async fn invalidate_for_table(&self, table_name: TableReference) -> Result<()>;
     fn size_bytes(&self) -> u64;
     fn item_count(&self) -> u64;
@@ -104,6 +164,20 @@ pub struct QueryResultsCacheProvider {
     metrics_reported_last_time: AtomicU64,
 
     ignore_schemas: Box<[Box<str>]>,
+}
+
+impl std::fmt::Debug for QueryResultsCacheProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QueryResultsCacheProvider")
+            .field("cache_max_size", &self.cache_max_size)
+            .field("ttl", &self.ttl)
+            .field("ignore_schemas", &self.ignore_schemas)
+            .field(
+                "metrics_reported_last_time",
+                &self.metrics_reported_last_time,
+            )
+            .finish_non_exhaustive()
+    }
 }
 
 impl QueryResultsCacheProvider {
@@ -139,9 +213,17 @@ impl QueryResultsCacheProvider {
     /// # Errors
     ///
     /// Will return `Err` if method fails to access the cache
-    pub async fn get(&self, plan: &LogicalPlan) -> Result<Option<CachedQueryResult>> {
+    pub async fn get(&self, key: CacheKey<'_>) -> Result<Option<CachedQueryResult>> {
+        let raw_key = key.as_raw_key();
+        self.get_raw_key(raw_key).await
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if method fails to access the cache
+    pub async fn get_raw_key(&self, raw_key: RawCacheKey) -> Result<Option<CachedQueryResult>> {
         metrics::REQUESTS.add(1, &[]);
-        match self.cache.get(plan).await {
+        match self.cache.get_raw_key(raw_key).await {
             Ok(Some(cached_result)) => {
                 metrics::HITS.add(1, &[]);
                 Ok(Some(cached_result))
@@ -154,8 +236,8 @@ impl QueryResultsCacheProvider {
     /// # Errors
     ///
     /// Will return `Err` if method fails to access the cache
-    pub async fn put(&self, plan: &LogicalPlan, result: CachedQueryResult) -> Result<()> {
-        let res = self.cache.put(plan, result).await;
+    pub async fn put(&self, key: CacheKey<'_>, result: CachedQueryResult) -> Result<()> {
+        let res = self.cache.put(key, result).await;
         self.report_size_metrics();
         res
     }
@@ -163,8 +245,8 @@ impl QueryResultsCacheProvider {
     /// # Errors
     ///
     /// Will return `Err` if method fails to access the cache
-    pub async fn put_key(&self, plan_key: u64, result: CachedQueryResult) -> Result<()> {
-        let res = self.cache.put_key(plan_key, result).await;
+    pub async fn put_raw_key(&self, raw_key: RawCacheKey, result: CachedQueryResult) -> Result<()> {
+        let res = self.cache.put_raw_key(raw_key, result).await;
         self.report_size_metrics();
         res
     }
@@ -249,13 +331,6 @@ fn current_time_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
-}
-
-#[must_use]
-pub fn key_for_logical_plan(plan: &LogicalPlan) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    plan.hash(&mut hasher);
-    hasher.finish()
 }
 
 #[cfg(test)]

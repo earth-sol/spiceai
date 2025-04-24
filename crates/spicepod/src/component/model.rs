@@ -17,6 +17,8 @@ limitations under the License.
 use regex::Regex;
 use std::{collections::HashMap, fmt::Display, path::Path, sync::LazyLock};
 
+use crate::metric::Metrics;
+
 use super::{Nameable, WithDependsOn};
 #[cfg(feature = "schemars")]
 use schemars::JsonSchema;
@@ -48,6 +50,9 @@ pub struct Model {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(rename = "dependsOn", default)]
     pub depends_on: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<Metrics>,
 }
 
 impl Nameable for Model {
@@ -67,6 +72,7 @@ impl WithDependsOn<Model> for Model {
             params: self.params.clone(),
             datasets: self.datasets.clone(),
             depends_on: depends_on.to_vec(),
+            metrics: self.metrics.clone(),
         }
     }
 }
@@ -83,6 +89,7 @@ pub enum ModelSource {
     Perplexity,
     SpiceAI,
     File,
+    Databricks,
 }
 
 // Matches model paths in these formats:
@@ -133,6 +140,8 @@ impl TryFrom<&str> for ModelSource {
             Ok(ModelSource::Xai)
         } else if value.starts_with("spiceai") {
             Ok(ModelSource::SpiceAI)
+        } else if value.starts_with("databricks") {
+            Ok(ModelSource::Databricks)
         } else {
             Err("Unknown prefix")
         }
@@ -151,6 +160,7 @@ impl Display for ModelSource {
             ModelSource::HuggingFace => write!(f, "huggingface"),
             ModelSource::File => write!(f, "file"),
             ModelSource::SpiceAI => write!(f, "spiceai"),
+            ModelSource::Databricks => write!(f, "databricks"),
         }
     }
 }
@@ -183,6 +193,7 @@ impl Model {
             params: HashMap::default(),
             datasets: Vec::default(),
             depends_on: Vec::default(),
+            metrics: None,
         }
     }
 
@@ -334,13 +345,14 @@ impl Model {
                 | ModelSource::OpenAi
                 | ModelSource::Anthropic
                 | ModelSource::Xai
+                | ModelSource::Databricks
         ) {
             return Some(ModelType::Llm);
         }
 
         if source == ModelSource::SpiceAI {
             return Some(ModelType::Ml);
-        };
+        }
 
         let files = self.get_all_files();
 
