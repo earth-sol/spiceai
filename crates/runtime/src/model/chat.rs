@@ -219,7 +219,12 @@ fn huggingface(
             path.display()
         );
     };
-    llms::chat::create_hf_model(&id, model_type, gguf_path, hf_token)
+
+    let chat_template_literal = params
+        .get("chat_template")
+        .map(secrecy::ExposeSecret::expose_secret);
+
+    llms::chat::create_hf_model(&id, model_type, gguf_path, hf_token, chat_template_literal)
 }
 
 fn databricks(
