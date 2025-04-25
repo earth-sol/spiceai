@@ -17,8 +17,7 @@ limitations under the License.
 use crate::component::dataset::Dataset;
 use async_trait::async_trait;
 use data_components::Read;
-use data_components::databricks_delta::DatabricksDelta;
-use data_components::databricks_spark::DatabricksSparkConnect;
+use data_components::databricks::{DatabricksDelta, DatabricksSparkConnect};
 use data_components::unity_catalog::Endpoint;
 use datafusion::datasource::TableProvider;
 use datafusion::sql::TableReference;
@@ -57,6 +56,9 @@ pub enum Error {
         "Invalid `mode` value: '{value}'. Use 'delta_lake' or 'spark_connect'.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
     ))]
     InvalidMode { value: String },
+
+    #[snafu(display("Invalid configuration: {message}"))]
+    InvalidConfiguration { message: String },
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -78,17 +80,60 @@ impl Databricks {
             .get("endpoint")
             .expose()
             .ok_or_else(|p| MissingParameterSnafu { parameter: p.0 }.build())?;
-        let token = params
-            .get("token")
-            .ok_or_else(|p| MissingParameterSnafu { parameter: p.0 }.build())?;
+
+        let token = params.get("token").ok();
+        let client_id = params.get("client_id").expose().ok();
+        let client_secret = params.get("client_secret").expose().ok();
+
+        match (token, client_id, client_secret) {
+            // Case where no credentials are provided
+            (None, None, None) => {
+                return MissingParameterSnafu {
+                    parameter: "token or client_id and client_secret".to_string(),
+                }
+                .fail();
+            }
+            // Cases where only one of client_id or client_secret is provided
+            (None, Some(_), None) => {
+                return MissingParameterSnafu {
+                    parameter: "client_secret".to_string(),
+                }
+                .fail();
+            }
+            (None, None, Some(_)) => {
+                return MissingParameterSnafu {
+                    parameter: "client_id".to_string(),
+                }
+                .fail();
+            }
+            // Case where all three are provided
+            (Some(_), Some(_), Some(_)) => {
+                return InvalidConfigurationSnafu {
+                    message: "Cannot use both token and client_id+client_secret together"
+                        .to_string(),
+                }
+                .fail();
+            }
+            _ => {}
+        }
 
         match mode {
             "delta_lake" => {
-                let databricks_delta = DatabricksDelta::new(
-                    Endpoint(endpoint.to_string()),
-                    token.clone(),
-                    params.to_secret_map(),
-                );
+                let databricks_delta = match (token, client_id, client_secret) {
+                    (Some(token), _, _) => DatabricksDelta::new(
+                        Endpoint(endpoint.to_string()),
+                        token.clone(),
+                        params.to_secret_map(),
+                    ),
+
+                    _ => {
+                        return MissingParameterSnafu {
+                            parameter: "client_id".to_string(),
+                        }
+                        .fail();
+                    }
+                };
+
                 Ok(Self {
                     read_provider: Arc::new(databricks_delta.clone()),
                 })
@@ -110,14 +155,37 @@ impl Databricks {
                 let cluster_id = params
                     .get("cluster_id")
                     .ok_or_else(|p| MissingParameterSnafu { parameter: p.0 }.build())?;
-                let databricks_spark = DatabricksSparkConnect::new(
-                    endpoint.to_string(),
-                    cluster_id.expose_secret().to_string(),
-                    token.expose_secret().to_string(),
-                    databricks_use_ssl,
-                )
-                .await
-                .context(UnableToConstructDatabricksSparkSnafu)?;
+
+                let databricks_spark = match (token, client_id, client_secret) {
+                    (None, Some(client_id), Some(client_secret)) => {
+                        DatabricksSparkConnect::new_m2m(
+                            endpoint.to_string(),
+                            cluster_id.expose_secret().to_string(),
+                            client_id.to_string(),
+                            client_secret.to_string(),
+                            databricks_use_ssl,
+                        )
+                        .await
+                        .context(UnableToConstructDatabricksSparkSnafu)?
+                    }
+
+                    (Some(token), _, _) => DatabricksSparkConnect::new(
+                        endpoint.to_string(),
+                        cluster_id.expose_secret().to_string(),
+                        token.expose_secret().to_string(),
+                        databricks_use_ssl,
+                    )
+                    .await
+                    .context(UnableToConstructDatabricksSparkSnafu)?,
+
+                    _ => {
+                        return MissingParameterSnafu {
+                            parameter: "client_id".to_string(),
+                        }
+                        .fail();
+                    }
+                };
+
                 Ok(Self {
                     read_provider: Arc::new(databricks_spark.clone()),
                 })
@@ -154,7 +222,6 @@ const PARAMETERS: &[ParameterSpec] = &[
         .secret()
         .description("The endpoint of the Databricks instance."),
     ParameterSpec::component("token")
-        .required()
         .secret()
         .description("The personal access token used to authenticate against the DataBricks API."),
     ParameterSpec::runtime("mode")
@@ -164,6 +231,10 @@ const PARAMETERS: &[ParameterSpec] = &[
         .description("The timeout setting for object store client."),
     ParameterSpec::component("cluster_id").description("The ID of the compute cluster in Databricks to use for the query. Only valid when mode is spark_connect."),
     ParameterSpec::component("use_ssl").description("Use a TLS connection to connect to the Databricks Spark Connect endpoint.").default("true"),
+
+    // Databricks M2M Service Principal credentials
+    ParameterSpec::component("client_id").description("The client ID of the Databricks service principal."),
+    ParameterSpec::component("client_secret").description("The client secret of the Databricks service principal."),
 
     // S3 storage options
     ParameterSpec::component("aws_region")
