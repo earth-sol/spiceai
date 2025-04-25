@@ -178,6 +178,8 @@ jobs:
           MSSQL_PASSWORD: S3cretP@ssw0rd
           MSSQL_TPCH_DB: tpch_sf1
           SPICEAI_BENCHMARK_METRICS_KEY: ${{ secrets.SPICEAI_BENCHMARK_METRICS_KEY }}
+          NEW_DATABRICKS_TOKEN: ${{ secrets.NEW_DATABRICKS_TOKEN }}
+          NEW_DATABRICKS_HOST: ${{ secrets.NEW_DATABRICKS_HOST }}
 
       - name: Run the benchmark test (with overrides) - ${{ steps.extract_spicepod_filename.outputs.SPICEPOD_FILENAME }}
         if: ${{ github.event.inputs.query_overrides != '' }}
