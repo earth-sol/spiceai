@@ -83,7 +83,7 @@ impl Databricks {
 
         let token = params.get("token").ok();
         let client_id = params.get("client_id").expose().ok();
-        let client_secret = params.get("client_secret").expose().ok();
+        let client_secret = params.get("client_secret").ok();
 
         match (token, client_id, client_secret) {
             // Case where no credentials are provided
@@ -162,7 +162,7 @@ impl Databricks {
                             endpoint.to_string(),
                             cluster_id.expose_secret().to_string(),
                             client_id.to_string(),
-                            client_secret.to_string(),
+                            client_secret,
                             databricks_use_ssl,
                         )
                         .await
@@ -234,7 +234,7 @@ const PARAMETERS: &[ParameterSpec] = &[
 
     // Databricks M2M Service Principal credentials
     ParameterSpec::component("client_id").description("The client ID of the Databricks service principal."),
-    ParameterSpec::component("client_secret").description("The client secret of the Databricks service principal."),
+    ParameterSpec::component("client_secret").secret().description("The client secret of the Databricks service principal."),
 
     // S3 storage options
     ParameterSpec::component("aws_region")
