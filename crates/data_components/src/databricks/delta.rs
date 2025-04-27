@@ -67,7 +67,6 @@ impl DatabricksDelta {
         }
     }
 
-    #[must_use]
     pub async fn new_m2m(
         endpoint: Endpoint,
         client_id: String,

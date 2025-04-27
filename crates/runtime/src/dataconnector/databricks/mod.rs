@@ -81,6 +81,7 @@ impl std::fmt::Debug for Databricks {
 }
 
 impl Databricks {
+    #[allow(clippy::too_many_lines)]
     pub async fn new(params: Parameters) -> Result<Self> {
         let mode = params.get("mode").expose().ok().unwrap_or_default();
         let endpoint = params
@@ -138,7 +139,7 @@ impl Databricks {
 
                     (Some(token), _, _) => DatabricksDelta::new(
                         Endpoint(endpoint.to_string()),
-                        &token,
+                        token,
                         params.to_secret_map(),
                     ),
 

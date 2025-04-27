@@ -33,8 +33,11 @@ use crate::token_provider::{Result, TokenProvider};
 
 type Key = (String, String);
 
-static REGISTRY: Lazy<RwLock<HashMap<Key, (Arc<DatabricksM2MTokenProvider>, Instant)>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
+type TokenProviderEntry = (Arc<DatabricksM2MTokenProvider>, Instant);
+
+type TokenProviderRegistry = HashMap<Key, TokenProviderEntry>;
+
+static REGISTRY: Lazy<RwLock<TokenProviderRegistry>> = Lazy::new(|| RwLock::new(HashMap::new()));
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -47,7 +50,9 @@ pub struct DatabricksM2MTokenProvider {
     endpoint: String,
     client_id: String,
 
+    #[allow(dead_code)]
     tx: watch::Sender<String>,
+    #[allow(dead_code)]
     rx: watch::Receiver<String>,
 
     _handle: Arc<JoinHandle<()>>,
@@ -56,8 +61,11 @@ pub struct DatabricksM2MTokenProvider {
 impl fmt::Debug for DatabricksM2MTokenProvider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("M2mTokenProvider")
-            .field("client_id", &self.client_id)
             .field("endpoint", &self.endpoint)
+            .field("client_id", &self.client_id)
+            .field("tx", &"<watch::Sender>")
+            .field("rx", &"<watch::Receiver>")
+            .field("_handle", &"<JoinHandle>")
             .finish()
     }
 }
@@ -89,6 +97,7 @@ impl DatabricksM2MTokenProvider {
 
         let handle = tokio::spawn(async move {
             // schedule the first refresh at 90% of `expires_in`
+            #[allow(clippy::cast_precision_loss)]
             let mut next_wait = Duration::from_secs_f64(expires_in as f64 * 0.9);
 
             loop {
@@ -108,7 +117,10 @@ impl DatabricksM2MTokenProvider {
                     }) => {
                         tracing::debug!("M2M token refreshed; expires in {}", expires_in);
                         let _ = cloned_tx.send(access_token.clone());
-                        next_wait = Duration::from_secs_f64(expires_in as f64);
+                        #[allow(clippy::cast_precision_loss)]
+                        {
+                            next_wait = Duration::from_secs_f64(expires_in as f64);
+                        }
                     }
                     Err(e) => {
                         tracing::error!("M2M token refresh failed: {}", e);
