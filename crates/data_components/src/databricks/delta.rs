@@ -15,20 +15,23 @@ limitations under the License.
 */
 
 use crate::Read;
+use crate::token_provider::{StaticTokenProvider, TokenProvider};
 use crate::unity_catalog::UnityCatalog;
 use crate::{delta_lake::DeltaTable, unity_catalog::Endpoint};
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use datafusion::datasource::TableProvider;
 use datafusion::sql::TableReference;
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use snafu::prelude::*;
 use std::{collections::HashMap, sync::Arc};
+
+use super::auth::DatabricksM2MTokenProvider;
 
 #[derive(Clone)]
 pub struct DatabricksDelta {
     endpoint: Endpoint,
-    token: SecretString,
+    token_provider: Arc<dyn TokenProvider>,
     storage_options: HashMap<String, SecretString>,
 }
 
@@ -42,20 +45,48 @@ pub enum Error {
         "Failed to find the Databricks table '{table_reference}'.\nVerify the table exists, and try again."
     ))]
     TableDoesNotExist { table_reference: TableReference },
+
+    #[snafu(display("Unable to get token"))]
+    UnableToGetToken {},
 }
 
 impl DatabricksDelta {
     #[must_use]
     pub fn new(
         endpoint: Endpoint,
-        token: SecretString,
+        token: &SecretString,
         storage_options: HashMap<String, SecretString>,
     ) -> Self {
+        let token_value = token.expose_secret();
+        let token_provider = Arc::new(StaticTokenProvider::new(token_value.into()));
+
         Self {
             endpoint,
-            token,
+            token_provider,
             storage_options,
         }
+    }
+
+    #[must_use]
+    pub async fn new_m2m(
+        endpoint: Endpoint,
+        client_id: String,
+        client_secret: &SecretString,
+        storage_options: HashMap<String, SecretString>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let token_provider = DatabricksM2MTokenProvider::get_shared(
+            endpoint.0.clone(),
+            client_id,
+            client_secret.clone(),
+        )
+        .await
+        .map_err(|_| Error::UnableToGetToken {})?;
+
+        Ok(Self {
+            endpoint,
+            token_provider,
+            storage_options,
+        })
     }
 
     async fn get_delta_table(
@@ -89,7 +120,10 @@ impl DatabricksDelta {
         &self,
         table_reference: TableReference,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let uc_client = UnityCatalog::new(self.endpoint.clone(), Some(self.token.clone()));
+        let token = self.token_provider.get_token().await?;
+
+        let uc_client =
+            UnityCatalog::new(self.endpoint.clone(), Some(SecretString::new(token.into())));
 
         let table_opt = uc_client.get_table(&table_reference).await.boxed()?;
 

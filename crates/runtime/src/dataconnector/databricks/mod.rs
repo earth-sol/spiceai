@@ -53,6 +53,13 @@ pub enum Error {
     },
 
     #[snafu(display(
+        "Failed to connect to Databricks Delta Lake.\n{source}\nVerify the connector configuration, and try again.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
+    ))]
+    UnableToConstructDatabricksDeltaLake {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[snafu(display(
         "Invalid `mode` value: '{value}'. Use 'delta_lake' or 'spark_connect'.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
     ))]
     InvalidMode { value: String },
@@ -120,9 +127,18 @@ impl Databricks {
         match mode {
             "delta_lake" => {
                 let databricks_delta = match (token, client_id, client_secret) {
+                    (None, Some(client_id), Some(client_secret)) => DatabricksDelta::new_m2m(
+                        Endpoint(endpoint.to_string()),
+                        client_id.to_string(),
+                        client_secret,
+                        params.to_secret_map(),
+                    )
+                    .await
+                    .context(UnableToConstructDatabricksDeltaLakeSnafu)?,
+
                     (Some(token), _, _) => DatabricksDelta::new(
                         Endpoint(endpoint.to_string()),
-                        token.clone(),
+                        &token,
                         params.to_secret_map(),
                     ),
 
