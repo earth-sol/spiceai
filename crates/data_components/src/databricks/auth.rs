@@ -81,9 +81,9 @@ impl DatabricksM2MTokenProvider {
         let (tx, rx) = watch::channel(access_token.clone());
 
         // spawn background refresh loop
-        let loop_id = client_id.clone();
-        let loop_endpoint = endpoint.clone();
-        let tx_cloned = tx.clone();
+        let cloned_client_id = client_id.clone();
+        let cloned_endpoint = endpoint.clone();
+        let cloned_tx = tx.clone();
 
         let secret = client_secret.clone();
 
@@ -94,8 +94,12 @@ impl DatabricksM2MTokenProvider {
             loop {
                 sleep(next_wait).await;
 
-                match get_m2m_access_token(loop_endpoint.clone(), loop_id.clone(), secret.clone())
-                    .await
+                match get_m2m_access_token(
+                    cloned_endpoint.clone(),
+                    cloned_client_id.clone(),
+                    secret.clone(),
+                )
+                .await
                 {
                     Ok(TokenResponse {
                         access_token,
@@ -103,7 +107,7 @@ impl DatabricksM2MTokenProvider {
                         ..
                     }) => {
                         tracing::debug!("M2M token refreshed; expires in {}", expires_in);
-                        let _ = tx_cloned.send(access_token.clone());
+                        let _ = cloned_tx.send(access_token.clone());
                         next_wait = Duration::from_secs_f64(expires_in as f64);
                     }
                     Err(e) => {
