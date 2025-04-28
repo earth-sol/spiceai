@@ -138,7 +138,7 @@ jobs:
 
   build:
     name: Build Go & Rust
-    runs-on: spiceai-runners
+    runs-on: spiceai-macos
     env:
       GOVER: 1.24.2
     needs: check_changes
@@ -194,7 +194,7 @@ jobs:
 
   build-docker:
     name: Build Docker Image
-    runs-on: spiceai-runners
+    runs-on: spiceai-macos
     needs: check_changes
 
     steps:
