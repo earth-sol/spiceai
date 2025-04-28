@@ -168,7 +168,7 @@ jobs:
           fi
 
       - name: Set up sccache
-        if: ${{ needs.check_changes.outputs.relevant_changes == 'true' && env.SCCACHE_SETUP == 'true' }}
+        if: ${{ needs.check_changes.outputs.relevant_changes == 'true' && env.SCCACHE_SETUP == 'true' && runner.os != 'macOS' }}
         uses: ./.github/actions/setup-sccache
         with:
           minio_endpoint: ${{ secrets.MINIO_ENDPOINT }}
@@ -189,7 +189,7 @@ jobs:
           CARGO_INCREMENTAL: 0
 
       - name: Show sccache stats
-        if: ${{ needs.check_changes.outputs.relevant_changes == 'true' && env.SCCACHE_SETUP == 'true' }}
+        if: ${{ needs.check_changes.outputs.relevant_changes == 'true' && env.SCCACHE_SETUP == 'true' && runner.os != 'macOS' }}
         run: sccache --show-stats
 
   build-docker:
@@ -199,6 +199,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: runner.os == 'macOS'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: runner.os == 'macOS'
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker images
         uses: docker/build-push-action@v6
