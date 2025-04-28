@@ -12570,6 +12570,7 @@ dependencies = [
  "anyhow",
  "app",
  "arrow",
+ "arrow-flight",
  "async-openai",
  "async-trait",
  "chrono",
