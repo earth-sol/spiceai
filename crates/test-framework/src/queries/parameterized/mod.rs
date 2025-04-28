@@ -14,10 +14,47 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use super::{ParameterValue, Query};
+use std::sync::Arc;
+
+use arrow::datatypes::DataType;
+
+use super::Query;
+
+// DataFusion has ParamValues which can define a list of `Vec<ScalarValue>`
+// This is a scaled down equivalent to the `ScalarValue` enum, but we don't want to import DataFusion just for this.
+#[derive(Debug, Clone)]
+pub enum ParameterValue {
+    String(Arc<str>),
+    Number(i64),
+    Float(f64),
+}
+
+impl ParameterValue {
+    #[must_use]
+    pub fn dtype(&self) -> DataType {
+        match self {
+            ParameterValue::String(_) => DataType::Utf8,
+            ParameterValue::Number(_) => DataType::Int64,
+            ParameterValue::Float(_) => DataType::Float64,
+        }
+    }
+
+    #[must_use]
+    pub fn array(&self) -> Arc<dyn arrow::array::Array> {
+        match self {
+            ParameterValue::String(value) => {
+                Arc::new(arrow::array::StringArray::from(vec![value.as_ref()]))
+            }
+            ParameterValue::Number(value) => Arc::new(arrow::array::Int64Array::from(vec![*value])),
+            ParameterValue::Float(value) => {
+                Arc::new(arrow::array::Float64Array::from(vec![*value]))
+            }
+        }
+    }
+}
 
 /// Defines parameters for TPC-H queries. Values are extracted from the original TPC-H queries,
-/// with their values replaced with ? parameters in the `/parameterized/` TPC-H files.
+/// with their values replaced with $1 parameters in the `/parameterized/` TPC-H files.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
@@ -25,7 +62,7 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
         .into_iter()
         .map(|q| {
             let mut q = q;
-            match q.name.as_ref() {
+            match q.name.replace("tpch_", "").as_str() {
                 "q1" => q.parameters = Some(vec![ParameterValue::String("1998-09-02".into())]),
                 "q2" => {
                     q.parameters = Some(vec![

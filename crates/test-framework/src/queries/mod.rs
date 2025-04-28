@@ -16,8 +16,11 @@ limitations under the License.
 
 use std::{fmt::Display, sync::Arc};
 
-use parameterized::add_tpch_parameters;
+use arrow::array::RecordBatch;
+use parameterized::{ParameterValue, add_tpch_parameters};
 use serde::{Deserialize, Serialize};
+
+use crate::flight::{PreparedStatementParamColumn, create_param_batch};
 
 pub mod parameterized;
 pub mod validation;
@@ -144,15 +147,6 @@ macro_rules! generate_clickbench_query_overrides {
   }
 }
 
-// DataFusion has ParamValues which can define a list of `Vec<ScalarValue>`
-// This is a scaled down equivalent to the `ScalarValue` enum, but we don't want to import DataFusion just for this.
-#[derive(Debug, Clone)]
-pub enum ParameterValue {
-    String(Arc<str>),
-    Number(i64),
-    Float(f64),
-}
-
 #[derive(Debug, Clone)]
 pub struct Query {
     pub name: Arc<str>,
@@ -170,6 +164,25 @@ impl Query {
             overridden,
             parameters: None,
         }
+    }
+
+    #[must_use]
+    pub fn get_parameters_batch(&self) -> Option<anyhow::Result<RecordBatch>> {
+        println!("parameters: {}", self.parameters.is_some());
+        self.parameters.as_ref().map(|params| {
+            let columns: Vec<_> = params
+                .iter()
+                .enumerate()
+                .map(|(i, param)| {
+                    let name = format!("${}", i + 1);
+                    let dtype = param.dtype();
+                    let array = param.array();
+                    PreparedStatementParamColumn::new(name, dtype, false, array)
+                })
+                .collect();
+
+            create_param_batch(columns)
+        })
     }
 }
 
