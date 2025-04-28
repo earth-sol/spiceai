@@ -32,6 +32,6 @@ where
         )
     )
   and s_nationkey = n_nationkey
-  and n_name = $5
+  and n_name = $3
 order by
     s_name;

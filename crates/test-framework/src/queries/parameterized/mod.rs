@@ -35,7 +35,7 @@ impl ParameterValue {
         match self {
             ParameterValue::String(_) => DataType::Utf8,
             ParameterValue::Number(_) => DataType::Int64,
-            ParameterValue::Float(_) => DataType::Float64,
+            ParameterValue::Float(_) => DataType::Decimal128(31, 6),
         }
     }
 
@@ -47,7 +47,9 @@ impl ParameterValue {
             }
             ParameterValue::Number(value) => Arc::new(arrow::array::Int64Array::from(vec![*value])),
             ParameterValue::Float(value) => {
-                Arc::new(arrow::array::Float64Array::from(vec![*value]))
+                #[allow(clippy::cast_possible_truncation)]
+                let decimal_value = (*value * 1_000_000.0) as i128;
+                Arc::new(arrow::array::Decimal128Array::from(vec![decimal_value]))
             }
         }
     }
