@@ -107,9 +107,11 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up make
+        if: runner.os != 'macOS'
         uses: ./.github/actions/setup-make
 
       - name: Set up cc
+        if: runner.os != 'macOS'
         uses: ./.github/actions/setup-cc
 
       - run: make lint
