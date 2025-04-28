@@ -46,8 +46,10 @@ pub enum Error {
     ))]
     TableDoesNotExist { table_reference: TableReference },
 
-    #[snafu(display("Unable to get token"))]
-    UnableToGetToken {},
+    #[snafu(display(
+        "Failed to obtain Databricks service principal token for machine-to-machine authentication.\nVerify your client_id and client_secret are correct.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
+    ))]
+    UnableToGetM2MToken {},
 }
 
 impl DatabricksDelta {
@@ -79,7 +81,7 @@ impl DatabricksDelta {
             client_secret.clone(),
         )
         .await
-        .map_err(|_| Error::UnableToGetToken {})?;
+        .map_err(|_| Error::UnableToGetM2MToken {})?;
 
         Ok(Self {
             endpoint,

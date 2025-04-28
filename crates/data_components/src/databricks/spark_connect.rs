@@ -28,8 +28,10 @@ use crate::{Read, spark_connect::SparkConnect};
 
 #[derive(Debug, Snafu)]
 pub enum Error {
-    #[snafu(display("Unable to get token"))]
-    UnableToGetToken {},
+    #[snafu(display(
+        "Failed to obtain Databricks service principal token for machine-to-machine authentication.\nVerify your client_id and client_secret are correct.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
+    ))]
+    UnableToGetM2MToken {},
 }
 
 #[derive(Clone)]
@@ -66,7 +68,7 @@ impl DatabricksSparkConnect {
             client_secret.clone(),
         )
         .await
-        .map_err(|_| Error::UnableToGetToken {})?;
+        .map_err(|_| Error::UnableToGetM2MToken {})?;
 
         let token = token_provider.get_token().await?;
 

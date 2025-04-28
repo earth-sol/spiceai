@@ -41,7 +41,9 @@ static REGISTRY: Lazy<RwLock<TokenProviderRegistry>> = Lazy::new(|| RwLock::new(
 
 #[derive(Debug, Snafu)]
 pub enum Error {
-    #[snafu(display("Unable to get token: {source}"))]
+    #[snafu(display(
+        "Failed to obtain Databricks service principal token for machine-to-machine authentication."
+    ))]
     UnableToGetToken { source: Box<dyn std::error::Error> },
 }
 
