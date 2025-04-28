@@ -36,7 +36,7 @@ async fn databricks_spark_connect_integration_test_catalog() -> Result<(), anyho
         .scope(async {
             let mut db_catalog =
                 Catalog::new("databricks:spiceai_sandbox".to_string(), "db_uc".to_string());
-            db_catalog.include = vec!["tpch.*".to_string(), "tpcds.*".to_string()];
+            db_catalog.include = vec!["tpch_sf1.*".to_string(), "tpcds_sf1.*".to_string()];
             db_catalog.params = Some(get_params());
 
             let app = AppBuilder::new("databricks_delta_lake_catalog_test")
