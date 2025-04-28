@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       platform_option:
-        description: 'Which platform do you want to run on? (Default is ALL)'
+        description: 'Which platform do you want to run on? (Default is all)'
         required: false
         type: choice
         options:
