@@ -137,6 +137,7 @@ fn get_params() -> Params {
                 "databricks_cluster_id".to_string(),
                 "${ env:NEW_DATABRICKS_CLUSTER_ID }".to_string(),
             ),
+            ("databricks_aws_region".to_string(), "us-west-2".to_string()),
             ("mode".to_string(), "spark_connect".to_string()),
         ]
         .into_iter()
