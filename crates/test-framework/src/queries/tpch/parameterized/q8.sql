@@ -1,7 +1,7 @@
 select
     o_year,
     sum(case
-            when nation = ? then volume
+            when nation = $1 then volume
             else 0
         end) / sum(volume) as mkt_share
 from
@@ -26,10 +26,10 @@ from
           and o_custkey = c_custkey
           and c_nationkey = n1.n_nationkey
           and n1.n_regionkey = r_regionkey
-          and r_name = ?
+          and r_name = $2
           and s_nationkey = n2.n_nationkey
-          and o_orderdate between date ? and date ?
-          and p_type = ?
+          and o_orderdate between date $3 and date $4
+          and p_type = $5
     ) as all_nations
 group by
     o_year

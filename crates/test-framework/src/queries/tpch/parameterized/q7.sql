@@ -24,10 +24,10 @@ from
           and s_nationkey = n1.n_nationkey
           and c_nationkey = n2.n_nationkey
           and (
-                (n1.n_name = ? and n2.n_name = ?)
-                or (n1.n_name = ? and n2.n_name = ?)
+                (n1.n_name = $1 and n2.n_name = $2)
+                or (n1.n_name = $3 and n2.n_name = $4)
             )
-          and l_shipdate between date ? and date ?
+          and l_shipdate between date $5 and date $6
     ) as shipping
 group by
     supp_nation,

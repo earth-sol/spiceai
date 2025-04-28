@@ -4,8 +4,8 @@ select
 from
     orders
 where
-        o_orderdate >= ?
-  and o_orderdate < date ? + interval ? month
+        o_orderdate >= $1
+  and o_orderdate < date $2 + interval $3 month
   and exists (
         select
             *

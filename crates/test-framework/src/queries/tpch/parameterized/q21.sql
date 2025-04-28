@@ -9,7 +9,7 @@ from
 where
         s_suppkey = l1.l_suppkey
   and o_orderkey = l1.l_orderkey
-  and o_orderstatus = ?
+  and o_orderstatus = $1
   and l1.l_receiptdate > l1.l_commitdate
   and exists (
         select
@@ -31,7 +31,7 @@ where
           and l3.l_receiptdate > l3.l_commitdate
     )
   and s_nationkey = n_nationkey
-  and n_name = ?
+  and n_name = $2
 group by
     s_name
 order by

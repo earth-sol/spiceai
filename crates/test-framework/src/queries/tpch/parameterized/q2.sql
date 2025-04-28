@@ -16,11 +16,11 @@ from
 where
         p_partkey = ps_partkey
   and s_suppkey = ps_suppkey
-  and p_size = ?
-  and p_type like ?
+  and p_size = $1
+  and p_type like $2
   and s_nationkey = n_nationkey
   and n_regionkey = r_regionkey
-  and r_name = ?
+  and r_name = $3
   and ps_supplycost = (
     select
         min(ps_supplycost)
@@ -34,7 +34,7 @@ where
       and s_suppkey = ps_suppkey
       and s_nationkey = n_nationkey
       and n_regionkey = r_regionkey
-      and r_name = ?
+      and r_name = $4
 )
 order by
     s_acctbal desc,

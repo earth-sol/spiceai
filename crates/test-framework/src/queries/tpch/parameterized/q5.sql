@@ -15,7 +15,7 @@ where
   and c_nationkey = s_nationkey
   and s_nationkey = n_nationkey
   and n_regionkey = r_regionkey
-  and r_name = ?
+  and r_name = $1
   and o_orderdate >= date '1994-01-01'
   and o_orderdate < date '1995-01-01'
 group by

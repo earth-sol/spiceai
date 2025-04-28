@@ -1,14 +1,14 @@
 select
     l_shipmode,
     sum(case
-            when o_orderpriority = ?
-                or o_orderpriority = ?
+            when o_orderpriority = $1
+                or o_orderpriority = $2
                 then 1
             else 0
         end) as high_line_count,
     sum(case
-            when o_orderpriority <> ?
-                and o_orderpriority <> ?
+            when o_orderpriority <> $3
+                and o_orderpriority <> $4
                 then 1
             else 0
         end) as low_line_count
@@ -19,11 +19,11 @@ from
     on
             l_orderkey = o_orderkey
 where
-        l_shipmode in (?, ?)
+        l_shipmode in ($5, $6)
   and l_commitdate < l_receiptdate
   and l_shipdate < l_commitdate
-  and l_receiptdate >= date ?
-  and l_receiptdate < date ?
+  and l_receiptdate >= date $7
+  and l_receiptdate < date $8
 group by
     l_shipmode
 order by
