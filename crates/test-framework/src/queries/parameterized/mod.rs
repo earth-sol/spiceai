@@ -263,6 +263,8 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                 }
                 _ => {}
             }
+
+            q.name = q.name.replace("tpch_", "tpch[parameterized]_").into();
             q
         })
         .collect()
