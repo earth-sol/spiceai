@@ -7,29 +7,29 @@ where
     (
                 p_partkey = l_partkey
             and p_brand = $1
-            and p_container in ($2, $3, $4, $5, $6)
-            and l_quantity >= $7 and l_quantity <= $8 + $9
-            and p_size between $10 and $11
-            and l_shipmode in ($12, $13)
-            and l_shipinstruct = $14
+            and p_container in ($2, $3, $4, $5)
+            and l_quantity >= $6 and l_quantity <= $7 + $8
+            and p_size between $9 and $10
+            and l_shipmode in ($11, $12)
+            and l_shipinstruct = $13
         )
    or
     (
                 p_partkey = l_partkey
-            and p_brand = $15
-            and p_container in ($16, $17, $18, $19, $20)
-            and l_quantity >= $21 and l_quantity <= $22 + $23
-            and p_size between $24 and $25
-            and l_shipmode in ($26, $27)
-            and l_shipinstruct = $28
+            and p_brand = $14
+            and p_container in ($15, $16, $17, $18)
+            and l_quantity >= $19 and l_quantity <= $20 + $21
+            and p_size between $22 and $23
+            and l_shipmode in ($24, $25)
+            and l_shipinstruct = $26
         )
    or
     (
                 p_partkey = l_partkey
-            and p_brand = $29
-            and p_container in ($30, $31, $32, $33, $34)
-            and l_quantity >= $35 and l_quantity <= $36 + $37
-            and p_size between $38 and $39
-            and l_shipmode in ($40, $41)
-            and l_shipinstruct = $42
+            and p_brand = $27
+            and p_container in ($28, $29, $30, $31)
+            and l_quantity >= $32 and l_quantity <= $33 + $34
+            and p_size between $35 and $36
+            and l_shipmode in ($37, $38)
+            and l_shipinstruct = $39
         );

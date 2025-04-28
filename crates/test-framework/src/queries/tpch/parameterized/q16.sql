@@ -10,14 +10,14 @@ where
         p_partkey = ps_partkey
   and p_brand <> $1
   and p_type not like $2
-  and p_size in ($3, $4, $5, $6, $7, $8, $9, $10, $11)
+  and p_size in ($3, $4, $5, $6, $7, $8, $9, $10)
   and ps_suppkey not in (
     select
         s_suppkey
     from
         supplier
     where
-            s_comment like $12
+            s_comment like $11
 )
 group by
     p_brand,

@@ -22,8 +22,8 @@ where
         l_shipmode in ($5, $6)
   and l_commitdate < l_receiptdate
   and l_shipdate < l_commitdate
-  and l_receiptdate >= date $7
-  and l_receiptdate < date $8
+  and l_receiptdate >= date '1994-01-01'
+  and l_receiptdate < date '1995-01-01'
 group by
     l_shipmode
 order by

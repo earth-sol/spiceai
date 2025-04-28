@@ -27,7 +27,7 @@ from
                 (n1.n_name = $1 and n2.n_name = $2)
                 or (n1.n_name = $3 and n2.n_name = $4)
             )
-          and l_shipdate between date $5 and date $6
+          and l_shipdate between date '1995-01-01' and date '1996-12-31'
     ) as shipping
 group by
     supp_nation,

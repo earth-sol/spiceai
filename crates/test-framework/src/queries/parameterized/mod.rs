@@ -73,18 +73,7 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                     ]);
                 }
                 "q3" => {
-                    q.parameters = Some(vec![
-                        ParameterValue::String("BUILDING".into()),
-                        ParameterValue::String("1995-03-15".into()),
-                        ParameterValue::String("1995-03-15".into()),
-                    ]);
-                }
-                "q4" => {
-                    q.parameters = Some(vec![
-                        ParameterValue::String("1993-07-01".into()),
-                        ParameterValue::String("1993-07-01".into()),
-                        ParameterValue::String("3".into()),
-                    ]);
+                    q.parameters = Some(vec![ParameterValue::String("BUILDING".into())]);
                 }
                 "q5" => {
                     q.parameters = Some(vec![ParameterValue::String("ASIA".into())]);
@@ -104,16 +93,12 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                         ParameterValue::String("GERMANY".into()),
                         ParameterValue::String("GERMANY".into()),
                         ParameterValue::String("FRANCE".into()),
-                        ParameterValue::String("1995-01-01".into()),
-                        ParameterValue::String("1996-12-31".into()),
                     ]);
                 }
                 "q8" => {
                     q.parameters = Some(vec![
                         ParameterValue::String("BRAZIL".into()),
                         ParameterValue::String("AMERICA".into()),
-                        ParameterValue::String("1995-01-01".into()),
-                        ParameterValue::String("1996-12-31".into()),
                         ParameterValue::String("ECONOMY ANODIZED STEEL".into()),
                     ]);
                 }
@@ -121,11 +106,7 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                     q.parameters = Some(vec![ParameterValue::String("%green%".into())]);
                 }
                 "q10" => {
-                    q.parameters = Some(vec![
-                        ParameterValue::String("1993-10-01".into()),
-                        ParameterValue::String("1994-01-01".into()),
-                        ParameterValue::String("R".into()),
-                    ]);
+                    q.parameters = Some(vec![ParameterValue::String("R".into())]);
                 }
                 "q11" => {
                     q.parameters = Some(vec![
@@ -141,8 +122,6 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                         ParameterValue::String("2-HIGH".into()),
                         ParameterValue::String("MAIL".into()),
                         ParameterValue::String("SHIP".into()),
-                        ParameterValue::String("1994-01-01".into()),
-                        ParameterValue::String("1995-01-01".into()),
                     ]);
                 }
                 "q13" => {
@@ -154,8 +133,6 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                         ParameterValue::Number(1),
                         ParameterValue::Number(0),
                         ParameterValue::Number(1),
-                        ParameterValue::String("1995-09-01".into()),
-                        ParameterValue::String("1995-10-01".into()),
                     ]);
                 }
                 "q16" => {
@@ -231,8 +208,6 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                     q.parameters = Some(vec![
                         ParameterValue::String("forest%".into()),
                         ParameterValue::Float(0.5),
-                        ParameterValue::String("1994-01-01".into()),
-                        ParameterValue::String("1994-01-01".into()),
                         ParameterValue::String("CANADA".into()),
                     ]);
                 }
