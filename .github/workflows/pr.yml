@@ -54,7 +54,7 @@ jobs:
 
   lint:
     name: Run Go & Rust Linters
-    runs-on: spiceai-runners
+    runs-on: spiceai-macos
     env:
       GOVER: 1.24.2
     needs: check_changes
