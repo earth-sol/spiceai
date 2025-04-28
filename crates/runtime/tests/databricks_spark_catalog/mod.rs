@@ -62,7 +62,7 @@ async fn databricks_spark_connect_integration_test_catalog() -> Result<(), anyho
             runtime_ready_check(&rt).await;
 
             let queries: QueryTests = vec![(
-                "SELECT * FROM db_uc.tpch.lineitem LIMIT 10",
+                "SELECT * FROM db_uc.tpch_sf1.lineitem LIMIT 10",
                 "select_tpch",
                 Some(Box::new(|result_batches| {
                     for batch in &result_batches {
@@ -83,7 +83,7 @@ async fn databricks_spark_connect_integration_test_catalog() -> Result<(), anyho
                 })),
             ),
             (
-                "SELECT * FROM db_uc.tpcds.catalog_sales LIMIT 10",
+                "SELECT * FROM db_uc.tpcds_sf1.catalog_sales LIMIT 10",
                 "select_tpcds",
                 Some(Box::new(|result_batches| {
                     for batch in &result_batches {
