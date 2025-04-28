@@ -64,7 +64,9 @@ pub enum Error {
     ))]
     InvalidMode { value: String },
 
-    #[snafu(display("Invalid configuration: {message}"))]
+    #[snafu(display(
+        "Invalid configuration: {message}.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
+    ))]
     InvalidConfiguration { message: String },
 }
 
@@ -94,31 +96,27 @@ impl Databricks {
         let client_secret = params.get("client_secret").ok();
 
         match (token, client_id, client_secret) {
-            // Case where no credentials are provided
             (None, None, None) => {
-                return MissingParameterSnafu {
-                    parameter: "token or client_id and client_secret".to_string(),
+                return InvalidConfigurationSnafu {
+                    message: "Missing `databricks_token` or `databricks_client_id` and `databricks_client_secret` parameters".to_string(),
                 }
                 .fail();
             }
-            // Cases where only one of client_id or client_secret is provided
             (None, Some(_), None) => {
                 return MissingParameterSnafu {
-                    parameter: "client_secret".to_string(),
+                    parameter: "`databricks_client_secret`".to_string(),
                 }
                 .fail();
             }
             (None, None, Some(_)) => {
                 return MissingParameterSnafu {
-                    parameter: "client_id".to_string(),
+                    parameter: "databricks_client_id".to_string(),
                 }
                 .fail();
             }
-            // Case where all three are provided
             (Some(_), Some(_), Some(_)) => {
                 return InvalidConfigurationSnafu {
-                    message: "Cannot use both token and client_id+client_secret together"
-                        .to_string(),
+                    message: "Cannot use `databricks_token`, `databricks_client_id` and `databricks_client_secret` together".to_string(),
                 }
                 .fail();
             }
@@ -144,8 +142,8 @@ impl Databricks {
                     ),
 
                     _ => {
-                        return MissingParameterSnafu {
-                            parameter: "client_id".to_string(),
+                        return InvalidConfigurationSnafu {
+                            message: "Missing `databricks_token` or `databricks_client_id` and `databricks_client_secret` parameters".to_string(),
                         }
                         .fail();
                     }
@@ -196,8 +194,8 @@ impl Databricks {
                     .context(UnableToConstructDatabricksSparkSnafu)?,
 
                     _ => {
-                        return MissingParameterSnafu {
-                            parameter: "client_id".to_string(),
+                        return InvalidConfigurationSnafu {
+                            message: "Missing `databricks_token` or `databricks_client_id` and `databricks_client_secret` parameters".to_string(),
                         }
                         .fail();
                     }
