@@ -12,7 +12,7 @@ where
   and c_custkey = o_custkey
   and l_orderkey = o_orderkey
   and o_orderdate < date ?
-  and l_shipdate > date '1995-03-15'
+  and l_shipdate > date ?
 group by
     l_orderkey,
     o_orderdate,

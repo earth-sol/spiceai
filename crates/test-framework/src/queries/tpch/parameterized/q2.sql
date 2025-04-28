@@ -20,7 +20,7 @@ where
   and p_type like ?
   and s_nationkey = n_nationkey
   and n_regionkey = r_regionkey
-  and r_name = 'EUROPE'
+  and r_name = ?
   and ps_supplycost = (
     select
         min(ps_supplycost)
@@ -34,7 +34,7 @@ where
       and s_suppkey = ps_suppkey
       and s_nationkey = n_nationkey
       and n_regionkey = r_regionkey
-      and r_name = 'EUROPE'
+      and r_name = ?
 )
 order by
     s_acctbal desc,

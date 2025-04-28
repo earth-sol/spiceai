@@ -1,9 +1,9 @@
 select
             100.00 * sum(case
                              when p_type like ?
-                                 then l_extendedprice * (1 - l_discount)
-                             else 0
-            end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
+                                 then l_extendedprice * (? - l_discount)
+                             else ?
+            end) / sum(l_extendedprice * (? - l_discount)) as promo_revenue
 from
     lineitem,
     part

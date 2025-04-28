@@ -27,7 +27,7 @@ from
                 (n1.n_name = ? and n2.n_name = ?)
                 or (n1.n_name = ? and n2.n_name = ?)
             )
-          and l_shipdate between date '1995-01-01' and date '1996-12-31'
+          and l_shipdate between date ? and date ?
     ) as shipping
 group by
     supp_nation,

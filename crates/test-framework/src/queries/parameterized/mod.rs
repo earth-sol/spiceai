@@ -31,11 +31,14 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                     q.parameters = Some(vec![
                         ParameterValue::Number(15),
                         ParameterValue::String("%BRASS".into()),
+                        ParameterValue::String("EUROPE".into()),
+                        ParameterValue::String("EUROPE".into()),
                     ]);
                 }
                 "q3" => {
                     q.parameters = Some(vec![
                         ParameterValue::String("BUILDING".into()),
+                        ParameterValue::String("1995-03-15".into()),
                         ParameterValue::String("1995-03-15".into()),
                     ]);
                 }
@@ -64,12 +67,16 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                         ParameterValue::String("GERMANY".into()),
                         ParameterValue::String("GERMANY".into()),
                         ParameterValue::String("FRANCE".into()),
+                        ParameterValue::String("1995-01-01".into()),
+                        ParameterValue::String("1996-12-31".into()),
                     ]);
                 }
                 "q8" => {
                     q.parameters = Some(vec![
                         ParameterValue::String("BRAZIL".into()),
                         ParameterValue::String("AMERICA".into()),
+                        ParameterValue::String("1995-01-01".into()),
+                        ParameterValue::String("1996-12-31".into()),
                         ParameterValue::String("ECONOMY ANODIZED STEEL".into()),
                     ]);
                 }
@@ -91,6 +98,10 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                 }
                 "q12" => {
                     q.parameters = Some(vec![
+                        ParameterValue::String("1-URGENT".into()),
+                        ParameterValue::String("2-HIGH".into()),
+                        ParameterValue::String("1-URGENT".into()),
+                        ParameterValue::String("2-HIGH".into()),
                         ParameterValue::String("MAIL".into()),
                         ParameterValue::String("SHIP".into()),
                         ParameterValue::String("1994-01-01".into()),
@@ -103,6 +114,9 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                 "q14" => {
                     q.parameters = Some(vec![
                         ParameterValue::String("PROMO%".into()),
+                        ParameterValue::Number(1),
+                        ParameterValue::Number(0),
+                        ParameterValue::Number(1),
                         ParameterValue::String("1995-09-01".into()),
                         ParameterValue::String("1995-10-01".into()),
                     ]);
@@ -124,6 +138,7 @@ pub fn add_tpch_parameters(queries: Vec<Query>) -> Vec<Query> {
                 }
                 "q17" => {
                     q.parameters = Some(vec![
+                        ParameterValue::Float(7.0),
                         ParameterValue::String("Brand#23".into()),
                         ParameterValue::String("MED BOX".into()),
                         ParameterValue::Float(0.2),
