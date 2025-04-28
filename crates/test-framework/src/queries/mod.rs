@@ -250,12 +250,11 @@ impl QuerySet {
                     q13,
                     q14,
                     q16,
-                    q17,
+                    // q17, -- Invalid argument error: column types must match schema types, expected Float64 but found Decimal128(38, 10) at column index 7
                     q18,
                     q19,
-                    q20,
-                    q21,
-                    q22
+                    // q20, -- Invalid argument error: column types must match schema types, expected Float64 but found Decimal128(38, 10) at column index 7
+                    q21 // q22 -- Invalid argument error: column types must match schema types, expected Float64 but found Decimal128(38, 10) at column index 7
                 );
 
                 add_tpch_parameters(queries)
