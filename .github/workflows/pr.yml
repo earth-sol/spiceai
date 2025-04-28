@@ -83,6 +83,7 @@ jobs:
           os: 'linux'
 
       - name: Check if sccache can be set up
+        if: runner.os != 'macOS'
         run: |
           if [ -z "${{ secrets.MINIO_ENDPOINT }}" ]; then
             echo "SCCACHE_SETUP=false" >> $GITHUB_ENV
@@ -93,7 +94,7 @@ jobs:
           fi
 
       - name: Set up sccache
-        if: ${{ needs.check_changes.outputs.relevant_changes == 'true' &&  env.SCCACHE_SETUP == 'true' }}
+        if: ${{ needs.check_changes.outputs.relevant_changes == 'true' && env.SCCACHE_SETUP == 'true' && runner.os != 'macOS' }}
         uses: ./.github/actions/setup-sccache
         with:
           minio_endpoint: ${{ secrets.MINIO_ENDPOINT }}
@@ -120,7 +121,7 @@ jobs:
           CARGO_INCREMENTAL: 0
 
       - name: Show sccache stats
-        if: ${{ needs.check_changes.outputs.relevant_changes == 'true' && env.SCCACHE_SETUP == 'true' }}
+        if: ${{ needs.check_changes.outputs.relevant_changes == 'true' && env.SCCACHE_SETUP == 'true' && runner.os != 'macOS' }}
         run: sccache --show-stats
 
       - name: Check if Cargo.lock is updated
