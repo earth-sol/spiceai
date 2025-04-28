@@ -2,7 +2,7 @@ version: v1
 kind: Spicepod
 name: databricks[delta_lake]-arrow
 datasets:
-  - from: databricks:spiceai_sandbox.tpch.partsupp
+  - from: databricks:spiceai_sandbox.tpch_sf1.partsupp
     name: partsupp
     params: &databricks_delta_params
       mode: delta_lake
@@ -15,31 +15,31 @@ datasets:
     acceleration: &acceleration
       enabled: true
       engine: arrow
-  - from: databricks:spiceai_sandbox.tpch.customer
+  - from: databricks:spiceai_sandbox.tpch_sf1.customer
     name: customer
     params: *databricks_delta_params
     acceleration: *acceleration
-  - from: databricks:spiceai_sandbox.tpch.lineitem
+  - from: databricks:spiceai_sandbox.tpch_sf1.lineitem
     name: lineitem
     params: *databricks_delta_params
     acceleration: *acceleration
-  - from: databricks:spiceai_sandbox.tpch.nation
+  - from: databricks:spiceai_sandbox.tpch_sf1.nation
     name: nation
     params: *databricks_delta_params
     acceleration: *acceleration
-  - from: databricks:spiceai_sandbox.tpch.orders
+  - from: databricks:spiceai_sandbox.tpch_sf1.orders
     name: orders
     params: *databricks_delta_params
     acceleration: *acceleration
-  - from: databricks:spiceai_sandbox.tpch.region
+  - from: databricks:spiceai_sandbox.tpch_sf1.region
     name: region
     params: *databricks_delta_params
     acceleration: *acceleration
-  - from: databricks:spiceai_sandbox.tpch.supplier
+  - from: databricks:spiceai_sandbox.tpch_sf1.supplier
     name: supplier
     params: *databricks_delta_params
     acceleration: *acceleration
-  - from: databricks:spiceai_sandbox.tpch.part
+  - from: databricks:spiceai_sandbox.tpch_sf1.part
     name: part
     params: *databricks_delta_params
     acceleration: *acceleration

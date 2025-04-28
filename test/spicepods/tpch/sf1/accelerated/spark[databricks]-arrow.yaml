@@ -2,7 +2,7 @@ version: v1
 kind: Spicepod
   name: spark[databricks]-arrow
 datasets:
-  - from: spark:spiceai_sandbox.tpch.customer
+  - from: spark:spiceai_sandbox.tpch_sf1.customer
     name: customer
     params: &spark_params
       spark_remote: |
@@ -15,30 +15,30 @@ datasets:
     acceleration: &acceleration
       enabled: true
       engine: arrow
-  - from: spark:spiceai_sandbox.tpch.lineitem
+  - from: spark:spiceai_sandbox.tpch_sf1.lineitem
     name: lineitem
     params: *spark_params
     acceleration: *acceleration
-  - from: spark:spiceai_sandbox.tpch.nation
+  - from: spark:spiceai_sandbox.tpch_sf1.nation
     name: nation
     params: *spark_params
     acceleration: *acceleration
-  - from: spark:spiceai_sandbox.tpch.orders
+  - from: spark:spiceai_sandbox.tpch_sf1.orders
     name: orders
     params: *spark_params
     acceleration: *acceleration
-  - from: spark:spiceai_sandbox.tpch.part
+  - from: spark:spiceai_sandbox.tpch_sf1.part
     name: part
     params: *spark_params
-  - from: spark:spiceai_sandbox.tpch.partsupp
+  - from: spark:spiceai_sandbox.tpch_sf1.partsupp
     name: partsupp
     params: *spark_params
     acceleration: *acceleration
-  - from: spark:spiceai_sandbox.tpch.region
+  - from: spark:spiceai_sandbox.tpch_sf1.region
     name: region
     params: *spark_params
     acceleration: *acceleration
-  - from: spark:spiceai_sandbox.tpch.supplier
+  - from: spark:spiceai_sandbox.tpch_sf1.supplier
     name: supplier
     params: *spark_params
     acceleration: *acceleration

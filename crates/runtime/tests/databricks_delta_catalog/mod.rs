@@ -36,7 +36,7 @@ async fn databricks_delta_lake_integration_test_catalog() -> Result<(), anyhow::
         .scope(async {
             let mut db_catalog =
                 Catalog::new("databricks:spiceai_sandbox".to_string(), "db_uc".to_string());
-            db_catalog.include = vec!["tpch.*".to_string(), "tpcds.*".to_string()];
+            db_catalog.include = vec!["tpch_sf1.*".to_string(), "tpcds_sf1.*".to_string()];
             db_catalog.params = Some(get_params());
 
             let app = AppBuilder::new("databricks_delta_lake_catalog_test")
@@ -62,7 +62,7 @@ async fn databricks_delta_lake_integration_test_catalog() -> Result<(), anyhow::
             runtime_ready_check(&rt).await;
 
             let queries: QueryTests = vec![(
-                "SELECT * FROM db_uc.tpch.lineitem LIMIT 10",
+                "SELECT * FROM db_uc.tpch_sf1.lineitem LIMIT 10",
                 "select_tpch",
                 Some(Box::new(|result_batches| {
                     for batch in &result_batches {
@@ -83,7 +83,7 @@ async fn databricks_delta_lake_integration_test_catalog() -> Result<(), anyhow::
                 })),
             ),
             (
-                "SELECT * FROM db_uc.tpcds.catalog_sales LIMIT 10",
+                "SELECT * FROM db_uc.tpcds_sf1.catalog_sales LIMIT 10",
                 "select_tpcds",
                 Some(Box::new(|result_batches| {
                     for batch in &result_batches {

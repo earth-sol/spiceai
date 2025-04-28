@@ -58,7 +58,7 @@ async fn spark_integration_test() -> Result<(), anyhow::Error> {
         .scope(async {
             let app = AppBuilder::new("spark_connector")
                 .with_dataset(make_spark_dataset(
-                    "spiceai_sandbox.tpch.lineitem",
+                    "spiceai_sandbox.tpch_sf1.lineitem",
                     "lineitem",
                 ))
                 .build();
