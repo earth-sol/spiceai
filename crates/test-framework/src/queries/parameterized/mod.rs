@@ -35,7 +35,7 @@ impl ParameterValue {
         match self {
             ParameterValue::String(_) => DataType::Utf8,
             ParameterValue::Number(_) => DataType::Int64,
-            ParameterValue::Float(_) => DataType::Decimal128(31, 6),
+            ParameterValue::Float(_) => DataType::Float64,
         }
     }
 
