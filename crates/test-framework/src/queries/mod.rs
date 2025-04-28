@@ -16,15 +16,149 @@ limitations under the License.
 
 use std::{fmt::Display, sync::Arc};
 
+use parameterized::add_tpch_parameters;
 use serde::{Deserialize, Serialize};
 
+pub mod parameterized;
 pub mod validation;
+
+#[macro_export]
+macro_rules! generate_tpch_queries {
+    ( $( $i:tt ),* ) => {
+        vec![
+            $(
+                Query::new(
+                    concat!("tpch_", stringify!($i)).into(),
+                    include_str!(concat!("./tpch/", stringify!($i), ".sql")).into(),
+                    false
+                )
+            ),*
+        ]
+    }
+}
+
+#[macro_export]
+macro_rules! generate_tpch_queries_override {
+    ( $override:expr, $( $i:tt ),* ) => {
+        vec![
+            $(
+                Query::new(
+                    concat!("tpch_", stringify!($i)).into(),
+                    include_str!(concat!("./tpch/", $override, "/", stringify!($i), ".sql")).into(),
+                    true
+                )
+            ),*
+        ]
+    }
+}
+
+#[macro_export]
+macro_rules! remove_tpch_query {
+    ( $queries:expr, $( $i:literal ),* ) => {
+        {
+            let query_names: Vec<Arc<str>> = vec![ $( concat!("tpch_q", stringify!($i)).into(), )* ];
+            $queries.into_iter()
+                .filter(|query| !query_names.contains(&query.name))
+                .collect()
+        }
+    };
+
+    ( $queries:expr, $( $i:ident ),* ) => {
+        {
+            let query_names: Vec<Arc<str>> = vec![ $( concat!("tpch_", stringify!($i)).into(), )* ];
+            $queries.into_iter()
+                .filter(|query| !query_names.contains(&query.name))
+                .collect()
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! generate_tpcds_queries {
+    ( $( $i:literal ),* ) => {
+        vec![
+            $(
+                Query::new(
+                    concat!("tpcds_q", stringify!($i)).into(),
+                    include_str!(concat!("./tpcds/q", stringify!($i), ".sql")).into(),
+                    false
+                )
+            ),*
+        ]
+    }
+}
+
+#[macro_export]
+macro_rules! remove_tpcds_query {
+    ( $queries:expr, $( $i:literal ),* ) => {
+        {
+            let query_names: Vec<Arc<str>> = vec![ $( concat!("tpcds_q", stringify!($i)).into(), )* ];
+            $queries.into_iter()
+                .filter(|query| !query_names.contains(&query.name))
+                .collect()
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! add_tpcds_query_overrides {
+    ( $queries:expr, $override:expr, $( $i:literal ),* ) => {
+        {
+            let mut queries = $queries;
+            $(
+                queries.push(Query::new(
+                    concat!("tpcds_q", stringify!($i)).into(),
+                    include_str!(concat!("./tpcds/", $override, "/q", stringify!($i), ".sql")).into(),
+                    true
+                ));
+            )*
+            queries
+        }
+    }
+}
+macro_rules! generate_clickbench_queries {
+  ( $( $i:literal ),* ) => {
+      vec![
+          $(
+              Query::new(
+                  concat!("clickbench_q", stringify!($i)).into(),
+                  include_str!(concat!("./clickbench/q", stringify!($i), ".sql")).into(),
+                  false
+              )
+          ),*
+      ]
+  }
+}
+
+macro_rules! generate_clickbench_query_overrides {
+  ( $engine:expr, $( $i:literal ),* ) => {
+      vec![
+          $(
+              Query::new(
+                  concat!("clickbench_q", stringify!($i)).into(),
+                  include_str!(concat!("./clickbench/", $engine, "/q", stringify!($i), ".sql")).into(),
+                  true
+              )
+          ),*
+      ]
+  }
+}
+
+// DataFusion has ParamValues which can define a list of `Vec<ScalarValue>`
+// This is a scaled down equivalent to the `ScalarValue` enum, but we don't want to import DataFusion just for this.
+#[derive(Debug, Clone)]
+pub enum ParameterValue {
+    String(Arc<str>),
+    Number(i64),
+    Float(f64),
+}
 
 #[derive(Debug, Clone)]
 pub struct Query {
     pub name: Arc<str>,
     pub sql: Arc<str>,
     pub overridden: bool,
+    pub parameters: Option<Vec<ParameterValue>>,
 }
 
 impl Query {
@@ -34,6 +168,7 @@ impl Query {
             name,
             sql,
             overridden,
+            parameters: None,
         }
     }
 }
@@ -47,6 +182,8 @@ pub enum QuerySet {
     Tpcds,
     #[serde(rename = "clickbench")]
     Clickbench,
+    #[serde(rename = "tpch[parameterized]")]
+    ParameterizedTpch,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -83,6 +220,34 @@ impl QuerySet {
             QuerySet::Tpch => get_tpch_test_queries(overrides),
             QuerySet::Tpcds => get_tpcds_test_queries(overrides),
             QuerySet::Clickbench => get_clickbench_test_queries(overrides),
+            QuerySet::ParameterizedTpch => {
+                let queries = generate_tpch_queries_override!(
+                    "parameterized",
+                    q1,
+                    q2,
+                    q3,
+                    q4,
+                    q5,
+                    q6,
+                    q7,
+                    q8,
+                    q9,
+                    q10,
+                    q11,
+                    q12,
+                    q13,
+                    q14,
+                    q16,
+                    q17,
+                    q18,
+                    q19,
+                    q20,
+                    q21,
+                    q22
+                );
+
+                add_tpch_parameters(queries)
+            }
         }
     }
 
@@ -90,7 +255,7 @@ impl QuerySet {
     #[must_use]
     pub fn row_counts(&self) -> Vec<TableWithRowCount> {
         match self {
-            QuerySet::Tpch => [
+            QuerySet::Tpch | QuerySet::ParameterizedTpch => [
                 ("customer", 150_000),
                 ("lineitem", 6_001_215),
                 ("nation", 25),
@@ -142,7 +307,7 @@ impl QuerySet {
     #[must_use]
     pub fn append_time_columns(&self) -> Vec<TableWithTimeColumn> {
         match self {
-            QuerySet::Tpch => [
+            QuerySet::Tpch | QuerySet::ParameterizedTpch => [
                 ("customer", "c_created_at"),
                 ("lineitem", "l_created_at"),
                 ("nation", "n_created_at"),
@@ -198,6 +363,7 @@ impl Display for QuerySet {
             QuerySet::Tpch => write!(f, "tpch"),
             QuerySet::Tpcds => write!(f, "tpcds"),
             QuerySet::Clickbench => write!(f, "clickbench"),
+            QuerySet::ParameterizedTpch => write!(f, "tpch[parameterized]"),
         }
     }
 }
@@ -233,57 +399,6 @@ impl QueryOverrides {
             _ => None,
         }
     }
-}
-
-#[macro_export]
-macro_rules! generate_tpch_queries {
-    ( $( $i:tt ),* ) => {
-        vec![
-            $(
-                Query::new(
-                    concat!("tpch_", stringify!($i)).into(),
-                    include_str!(concat!("./tpch/", stringify!($i), ".sql")).into(),
-                    false
-                )
-            ),*
-        ]
-    }
-}
-
-#[macro_export]
-macro_rules! generate_tpch_queries_override {
-    ( $override:expr, $( $i:tt ),* ) => {
-        vec![
-            $(
-                Query::new(
-                    concat!("tpch_", stringify!($i)).into(),
-                    include_str!(concat!("./tpch/", $override, "/", stringify!($i), ".sql")).into(),
-                    true
-                )
-            ),*
-        ]
-    }
-}
-
-#[macro_export]
-macro_rules! remove_tpch_query {
-    ( $queries:expr, $( $i:literal ),* ) => {
-        {
-            let query_names: Vec<Arc<str>> = vec![ $( concat!("tpch_q", stringify!($i)).into(), )* ];
-            $queries.into_iter()
-                .filter(|query| !query_names.contains(&query.name))
-                .collect()
-        }
-    };
-
-    ( $queries:expr, $( $i:ident ),* ) => {
-        {
-            let query_names: Vec<Arc<str>> = vec![ $( concat!("tpch_", stringify!($i)).into(), )* ];
-            $queries.into_iter()
-                .filter(|query| !query_names.contains(&query.name))
-                .collect()
-        }
-    };
 }
 
 #[allow(clippy::too_many_lines)]
@@ -406,50 +521,6 @@ pub fn get_tpch_test_queries(overrides: Option<QueryOverrides>) -> Vec<Query> {
     }
 }
 
-#[macro_export]
-macro_rules! generate_tpcds_queries {
-    ( $( $i:literal ),* ) => {
-        vec![
-            $(
-                Query::new(
-                    concat!("tpcds_q", stringify!($i)).into(),
-                    include_str!(concat!("./tpcds/q", stringify!($i), ".sql")).into(),
-                    false
-                )
-            ),*
-        ]
-    }
-}
-
-#[macro_export]
-macro_rules! remove_tpcds_query {
-    ( $queries:expr, $( $i:literal ),* ) => {
-        {
-            let query_names: Vec<Arc<str>> = vec![ $( concat!("tpcds_q", stringify!($i)).into(), )* ];
-            $queries.into_iter()
-                .filter(|query| !query_names.contains(&query.name))
-                .collect()
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! add_tpcds_query_overrides {
-    ( $queries:expr, $override:expr, $( $i:literal ),* ) => {
-        {
-            let mut queries = $queries;
-            $(
-                queries.push(Query::new(
-                    concat!("tpcds_q", stringify!($i)).into(),
-                    include_str!(concat!("./tpcds/", $override, "/q", stringify!($i), ".sql")).into(),
-                    true
-                ));
-            )*
-            queries
-        }
-    }
-}
-
 #[must_use]
 pub fn get_tpcds_test_queries(overrides: Option<QueryOverrides>) -> Vec<Query> {
     let queries = generate_tpcds_queries!(
@@ -539,34 +610,6 @@ pub fn get_tpcds_test_queries(overrides: Option<QueryOverrides>) -> Vec<Query> {
         ),
         Some(_) | None => queries,
     }
-}
-
-macro_rules! generate_clickbench_queries {
-  ( $( $i:literal ),* ) => {
-      vec![
-          $(
-              Query::new(
-                  concat!("clickbench_q", stringify!($i)).into(),
-                  include_str!(concat!("./clickbench/q", stringify!($i), ".sql")).into(),
-                  false
-              )
-          ),*
-      ]
-  }
-}
-
-macro_rules! generate_clickbench_query_overrides {
-  ( $engine:expr, $( $i:literal ),* ) => {
-      vec![
-          $(
-              Query::new(
-                  concat!("clickbench_q", stringify!($i)).into(),
-                  include_str!(concat!("./clickbench/", $engine, "/q", stringify!($i), ".sql")).into(),
-                  true
-              )
-          ),*
-      ]
-  }
 }
 
 #[must_use]
