@@ -240,7 +240,7 @@ impl QuerySet {
                     q2,
                     q3,
                     q5,
-                    q6,
+                    // q6, -- Invalid argument error: column types must match schema types, expected Float64 but found Decimal128(38, 10) at column index 0
                     q7,
                     q8,
                     q9,
