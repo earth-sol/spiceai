@@ -307,6 +307,12 @@ pub enum Error {
         source: crate::component::dataset::Error,
     },
 
+    #[snafu(display("Unable to build catalog: {catalog}: {source}"))]
+    UnableToBuildCatalog {
+        catalog: String,
+        source: crate::component::catalog::Error,
+    },
+
     #[snafu(display("{source}"))]
     ComponentError { source: component::Error },
 
@@ -630,7 +636,7 @@ impl Runtime {
             }
         }
 
-        let valid_catalogs = Self::get_valid_catalogs(app, LogErrors(false));
+        let valid_catalogs = Arc::clone(&self).get_valid_catalogs(app, LogErrors(false));
         for catalog in valid_catalogs {
             self.status
                 .update_catalog(&catalog.name, ComponentStatus::Initializing);
