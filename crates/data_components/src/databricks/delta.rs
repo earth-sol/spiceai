@@ -26,8 +26,6 @@ use secrecy::{ExposeSecret, SecretString};
 use snafu::prelude::*;
 use std::{collections::HashMap, sync::Arc};
 
-use super::auth::DatabricksM2MTokenProvider;
-
 #[derive(Clone)]
 pub struct DatabricksDelta {
     endpoint: Endpoint,
@@ -45,11 +43,6 @@ pub enum Error {
         "Failed to find the Databricks table '{table_reference}'.\nVerify the table exists, and try again."
     ))]
     TableDoesNotExist { table_reference: TableReference },
-
-    #[snafu(display(
-        "Failed to obtain Databricks service principal token for machine-to-machine authentication.\nVerify your client_id and client_secret are correct.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
-    ))]
-    UnableToGetM2MToken {},
 }
 
 impl DatabricksDelta {
@@ -71,18 +64,9 @@ impl DatabricksDelta {
 
     pub async fn new_m2m(
         endpoint: Endpoint,
-        client_id: String,
-        client_secret: &SecretString,
         storage_options: HashMap<String, SecretString>,
+        token_provider: Arc<dyn TokenProvider>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let token_provider = DatabricksM2MTokenProvider::get_shared(
-            endpoint.0.clone(),
-            client_id,
-            client_secret.clone(),
-        )
-        .await
-        .map_err(|_| Error::UnableToGetM2MToken {})?;
-
         Ok(Self {
             endpoint,
             token_provider,

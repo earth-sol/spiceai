@@ -15,29 +15,25 @@ limitations under the License.
 */
 
 use async_trait::async_trait;
-use once_cell::sync::Lazy;
+// use once_cell::sync::Lazy;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
-use std::collections::HashMap;
+// use std::collections::HashMap;
 use std::time::Duration;
 use std::{fmt, sync::Arc};
-use tokio::time::Instant;
-use tokio::{
-    sync::{RwLock, watch},
-    task::JoinHandle,
-    time::sleep,
-};
+// use tokio::time::Instant;
+use tokio::{sync::watch, task::JoinHandle, time::sleep};
 
 use crate::token_provider::{Result, TokenProvider};
 
-type Key = (String, String);
+// type Key = (String, String);
 
-type TokenProviderEntry = (Arc<DatabricksM2MTokenProvider>, Instant);
+// type TokenProviderEntry = (Arc<DatabricksM2MTokenProvider>, Instant);
 
-type TokenProviderRegistry = HashMap<Key, TokenProviderEntry>;
+// type TokenProviderRegistry = HashMap<Key, TokenProviderEntry>;
 
-static REGISTRY: Lazy<RwLock<TokenProviderRegistry>> = Lazy::new(|| RwLock::new(HashMap::new()));
+// static REGISTRY: Lazy<RwLock<TokenProviderRegistry>> = Lazy::new(|| RwLock::new(HashMap::new()));
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -73,11 +69,11 @@ impl fmt::Debug for DatabricksM2MTokenProvider {
 }
 
 impl DatabricksM2MTokenProvider {
-    async fn new(
+    pub async fn try_new(
         endpoint: String,
         client_id: String,
         client_secret: SecretString,
-    ) -> Result<Self, Error> {
+    ) -> Result<Arc<Self>, Error> {
         // initial fetch
         let TokenResponse {
             access_token,
@@ -133,52 +129,52 @@ impl DatabricksM2MTokenProvider {
             }
         });
 
-        Ok(Self {
+        Ok(Arc::new(Self {
             endpoint,
             client_id,
             tx,
             rx,
             _handle: Arc::new(handle),
-        })
+        }))
     }
 
-    pub async fn get_shared(
-        endpoint: String,
-        client_id: String,
-        client_secret: SecretString,
-    ) -> Result<Arc<Self>, Error> {
-        let key = (endpoint.clone(), client_id.clone());
+    // pub async fn get_shared(
+    //     endpoint: String,
+    //     client_id: String,
+    //     client_secret: SecretString,
+    // ) -> Result<Arc<Self>, Error> {
+    //     let key = (endpoint.clone(), client_id.clone());
 
-        // Fast path: try an *async read* lock
-        {
-            let read_guard = REGISTRY.read().await;
-            if let Some((existing, _last_used)) = read_guard.get(&key) {
-                return Ok(Arc::clone(existing));
-            }
-        }
+    //     // Fast path: try an *async read* lock
+    //     {
+    //         let read_guard = REGISTRY.read().await;
+    //         if let Some((existing, _last_used)) = read_guard.get(&key) {
+    //             return Ok(Arc::clone(existing));
+    //         }
+    //     }
 
-        // Not in map yet: acquire *write* lock to initialize
-        let mut write_guard = REGISTRY.write().await;
+    //     // Not in map yet: acquire *write* lock to initialize
+    //     let mut write_guard = REGISTRY.write().await;
 
-        // 2a) re‑check in case someone else filled it while we were waiting for the write lock
-        if let Some((existing, last_used)) = write_guard.get_mut(&key) {
-            *last_used = Instant::now();
-            return Ok(Arc::clone(existing));
-        }
+    //     // 2a) re‑check in case someone else filled it while we were waiting for the write lock
+    //     if let Some((existing, last_used)) = write_guard.get_mut(&key) {
+    //         *last_used = Instant::now();
+    //         return Ok(Arc::clone(existing));
+    //     }
 
-        // We are the first: actually build the provider (await the HTTP fetch)
-        let provider = Arc::new(
-            DatabricksM2MTokenProvider::new(
-                endpoint.clone(),
-                client_id.clone(),
-                client_secret.clone(),
-            )
-            .await?,
-        );
+    //     // We are the first: actually build the provider (await the HTTP fetch)
+    //     let provider = Arc::new(
+    //         DatabricksM2MTokenProvider::new(
+    //             endpoint.clone(),
+    //             client_id.clone(),
+    //             client_secret.clone(),
+    //         )
+    //         .await?,
+    //     );
 
-        write_guard.insert(key, (Arc::clone(&provider), Instant::now()));
-        Ok(provider)
-    }
+    //     write_guard.insert(key, (Arc::clone(&provider), Instant::now()));
+    //     Ok(provider)
+    // }
 }
 
 #[async_trait]

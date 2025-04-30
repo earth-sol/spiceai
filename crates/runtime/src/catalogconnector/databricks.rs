@@ -180,7 +180,7 @@ impl CatalogConnector for Databricks {
             )
         } else {
             let dataset_databricks =
-                match DatabricksDataConnector::new(params)
+                match DatabricksDataConnector::new(params, runtime.token_provider_registry())
                     .await
                     .map_err(|source| super::Error::UnableToGetCatalogProvider {
                         connector: "databricks".to_string(),

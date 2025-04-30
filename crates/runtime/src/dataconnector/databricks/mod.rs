@@ -15,8 +15,10 @@ limitations under the License.
 */
 
 use crate::component::dataset::Dataset;
+use crate::token_provider_registry::TokenProviderRegistry;
 use async_trait::async_trait;
 use data_components::Read;
+use data_components::databricks::auth::DatabricksM2MTokenProvider;
 use data_components::databricks::{DatabricksDelta, DatabricksSparkConnect};
 use data_components::unity_catalog::Endpoint;
 use datafusion::datasource::TableProvider;
@@ -68,6 +70,16 @@ pub enum Error {
         "Invalid configuration: {message}.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
     ))]
     InvalidConfiguration { message: String },
+
+    #[snafu(display(
+        "Failed to build Databricks connector: required component '{missing_component}' is missing.\nAn unexpected error occurred. Report a bug to request support: https://github.com/spiceai/spiceai/issues"
+    ))]
+    UnableToBuild { missing_component: String },
+
+    #[snafu(display(
+        "Failed to obtain Databricks service principal token for machine-to-machine authentication."
+    ))]
+    UnableToGetToken {},
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -84,7 +96,11 @@ impl std::fmt::Debug for Databricks {
 
 impl Databricks {
     #[allow(clippy::too_many_lines)]
-    pub async fn new(params: Parameters) -> Result<Self> {
+    pub async fn new(
+        params: Parameters,
+        // TODO: register token provider in registry
+        _token_provider_registry: Arc<TokenProviderRegistry>,
+    ) -> Result<Self> {
         let mode = params.get("mode").expose().ok().unwrap_or_default();
         let endpoint = params
             .get("endpoint")
@@ -126,14 +142,23 @@ impl Databricks {
         match mode {
             "delta_lake" => {
                 let databricks_delta = match (token, client_id, client_secret) {
-                    (None, Some(client_id), Some(client_secret)) => DatabricksDelta::new_m2m(
-                        Endpoint(endpoint.to_string()),
-                        client_id.to_string(),
-                        client_secret,
-                        params.to_secret_map(),
-                    )
-                    .await
-                    .context(UnableToConstructDatabricksDeltaLakeSnafu)?,
+                    (None, Some(client_id), Some(client_secret)) => {
+                        let token_provider = DatabricksM2MTokenProvider::try_new(
+                            endpoint.to_string(),
+                            client_id.to_string(),
+                            client_secret.clone(),
+                        )
+                        .await
+                        .map_err(|_| Error::UnableToGetToken {})?;
+
+                        DatabricksDelta::new_m2m(
+                            Endpoint(endpoint.to_string()),
+                            params.to_secret_map(),
+                            token_provider,
+                        )
+                        .await
+                        .context(UnableToConstructDatabricksDeltaLakeSnafu)?
+                    }
 
                     (Some(token), _, _) => DatabricksDelta::new(
                         Endpoint(endpoint.to_string()),
@@ -173,12 +198,19 @@ impl Databricks {
 
                 let databricks_spark = match (token, client_id, client_secret) {
                     (None, Some(client_id), Some(client_secret)) => {
+                        let token_provider = DatabricksM2MTokenProvider::try_new(
+                            endpoint.to_string(),
+                            client_id.to_string(),
+                            client_secret.clone(),
+                        )
+                        .await
+                        .map_err(|_| Error::UnableToGetToken {})?;
+
                         DatabricksSparkConnect::new_m2m(
                             endpoint.to_string(),
                             cluster_id.expose_secret().to_string(),
-                            client_id.to_string(),
-                            client_secret,
                             databricks_use_ssl,
+                            token_provider,
                         )
                         .await
                         .context(UnableToConstructDatabricksSparkSnafu)?
@@ -303,10 +335,20 @@ impl DataConnectorFactory for DatabricksFactory {
         &self,
         params: ConnectorParams,
     ) -> Pin<Box<dyn Future<Output = super::NewDataConnectorResult> + Send>> {
-        Box::pin(async move {
-            let databricks = Databricks::new(params.parameters).await?;
-            Ok(Arc::new(databricks) as Arc<dyn DataConnector>)
-        })
+        if let Some(runtime) = params.runtime {
+            Box::pin(async move {
+                let databricks =
+                    Databricks::new(params.parameters, runtime.token_provider_registry()).await?;
+                Ok(Arc::new(databricks) as Arc<dyn DataConnector>)
+            })
+        } else {
+            Box::pin(async move {
+                Err(Box::new(Error::UnableToBuild {
+                    missing_component: "runtime".to_string(),
+                })
+                    as Box<dyn std::error::Error + Send + Sync>)
+            })
+        }
     }
 
     fn prefix(&self) -> &'static str {

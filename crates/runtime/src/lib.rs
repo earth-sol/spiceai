@@ -23,6 +23,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
+use token_provider_registry::TokenProviderRegistry;
 use tokio::{sync::Mutex, task::JoinHandle, time::Instant};
 use tools::factory::{ToolFactory, default_catalog_names};
 use util::force_shutdown_signal;
@@ -99,6 +100,7 @@ pub mod status;
 pub mod task_history;
 pub mod timing;
 pub mod tls;
+mod token_provider_registry;
 pub mod tools;
 pub mod topological_ordering;
 pub(crate) mod tracers;
@@ -371,6 +373,7 @@ pub struct Runtime {
     status: Arc<status::RuntimeStatus>,
     runtime_tasks: Arc<RwLock<HashMap<String, CancellableTaskHandle>>>,
     accelerator_engine_registry: Arc<AcceleratorEngineRegistry>,
+    token_provider_registry: Arc<TokenProviderRegistry>,
 }
 
 impl Runtime {
@@ -412,6 +415,11 @@ impl Runtime {
     #[must_use]
     pub fn accelerator_engine_registry(&self) -> Arc<AcceleratorEngineRegistry> {
         Arc::clone(&self.accelerator_engine_registry)
+    }
+
+    #[must_use]
+    pub fn token_provider_registry(&self) -> Arc<TokenProviderRegistry> {
+        Arc::clone(&self.token_provider_registry)
     }
 
     /// Requests a loaded extension, or will attempt to load it if part of the autoloaded extensions.

@@ -17,22 +17,11 @@ limitations under the License.
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use datafusion::{datasource::TableProvider, sql::TableReference};
-use secrecy::SecretString;
-use snafu::prelude::*;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::databricks::auth::DatabricksM2MTokenProvider;
 use crate::token_provider::TokenProvider;
 use crate::{Read, spark_connect::SparkConnect};
-
-#[derive(Debug, Snafu)]
-pub enum Error {
-    #[snafu(display(
-        "Failed to obtain Databricks service principal token for machine-to-machine authentication.\nVerify your client_id and client_secret are correct.\nFor details, visit: https://spiceai.org/docs/components/data-connectors/databricks#parameters"
-    ))]
-    UnableToGetM2MToken {},
-}
 
 #[derive(Clone)]
 pub struct DatabricksSparkConnect {
@@ -58,18 +47,9 @@ impl DatabricksSparkConnect {
     pub async fn new_m2m(
         endpoint: String,
         cluster_id: String,
-        client_id: String,
-        client_secret: &SecretString,
         databricks_use_ssl: bool,
+        token_provider: Arc<dyn TokenProvider>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let token_provider = DatabricksM2MTokenProvider::get_shared(
-            endpoint.clone(),
-            client_id,
-            client_secret.clone(),
-        )
-        .await
-        .map_err(|_| Error::UnableToGetM2MToken {})?;
-
         let token = token_provider.get_token().await?;
 
         let session_id = Uuid::new_v4();
