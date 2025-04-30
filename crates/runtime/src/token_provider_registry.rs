@@ -14,7 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use data_components::token_provider::TokenProvider;
+use data_components::{
+    databricks::auth::DatabricksM2MTokenProvider, token_provider::TokenProvider,
+};
+use secrecy::SecretString;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -28,5 +31,50 @@ impl TokenProviderRegistry {
         Self {
             token_provider_registry: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Gets or creates a DatabricksM2MTokenProvider
+    ///
+    /// This method will return an existing provider if one is already registered with the same client_id,
+    /// otherwise it will create a new one and register it.
+    pub async fn get_or_create_databricks_m2m(
+        &self,
+        endpoint: String,
+        client_id: String,
+        client_secret: SecretString,
+    ) -> Result<Arc<dyn TokenProvider>, data_components::databricks::auth::Error> {
+        let key = format!("databricks_m2m:{}", client_id);
+
+        {
+            let registry = self.token_provider_registry.read().await;
+            if let Some(provider) = registry.get(&key) {
+                tracing::debug!(
+                    "Using existing Databricks M2M token provider for client_id: {}",
+                    client_id
+                );
+                return Ok(Arc::clone(provider));
+            }
+        }
+
+        let mut registry = self.token_provider_registry.write().await;
+
+        if let Some(provider) = registry.get(&key) {
+            tracing::debug!(
+                "Using existing Databricks M2M token provider for client_id: {}",
+                client_id
+            );
+            return Ok(Arc::clone(provider));
+        }
+
+        tracing::debug!(
+            "Creating new Databricks M2M token provider for client_id: {}",
+            client_id
+        );
+        let provider =
+            DatabricksM2MTokenProvider::try_new(endpoint, client_id.clone(), client_secret).await?;
+
+        registry.insert(key, provider.clone());
+
+        Ok(provider)
     }
 }

@@ -18,7 +18,6 @@ use crate::component::dataset::Dataset;
 use crate::token_provider_registry::TokenProviderRegistry;
 use async_trait::async_trait;
 use data_components::Read;
-use data_components::databricks::auth::DatabricksM2MTokenProvider;
 use data_components::databricks::{DatabricksDelta, DatabricksSparkConnect};
 use data_components::unity_catalog::Endpoint;
 use datafusion::datasource::TableProvider;
@@ -98,8 +97,7 @@ impl Databricks {
     #[allow(clippy::too_many_lines)]
     pub async fn new(
         params: Parameters,
-        // TODO: register token provider in registry
-        _token_provider_registry: Arc<TokenProviderRegistry>,
+        token_provider_registry: Arc<TokenProviderRegistry>,
     ) -> Result<Self> {
         let mode = params.get("mode").expose().ok().unwrap_or_default();
         let endpoint = params
@@ -143,13 +141,14 @@ impl Databricks {
             "delta_lake" => {
                 let databricks_delta = match (token, client_id, client_secret) {
                     (None, Some(client_id), Some(client_secret)) => {
-                        let token_provider = DatabricksM2MTokenProvider::try_new(
-                            endpoint.to_string(),
-                            client_id.to_string(),
-                            client_secret.clone(),
-                        )
-                        .await
-                        .map_err(|_| Error::UnableToGetToken {})?;
+                        let token_provider = token_provider_registry
+                            .get_or_create_databricks_m2m(
+                                endpoint.to_string(),
+                                client_id.to_string(),
+                                client_secret.clone(),
+                            )
+                            .await
+                            .map_err(|_| Error::UnableToGetToken {})?;
 
                         DatabricksDelta::new_m2m(
                             Endpoint(endpoint.to_string()),
@@ -198,13 +197,14 @@ impl Databricks {
 
                 let databricks_spark = match (token, client_id, client_secret) {
                     (None, Some(client_id), Some(client_secret)) => {
-                        let token_provider = DatabricksM2MTokenProvider::try_new(
-                            endpoint.to_string(),
-                            client_id.to_string(),
-                            client_secret.clone(),
-                        )
-                        .await
-                        .map_err(|_| Error::UnableToGetToken {})?;
+                        let token_provider = token_provider_registry
+                            .get_or_create_databricks_m2m(
+                                endpoint.to_string(),
+                                client_id.to_string(),
+                                client_secret.clone(),
+                            )
+                            .await
+                            .map_err(|_| Error::UnableToGetToken {})?;
 
                         DatabricksSparkConnect::new_m2m(
                             endpoint.to_string(),
