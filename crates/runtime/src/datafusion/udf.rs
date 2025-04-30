@@ -27,6 +27,8 @@ use datafusion::{
 
 use super::error::find_datafusion_root;
 
+pub mod date_add;
+
 pub static SUPPORTED_COMPARISON_TYPES: &[DataType] = &[
     DataType::Null,
     DataType::Boolean,
