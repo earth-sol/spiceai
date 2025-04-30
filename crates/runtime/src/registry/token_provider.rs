@@ -14,10 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use data_components::{
-    databricks::auth::DatabricksM2MTokenProvider, token_provider::TokenProvider,
-};
-use secrecy::SecretString;
+use data_components::token_provider::TokenProvider;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -33,24 +30,40 @@ impl TokenProviderRegistry {
         }
     }
 
-    /// Gets or creates a DatabricksM2MTokenProvider
+    /// Get or create a token provider for the given key and provider type.
     ///
-    /// This method will return an existing provider if one is already registered with the same client_id,
-    /// otherwise it will create a new one and register it.
-    pub async fn get_or_create_databricks_m2m(
+    /// If the provider already exists, it will be returned.
+    /// If the provider does not exist, it will be created using the provided factory function.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key to use for the token provider.
+    /// * `provider_type` - The type of token provider to create.
+    /// * `factory` - The factory function to use to create the token provider.
+    ///
+    /// # Returns
+    ///
+    /// A token provider, or an error if the provider could not be created.
+    pub async fn get_or_create_provider<P, E, F, Fut>(
         &self,
-        endpoint: String,
-        client_id: String,
-        client_secret: SecretString,
-    ) -> Result<Arc<dyn TokenProvider>, data_components::databricks::auth::Error> {
-        let key = format!("databricks_m2m:{}", client_id);
+        key: String,
+        provider_type: &str,
+        factory: F,
+    ) -> Result<Arc<dyn TokenProvider>, E>
+    where
+        P: TokenProvider + 'static,
+        Fut: std::future::Future<Output = Result<P, E>> + Send,
+        F: FnOnce() -> Fut + Send,
+    {
+        let registry_key = format!("{}:{}", provider_type, key);
 
         {
             let registry = self.token_provider_registry.read().await;
-            if let Some(provider) = registry.get(&key) {
+            if let Some(provider) = registry.get(&registry_key) {
                 tracing::debug!(
-                    "Using existing Databricks M2M token provider for client_id: {}",
-                    client_id
+                    "Using existing {} token provider for key: {}",
+                    provider_type,
+                    key
                 );
                 return Ok(Arc::clone(provider));
             }
@@ -58,23 +71,26 @@ impl TokenProviderRegistry {
 
         let mut registry = self.token_provider_registry.write().await;
 
-        if let Some(provider) = registry.get(&key) {
+        if let Some(provider) = registry.get(&registry_key) {
             tracing::debug!(
-                "Using existing Databricks M2M token provider for client_id: {}",
-                client_id
+                "Using existing {} token provider for key: {}",
+                provider_type,
+                key
             );
             return Ok(Arc::clone(provider));
         }
 
         tracing::debug!(
-            "Creating new Databricks M2M token provider for client_id: {}",
-            client_id
+            "Creating new {} token provider for key: {}",
+            provider_type,
+            key
         );
-        let provider =
-            DatabricksM2MTokenProvider::try_new(endpoint, client_id.clone(), client_secret).await?;
 
-        registry.insert(key, provider.clone());
+        let provider = factory().await?;
+        let provider_arc = Arc::new(provider) as Arc<dyn TokenProvider>;
 
-        Ok(provider)
+        registry.insert(registry_key, provider_arc.clone());
+
+        Ok(provider_arc)
     }
 }

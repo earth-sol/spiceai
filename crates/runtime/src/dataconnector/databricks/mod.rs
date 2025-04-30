@@ -18,13 +18,16 @@ use crate::component::dataset::Dataset;
 use crate::registry::token_provider::TokenProviderRegistry;
 use async_trait::async_trait;
 use data_components::Read;
+use data_components::databricks::auth::DatabricksM2MTokenProvider;
 use data_components::databricks::{DatabricksDelta, DatabricksSparkConnect};
+use data_components::token_provider::TokenProvider;
 use data_components::unity_catalog::Endpoint;
 use datafusion::datasource::TableProvider;
 use datafusion::sql::TableReference;
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretString};
 use snafu::prelude::*;
 use std::any::Any;
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -105,135 +108,42 @@ impl Databricks {
             .expose()
             .ok_or_else(|p| MissingParameterSnafu { parameter: p.0 }.build())?;
 
-        let token = params.get("token").ok();
-        let client_id = params.get("client_id").expose().ok();
-        let client_secret = params.get("client_secret").ok();
-
-        match (token, client_id, client_secret) {
-            (None, None, None) => {
-                return InvalidConfigurationSnafu {
-                    message: "Missing `databricks_token` or `databricks_client_id` and `databricks_client_secret` parameters".to_string(),
-                }
-                .fail();
-            }
-            (None, Some(_), None) => {
-                return MissingParameterSnafu {
-                    parameter: "`databricks_client_secret`".to_string(),
-                }
-                .fail();
-            }
-            (None, None, Some(_)) => {
-                return MissingParameterSnafu {
-                    parameter: "databricks_client_id".to_string(),
-                }
-                .fail();
-            }
-            (Some(_), Some(_), Some(_)) => {
-                return InvalidConfigurationSnafu {
-                    message: "Cannot use `databricks_token`, `databricks_client_id` and `databricks_client_secret` together".to_string(),
-                }
-                .fail();
-            }
-            _ => {}
-        }
+        let auth_credentials = Self::validate_auth_credentials(&params)?;
 
         match mode {
             "delta_lake" => {
-                let databricks_delta = match (token, client_id, client_secret) {
-                    (None, Some(client_id), Some(client_secret)) => {
-                        let token_provider = token_provider_registry
-                            .get_or_create_databricks_m2m(
-                                endpoint.to_string(),
-                                client_id.to_string(),
-                                client_secret.clone(),
-                            )
-                            .await
-                            .map_err(|_| Error::UnableToGetToken {})?;
+                let storage_options = params.to_secret_map();
 
-                        DatabricksDelta::new_m2m(
-                            Endpoint(endpoint.to_string()),
-                            params.to_secret_map(),
-                            token_provider,
-                        )
-                    }
-
-                    (Some(token), _, _) => DatabricksDelta::new(
-                        Endpoint(endpoint.to_string()),
-                        token,
-                        params.to_secret_map(),
-                    ),
-
-                    _ => {
-                        return InvalidConfigurationSnafu {
-                            message: "Missing `databricks_token` or `databricks_client_id` and `databricks_client_secret` parameters".to_string(),
-                        }
-                        .fail();
-                    }
-                };
-
-                Ok(Self {
-                    read_provider: Arc::new(databricks_delta.clone()),
-                })
+                Self::build_delta_lake_connector(
+                    endpoint,
+                    auth_credentials,
+                    token_provider_registry,
+                    storage_options,
+                )
+                .await
             }
             "spark_connect" => {
-                let mut databricks_use_ssl = true;
-                if let Some(databricks_use_ssl_value) = params.get("use_ssl").expose().ok() {
-                    databricks_use_ssl = match databricks_use_ssl_value {
-                        "true" => true,
-                        "false" => false,
-                        _ => {
-                            return InvalidUsesslSnafu {
-                                value: databricks_use_ssl_value,
-                            }
-                            .fail();
-                        }
-                    };
-                }
                 let cluster_id = params
                     .get("cluster_id")
                     .ok_or_else(|p| MissingParameterSnafu { parameter: p.0 }.build())?;
 
-                let databricks_spark = match (token, client_id, client_secret) {
-                    (None, Some(client_id), Some(client_secret)) => {
-                        let token_provider = token_provider_registry
-                            .get_or_create_databricks_m2m(
-                                endpoint.to_string(),
-                                client_id.to_string(),
-                                client_secret.clone(),
-                            )
-                            .await
-                            .map_err(|_| Error::UnableToGetToken {})?;
-
-                        DatabricksSparkConnect::new_m2m(
-                            endpoint.to_string(),
-                            cluster_id.expose_secret().to_string(),
-                            databricks_use_ssl,
-                            token_provider,
-                        )
-                        .await
-                        .context(UnableToConstructDatabricksSparkSnafu)?
-                    }
-
-                    (Some(token), _, _) => DatabricksSparkConnect::new(
-                        endpoint.to_string(),
-                        cluster_id.expose_secret().to_string(),
-                        token.expose_secret().to_string(),
-                        databricks_use_ssl,
-                    )
-                    .await
-                    .context(UnableToConstructDatabricksSparkSnafu)?,
-
-                    _ => {
-                        return InvalidConfigurationSnafu {
-                            message: "Missing `databricks_token` or `databricks_client_id` and `databricks_client_secret` parameters".to_string(),
-                        }
-                        .fail();
-                    }
+                let databricks_use_ssl = match params.get("use_ssl").expose().ok() {
+                    Some(value) => match value {
+                        "true" => true,
+                        "false" => false,
+                        _ => return InvalidUsesslSnafu { value }.fail(),
+                    },
+                    None => true, // Default value
                 };
 
-                Ok(Self {
-                    read_provider: Arc::new(databricks_spark.clone()),
-                })
+                Self::build_spark_connect_connector(
+                    endpoint,
+                    auth_credentials,
+                    token_provider_registry,
+                    cluster_id,
+                    databricks_use_ssl,
+                )
+                .await
             }
             _ => Err(Error::InvalidMode {
                 value: mode.to_string(),
@@ -241,9 +151,150 @@ impl Databricks {
         }
     }
 
+    fn validate_auth_credentials(params: &Parameters) -> Result<AuthCredentials> {
+        let token = params.get("token").ok();
+        let client_id = params.get("client_id").expose().ok();
+        let client_secret = params.get("client_secret").ok();
+
+        match (token, client_id, client_secret) {
+            (Some(token), None, None) => Ok(AuthCredentials::Token(&token)),
+            (None, Some(client_id), Some(client_secret)) => {
+                Ok(AuthCredentials::ServicePrincipal(client_id, &client_secret))
+            }
+            (None, None, None) => {
+                InvalidConfigurationSnafu {
+                    message: "Missing `databricks_token` or `databricks_client_id` and `databricks_client_secret` parameters".to_string(),
+                }
+                .fail()
+            }
+            (None, Some(_), None) => {
+                MissingParameterSnafu {
+                    parameter: "`databricks_client_secret`".to_string(),
+                }
+                .fail()
+            }
+            (None, None, Some(_)) => {
+                MissingParameterSnafu {
+                    parameter: "databricks_client_id".to_string(),
+                }
+                .fail()
+            }
+            (Some(_), Some(_), Some(_)) => {
+                InvalidConfigurationSnafu {
+                    message: "Cannot use `databricks_token`, `databricks_client_id` and `databricks_client_secret` together".to_string(),
+                }
+                .fail()
+            }
+            _ => {
+                InvalidConfigurationSnafu {
+                    message: "Invalid authentication configuration".to_string(),
+                }
+                .fail()
+            }
+        }
+    }
+
+    async fn build_delta_lake_connector(
+        endpoint: &str,
+        auth_credentials: AuthCredentials<'_>,
+        token_provider_registry: Arc<TokenProviderRegistry>,
+        storage_options: HashMap<String, SecretString>,
+    ) -> Result<Self> {
+        let read_provider = match auth_credentials {
+            AuthCredentials::Token(token) => {
+                DatabricksDelta::new(Endpoint(endpoint.to_string()), token, storage_options)
+            }
+            AuthCredentials::ServicePrincipal(client_id, client_secret) => {
+                let token_provider = Self::get_m2m_token_provider(
+                    &endpoint,
+                    client_id,
+                    client_secret,
+                    &token_provider_registry,
+                )
+                .await?;
+
+                DatabricksDelta::new_m2m(
+                    Endpoint(endpoint.to_string()),
+                    storage_options,
+                    token_provider,
+                )
+            }
+        };
+
+        Ok(Self {
+            read_provider: Arc::new(read_provider),
+        })
+    }
+
+    async fn build_spark_connect_connector(
+        endpoint: &str,
+        auth_credentials: AuthCredentials<'_>,
+        token_provider_registry: Arc<TokenProviderRegistry>,
+        cluster_id: &SecretString,
+        databricks_use_ssl: bool,
+    ) -> Result<Self> {
+        let databricks_spark = match auth_credentials {
+            AuthCredentials::Token(token) => DatabricksSparkConnect::new(
+                endpoint.to_string(),
+                cluster_id.expose_secret().to_string(),
+                token.expose_secret().to_string(),
+                databricks_use_ssl,
+            )
+            .await
+            .context(UnableToConstructDatabricksSparkSnafu)?,
+
+            AuthCredentials::ServicePrincipal(client_id, client_secret) => {
+                let token_provider = Self::get_m2m_token_provider(
+                    &endpoint,
+                    client_id,
+                    client_secret,
+                    &token_provider_registry,
+                )
+                .await?;
+
+                DatabricksSparkConnect::new_m2m(
+                    endpoint.to_string(),
+                    cluster_id.expose_secret().to_string(),
+                    databricks_use_ssl,
+                    token_provider,
+                )
+                .await
+                .context(UnableToConstructDatabricksSparkSnafu)?
+            }
+        };
+
+        Ok(Self {
+            read_provider: Arc::new(databricks_spark),
+        })
+    }
+
+    async fn get_m2m_token_provider(
+        endpoint: &str,
+        client_id: &str,
+        client_secret: &SecretString,
+        token_provider_registry: &Arc<TokenProviderRegistry>,
+    ) -> Result<Arc<dyn TokenProvider>> {
+        token_provider_registry
+            .get_or_create_provider(client_id.to_string(), "databricks_m2m", || async {
+                DatabricksM2MTokenProvider::try_new(
+                    endpoint.to_string(),
+                    client_id.to_string(),
+                    client_secret.clone(),
+                )
+                .await
+            })
+            .await
+            .map_err(|_| Error::UnableToGetToken {})
+    }
+
     pub(crate) fn read_provider(&self) -> Arc<dyn Read> {
         Arc::clone(&self.read_provider)
     }
+}
+
+pub enum AuthCredentials<'a> {
+    Token(&'a SecretString),
+    ServicePrincipal(&'a str, &'a SecretString),
 }
 
 #[derive(Default, Clone, Copy)]

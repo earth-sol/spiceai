@@ -73,7 +73,7 @@ impl DatabricksM2MTokenProvider {
         endpoint: String,
         client_id: String,
         client_secret: SecretString,
-    ) -> Result<Arc<Self>, Error> {
+    ) -> Result<Self, Error> {
         // initial fetch
         let TokenResponse {
             access_token,
@@ -97,7 +97,7 @@ impl DatabricksM2MTokenProvider {
             // schedule the first refresh at 90% of `expires_in`
             #[allow(clippy::cast_precision_loss)]
             let mut next_wait = Duration::from_secs_f64(expires_in as f64 * 0.9);
-            next_wait = Duration::from_secs(15);
+            // next_wait = Duration::from_secs(15);
 
             loop {
                 sleep(next_wait).await;
@@ -118,8 +118,8 @@ impl DatabricksM2MTokenProvider {
                         let _ = cloned_tx.send(access_token.clone());
                         #[allow(clippy::cast_precision_loss)]
                         {
-                            // next_wait = Duration::from_secs_f64(expires_in as f64);
-                            next_wait = Duration::from_secs(15);
+                            next_wait = Duration::from_secs_f64(expires_in as f64);
+                            // next_wait = Duration::from_secs(15);
                         }
                     }
                     Err(e) => {
@@ -131,13 +131,13 @@ impl DatabricksM2MTokenProvider {
             }
         });
 
-        Ok(Arc::new(Self {
+        Ok(Self {
             endpoint,
             client_id,
             tx,
             rx,
             _handle: Arc::new(handle),
-        }))
+        })
     }
 }
 
