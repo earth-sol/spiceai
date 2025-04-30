@@ -97,7 +97,6 @@ impl std::fmt::Debug for Databricks {
 }
 
 impl Databricks {
-    #[allow(clippy::too_many_lines)]
     pub async fn new(
         params: Parameters,
         token_provider_registry: Arc<TokenProviderRegistry>,
@@ -157,9 +156,9 @@ impl Databricks {
         let client_secret = params.get("client_secret").ok();
 
         match (token, client_id, client_secret) {
-            (Some(token), None, None) => Ok(AuthCredentials::Token(&token)),
+            (Some(token), None, None) => Ok(AuthCredentials::Token(token)),
             (None, Some(client_id), Some(client_secret)) => {
-                Ok(AuthCredentials::ServicePrincipal(client_id, &client_secret))
+                Ok(AuthCredentials::ServicePrincipal(client_id, client_secret))
             }
             (None, None, None) => {
                 InvalidConfigurationSnafu {
@@ -206,7 +205,7 @@ impl Databricks {
             }
             AuthCredentials::ServicePrincipal(client_id, client_secret) => {
                 let token_provider = Self::get_m2m_token_provider(
-                    &endpoint,
+                    endpoint,
                     client_id,
                     client_secret,
                     &token_provider_registry,

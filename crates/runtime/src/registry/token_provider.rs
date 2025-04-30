@@ -55,7 +55,7 @@ impl TokenProviderRegistry {
         Fut: std::future::Future<Output = Result<P, E>> + Send,
         F: FnOnce() -> Fut + Send,
     {
-        let registry_key = format!("{}:{}", provider_type, key);
+        let registry_key = format!("{provider_type}:{key}");
 
         {
             let registry = self.token_provider_registry.read().await;
@@ -89,7 +89,7 @@ impl TokenProviderRegistry {
         let provider = factory().await?;
         let provider_arc = Arc::new(provider) as Arc<dyn TokenProvider>;
 
-        registry.insert(registry_key, provider_arc.clone());
+        registry.insert(registry_key, Arc::clone(&provider_arc));
 
         Ok(provider_arc)
     }
