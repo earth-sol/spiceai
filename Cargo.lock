@@ -14972,6 +14972,7 @@ dependencies = [
  "snafu",
  "spicepod",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
