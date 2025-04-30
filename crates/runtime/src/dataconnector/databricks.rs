@@ -244,7 +244,7 @@ impl Databricks {
 
             AuthCredentials::ServicePrincipal(client_id, client_secret) => {
                 let token_provider = Self::get_m2m_token_provider(
-                    &endpoint,
+                    endpoint,
                     client_id,
                     client_secret,
                     &token_provider_registry,
