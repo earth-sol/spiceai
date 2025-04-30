@@ -62,16 +62,16 @@ impl DatabricksDelta {
         }
     }
 
-    pub async fn new_m2m(
+    pub fn new_m2m(
         endpoint: Endpoint,
         storage_options: HashMap<String, SecretString>,
         token_provider: Arc<dyn TokenProvider>,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             endpoint,
             token_provider,
             storage_options,
-        })
+        }
     }
 
     async fn get_delta_table(

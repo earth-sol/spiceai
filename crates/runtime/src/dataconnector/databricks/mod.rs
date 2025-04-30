@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 use crate::component::dataset::Dataset;
-use crate::token_provider_registry::TokenProviderRegistry;
+use crate::registry::token_provider::TokenProviderRegistry;
 use async_trait::async_trait;
 use data_components::Read;
 use data_components::databricks::{DatabricksDelta, DatabricksSparkConnect};
@@ -155,8 +155,6 @@ impl Databricks {
                             params.to_secret_map(),
                             token_provider,
                         )
-                        .await
-                        .context(UnableToConstructDatabricksDeltaLakeSnafu)?
                     }
 
                     (Some(token), _, _) => DatabricksDelta::new(

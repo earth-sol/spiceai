@@ -97,6 +97,7 @@ impl DatabricksM2MTokenProvider {
             // schedule the first refresh at 90% of `expires_in`
             #[allow(clippy::cast_precision_loss)]
             let mut next_wait = Duration::from_secs_f64(expires_in as f64 * 0.9);
+            next_wait = Duration::from_secs(15);
 
             loop {
                 sleep(next_wait).await;
@@ -113,11 +114,12 @@ impl DatabricksM2MTokenProvider {
                         expires_in,
                         ..
                     }) => {
-                        tracing::debug!("M2M token refreshed; expires in {}", expires_in);
+                        tracing::info!("M2M token refreshed; expires in {}", expires_in);
                         let _ = cloned_tx.send(access_token.clone());
                         #[allow(clippy::cast_precision_loss)]
                         {
-                            next_wait = Duration::from_secs_f64(expires_in as f64);
+                            // next_wait = Duration::from_secs_f64(expires_in as f64);
+                            next_wait = Duration::from_secs(15);
                         }
                     }
                     Err(e) => {
@@ -137,44 +139,6 @@ impl DatabricksM2MTokenProvider {
             _handle: Arc::new(handle),
         }))
     }
-
-    // pub async fn get_shared(
-    //     endpoint: String,
-    //     client_id: String,
-    //     client_secret: SecretString,
-    // ) -> Result<Arc<Self>, Error> {
-    //     let key = (endpoint.clone(), client_id.clone());
-
-    //     // Fast path: try an *async read* lock
-    //     {
-    //         let read_guard = REGISTRY.read().await;
-    //         if let Some((existing, _last_used)) = read_guard.get(&key) {
-    //             return Ok(Arc::clone(existing));
-    //         }
-    //     }
-
-    //     // Not in map yet: acquire *write* lock to initialize
-    //     let mut write_guard = REGISTRY.write().await;
-
-    //     // 2a) re‑check in case someone else filled it while we were waiting for the write lock
-    //     if let Some((existing, last_used)) = write_guard.get_mut(&key) {
-    //         *last_used = Instant::now();
-    //         return Ok(Arc::clone(existing));
-    //     }
-
-    //     // We are the first: actually build the provider (await the HTTP fetch)
-    //     let provider = Arc::new(
-    //         DatabricksM2MTokenProvider::new(
-    //             endpoint.clone(),
-    //             client_id.clone(),
-    //             client_secret.clone(),
-    //         )
-    //         .await?,
-    //     );
-
-    //     write_guard.insert(key, (Arc::clone(&provider), Instant::now()));
-    //     Ok(provider)
-    // }
 }
 
 #[async_trait]

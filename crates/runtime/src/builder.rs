@@ -28,10 +28,10 @@ use crate::{
     extension::{Extension, ExtensionFactory},
     flight::RateLimits,
     metrics, podswatcher,
+    registry::token_provider::TokenProviderRegistry,
     secrets::{self, Secrets},
     status,
     timing::TimeMeasurement,
-    token_provider_registry::TokenProviderRegistry,
     tracers,
 };
 
