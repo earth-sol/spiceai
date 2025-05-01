@@ -18,7 +18,7 @@ use crate::component::dataset::Dataset;
 use crate::registry::token_provider::TokenProviderRegistry;
 use async_trait::async_trait;
 use data_components::Read;
-use data_components::databricks::auth::DatabricksM2MTokenProvider;
+use data_components::databricks::auth::{AuthCredentials, DatabricksM2MTokenProvider};
 use data_components::databricks::{DatabricksDelta, DatabricksSparkConnect};
 use data_components::token_provider::TokenProvider;
 use data_components::unity_catalog::Endpoint;
@@ -150,7 +150,7 @@ impl Databricks {
         }
     }
 
-    fn validate_auth_credentials(params: &Parameters) -> Result<AuthCredentials> {
+    pub fn validate_auth_credentials(params: &Parameters) -> Result<AuthCredentials> {
         let token = params.get("token").ok();
         let client_id = params.get("client_id").expose().ok();
         let client_secret = params.get("client_secret").ok();
@@ -180,13 +180,13 @@ impl Databricks {
             }
             (Some(_), Some(_), Some(_)) => {
                 InvalidConfigurationSnafu {
-                    message: "Cannot use `databricks_token`, `databricks_client_id` and `databricks_client_secret` together".to_string(),
+                    message: "Choose either `databricks_token` or `databricks_client_id` and `databricks_client_secret`".to_string(),
                 }
                 .fail()
             }
             _ => {
                 InvalidConfigurationSnafu {
-                    message: "Invalid authentication configuration".to_string(),
+                    message: format!("Invalid authentication configuration: {:?}", params),
                 }
                 .fail()
             }
@@ -289,11 +289,6 @@ impl Databricks {
     pub(crate) fn read_provider(&self) -> Arc<dyn Read> {
         Arc::clone(&self.read_provider)
     }
-}
-
-pub enum AuthCredentials<'a> {
-    Token(&'a SecretString),
-    ServicePrincipal(&'a str, &'a SecretString),
 }
 
 #[derive(Default, Clone, Copy)]

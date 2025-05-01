@@ -192,3 +192,8 @@ async fn get_m2m_access_token(
 
     Ok(token_response)
 }
+
+pub enum AuthCredentials<'a> {
+    Token(&'a SecretString),
+    ServicePrincipal(&'a str, &'a SecretString),
+}
