@@ -26,7 +26,6 @@ use async_openai::{
 use async_trait::async_trait;
 use llms::chat::Chat;
 use serde_json::{Number, Value, json};
-use tracing_futures::Instrument;
 
 use crate::model::eval::scorer::mean;
 
@@ -117,13 +116,6 @@ impl Scorer for ModelGradedScorer {
         actual: &DatasetOutput,
         ideal: &DatasetOutput,
     ) -> super::Result<f32> {
-        let span = tracing::span!(
-            target: "task_history",
-            tracing::Level::INFO,
-            "model_graded_scoring",
-            input = %serde_json::to_string(&input).unwrap_or_default(),
-            model = %self.model_name.clone(),
-        );
         let req =
             self.construct_request(input, actual, ideal)
                 .map_err(|e| Error::ErrorScoringCase {
@@ -135,16 +127,15 @@ impl Scorer for ModelGradedScorer {
                     )),
                 })?;
 
-        let mut score = self
-            .attempt_score(&req)
-            .instrument(span.clone())
-            .await
-            .map_err(|source| Error::ErrorScoringCase {
-                input: input.clone(),
-                actual: actual.clone(),
-                ideal: ideal.clone(),
-                source: Box::from(source),
-            })?;
+        let mut score =
+            self.attempt_score(&req)
+                .await
+                .map_err(|source| Error::ErrorScoringCase {
+                    input: input.clone(),
+                    actual: actual.clone(),
+                    ideal: ideal.clone(),
+                    source: Box::from(source),
+                })?;
 
         // Retry once for when LLM scorer was successfully called, but `score` key was not returned.
         if score.is_none() {
@@ -153,7 +144,6 @@ impl Scorer for ModelGradedScorer {
             );
             score = self
                 .attempt_score(&req)
-                .instrument(span.clone())
                 .await
                 .map_err(|source| Error::ErrorScoringCase {
                     input: input.clone(),
