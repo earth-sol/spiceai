@@ -26,6 +26,7 @@ use async_openai::{
 use async_trait::async_trait;
 use llms::chat::Chat;
 use serde_json::{Number, Value, json};
+use tracing_futures::Instrument;
 
 use crate::model::eval::scorer::mean;
 
@@ -36,19 +37,25 @@ use super::{DatasetInput, DatasetOutput, Error, Scorer};
 /// The [`DatasetInput`] and both [`DatasetOutput`]s are provided to the [`Chat`] model via request metadata (i.e. [`CreateChatCompletionRequest`]'s metadata field]).
 pub struct ModelGradedScorer {
     model: Arc<dyn Chat>,
+    model_name: String,
 }
 
 impl ModelGradedScorer {
-    pub fn new(model: Arc<dyn Chat>) -> Self {
-        Self { model }
+    pub fn new(model: Arc<dyn Chat>, name: String) -> Self {
+        Self {
+            model,
+            model_name: name,
+        }
     }
 
     fn construct_request(
+        &self,
         input: &DatasetInput,
         actual: &DatasetOutput,
         ideal: &DatasetOutput,
     ) -> Result<CreateChatCompletionRequest, OpenAIError> {
         CreateChatCompletionRequestArgs::default()
+            .model(self.model_name.clone())
             .metadata(json!({
                 "input": input,
                 "actual": actual,
@@ -110,25 +117,34 @@ impl Scorer for ModelGradedScorer {
         actual: &DatasetOutput,
         ideal: &DatasetOutput,
     ) -> super::Result<f32> {
+        let span = tracing::span!(
+            target: "task_history",
+            tracing::Level::INFO,
+            "model_graded_scoring",
+            input = %serde_json::to_string(&input).unwrap_or_default(),
+            model = %self.model_name.clone(),
+        );
         let req =
-            Self::construct_request(input, actual, ideal).map_err(|e| Error::ErrorScoringCase {
-                input: input.clone(),
-                actual: actual.clone(),
-                ideal: ideal.clone(),
-                source: Box::from(format!(
-                    "Failed to build request for model graded scorer: {e}"
-                )),
-            })?;
-
-        let mut score =
-            self.attempt_score(&req)
-                .await
-                .map_err(|source| Error::ErrorScoringCase {
+            self.construct_request(input, actual, ideal)
+                .map_err(|e| Error::ErrorScoringCase {
                     input: input.clone(),
                     actual: actual.clone(),
                     ideal: ideal.clone(),
-                    source: Box::from(source),
+                    source: Box::from(format!(
+                        "Failed to build request for model graded scorer: {e}"
+                    )),
                 })?;
+
+        let mut score = self
+            .attempt_score(&req)
+            .instrument(span.clone())
+            .await
+            .map_err(|source| Error::ErrorScoringCase {
+                input: input.clone(),
+                actual: actual.clone(),
+                ideal: ideal.clone(),
+                source: Box::from(source),
+            })?;
 
         // Retry once for when LLM scorer was successfully called, but `score` key was not returned.
         if score.is_none() {
@@ -137,6 +153,7 @@ impl Scorer for ModelGradedScorer {
             );
             score = self
                 .attempt_score(&req)
+                .instrument(span.clone())
                 .await
                 .map_err(|source| Error::ErrorScoringCase {
                     input: input.clone(),
