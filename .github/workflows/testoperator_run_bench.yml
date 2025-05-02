@@ -53,6 +53,7 @@ on:
         type: choice
         options:
           - 'spiceai-runners'
+          - 'spiceai-macos'
           - 'spiceai-large-runners'
       scale_factor:
         description: 'Scale factor for the benchmark'
@@ -102,26 +103,36 @@ jobs:
           minio_endpoint: ${{ secrets.MINIO_ENDPOINT }}
           minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
           minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
+          os: ${{ github.event.inputs.runner_type == 'spiceai-macos' && 'darwin' || 'linux' }}
 
       - name: Setup spiced
         uses: ./.github/actions/setup-spiced
+        if: !always()
         id: setup-spiced
         with:
           spiced_commit: ${{ github.event.inputs.spiced_commit }}
           with_odbc: ${{ contains(steps.extract_spicepod_filename.outputs.SPICEPOD_FILENAME, 'odbc') }}
 
       - name: Display spiced commit
+        if: !always()
         run: echo "SPICED_COMMIT=${{ steps.setup-spiced.outputs.SPICED_COMMIT }}"
 
       - name: Build Testoperator
+        if: !always()
         uses: ./.github/actions/build-testoperator
+      
+      - name: Build testoperator (Macos)
+        run: |
+          cargo build -p testoperator --release
 
       - name: Setup Testoperator
+        if: !always()
         uses: ./.github/actions/setup-testoperator-data
         with:
           query_set: ${{ github.event.inputs.query_set }}
 
       - name: Setup MySQL
+        if: !always()
         run: |
           if [[ ${{ github.event.inputs.query_set }} == "tpcds" ]]; then
             echo "MYSQL_DB=tpcds_sf1" >> $GITHUB_ENV

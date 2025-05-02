@@ -352,9 +352,12 @@ jobs:
         
       # Publish Mac binaries to MinIO
       - name: Setup MinIO
-        run: |
-          brew install minio/stable/mc
-          mc alias set spice-minio ${{ secrets.TEST_MINIO_HOST }} ${{ secrets.TEST_MINIO_ACCESS_KEY }} ${{ secrets.TEST_MINIO_SECRET_KEY }}
+        uses: ./.github/actions/setup-minio
+        with:
+          minio_endpoint: ${{ secrets.MINIO_ENDPOINT }}
+          minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
+          minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
+          os: "darwin"
 
       - name: Upload artifacts to Minio
         run: |
