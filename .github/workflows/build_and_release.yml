@@ -357,7 +357,7 @@ jobs:
           minio_endpoint: ${{ secrets.MINIO_ENDPOINT }}
           minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
           minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
-          os: "darwin"
+          target_os: "darwin"
 
       - name: Upload artifacts to Minio
         run: |

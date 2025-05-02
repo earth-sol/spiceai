@@ -14,9 +14,9 @@ inputs:
     description: 'MinIO secret key'
     required: true
     type: string
-  os:
+  target_os:
     description: 'OS'
-    required: false
+    required: true
     default: 'linux'
     type: string
 runs:
@@ -24,7 +24,7 @@ runs:
   steps:
     - name: Install MinIO
       shell: bash
-      if: ${{ inputs.os == 'linux' }}
+      if: inputs.target_os
       run: |
         sudo apt update && sudo apt install wget -y
         sudo wget https://dl.min.io/client/mc/release/linux-amd64/mc -O /usr/local/bin/mc
@@ -32,7 +32,7 @@ runs:
         mc alias set spice-minio ${{ inputs.minio_endpoint }} ${{ inputs.minio_access_key }} ${{ inputs.minio_secret_key }}
     - name: Install MinIO
       shell: bash
-      if: ${{ inputs.os == 'macos' }}
+      if: inputs.target_os == 'macos'
       run: |
         brew install minio/stable/minio
         mc alias set spice-minio ${{ inputs.minio_endpoint }} ${{ inputs.minio_access_key }} ${{ inputs.minio_secret_key }}
