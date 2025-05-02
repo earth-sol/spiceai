@@ -199,7 +199,6 @@ jobs:
           INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" target/release/testoperator run bench \
             -s ~/spiced \
             -p ${{ github.event.inputs.spicepod_path }} \
-            -d /opt/spiced/data \
             --query-set ${{ github.event.inputs.query_set }} \
             --query-overrides ${{ github.event.inputs.query_overrides }} \
             --ready-wait ${{ github.event.inputs.ready_wait }} \
