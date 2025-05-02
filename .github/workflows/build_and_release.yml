@@ -336,23 +336,41 @@ jobs:
           minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
           minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
       
-      - name: Upload artifacts to Minio
-        if: matrix.target.target_os == 'linux' && matrix.target.target_arch == 'x86_64'
+      # Publish Mac binaries to MinIO
+      - name: Setup MinIO
+        if: matrix.target.target_os == 'darwin' && matrix.target.target_arch == 'aarch64'
         run: |
-          if [ -f "spiced_linux_x86_64.tar.gz" ]; then
-            mc cp spiced_linux_x86_64.tar.gz spice-minio/artifacts/spiced/linux-x86_64/${{ github.sha }}/
+          brew install minio/stable/mc
+          mc alias set spice-minio ${{ secrets.TEST_MINIO_HOST }} ${{ secrets.TEST_MINIO_ACCESS_KEY }} ${{ secrets.TEST_MINIO_SECRET_KEY }}
+
+  publish_to_minio:
+    name: Publish Mac binaries to MinIO
+    needs: build
+    runs-on: spiceai-macos
+    env:
+      ARTIFACT_DIR: ./release
+    steps:
+      # macOS metal 
+      - name: download artifacts - spiced_models_darwin_aarch64
+        uses: actions/download-artifact@v4
+        with:
+          name: spiced_models_darwin_aarch64
+          path: ${{ env.ARTIFACT_DIR }}
+        
+      # Publish Mac binaries to MinIO
+      - name: Setup MinIO
+        run: |
+          brew install minio/stable/mc
+          mc alias set spice-minio ${{ secrets.TEST_MINIO_HOST }} ${{ secrets.TEST_MINIO_ACCESS_KEY }} ${{ secrets.TEST_MINIO_SECRET_KEY }}
+
+      - name: Upload artifacts to Minio
+        run: |
+          if [ -f "spiced_models_darwin_aarch64.tar.gz" ]; then
+            mc cp spiced_models_darwin_aarch64.tar.gz spice-minio/artifacts/spiced/darwin-aarch64/${{ github.sha }}/
           fi;
 
-          if [ -f "spiced_models_linux_x86_64.tar.gz" ]; then
-            mc cp spiced_models_linux_x86_64.tar.gz spice-minio/artifacts/spiced/linux-x86_64/${{ github.sha }}/
-          fi;
-
-          if [ -f "spiced_odbc_models_linux_x86_64.tar.gz" ]; then
-            mc cp spiced_odbc_models_linux_x86_64.tar.gz spice-minio/artifacts/spiced/linux-x86_64/${{ github.sha }}/
-          fi;
-
-          if [ -f "spice_linux_x86_64.tar.gz" ]; then
-            mc cp spice_linux_x86_64.tar.gz spice-minio/artifacts/spice/linux-x86_64/${{ github.sha }}/
+          if [ -f "spice_darwin_aarch64.tar.gz" ]; then
+            mc cp spice_darwin_aarch64.tar.gz spice-minio/artifacts/spice/darwin-aarch64/${{ github.sha }}/
           fi;
 
   publish:
