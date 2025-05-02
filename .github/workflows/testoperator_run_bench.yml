@@ -121,6 +121,7 @@ jobs:
       - name: Build testoperator (Macos)
         run: |
           cargo build -p testoperator --release
+          chmod +x target/release/testoperator
 
       # - name: Setup Testoperator
       #   uses: ./.github/actions/setup-testoperator-data
@@ -144,7 +145,7 @@ jobs:
         if: ${{ github.event.inputs.query_overrides == '' }}
         run: |
           rm -rf .spice/data
-          INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" testoperator run bench \
+          INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" target/release/testoperator run bench \
             -s ~/spiced \
             -p ${{ github.event.inputs.spicepod_path }} \
             -d /opt/spiced/data \
@@ -195,7 +196,7 @@ jobs:
         if: ${{ github.event.inputs.query_overrides != '' }}
         run: |
           rm -rf .spice/data
-          INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" testoperator run bench \
+          INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" target/release/testoperator run bench \
             -s ~/spiced \
             -p ${{ github.event.inputs.spicepod_path }} \
             -d /opt/spiced/data \
