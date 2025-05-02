@@ -343,6 +343,8 @@ jobs:
     env:
       ARTIFACT_DIR: ./release
     steps:
+      - uses: actions/checkout@v4
+      
       # macOS metal 
       - name: download artifacts - spiced_models_darwin_aarch64
         uses: actions/download-artifact@v4

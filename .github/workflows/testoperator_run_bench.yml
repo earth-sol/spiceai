@@ -105,15 +105,15 @@ jobs:
           minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
           os: ${{ github.event.inputs.runner_type == 'spiceai-macos' && 'darwin' || 'linux' }}
 
-      # - name: Setup spiced
-      #   uses: ./.github/actions/setup-spiced
-      #   id: setup-spiced
-      #   with:
-      #     spiced_commit: ${{ github.event.inputs.spiced_commit }}
-      #     with_odbc: ${{ contains(steps.extract_spicepod_filename.outputs.SPICEPOD_FILENAME, 'odbc') }}
+      - name: Setup spiced
+        uses: ./.github/actions/setup-spiced
+        id: setup-spiced
+        with:
+          spiced_commit: ${{ github.event.inputs.spiced_commit }}
+          with_odbc: ${{ contains(steps.extract_spicepod_filename.outputs.SPICEPOD_FILENAME, 'odbc') }}
 
-      # - name: Display spiced commit
-      #   run: echo "SPICED_COMMIT=${{ steps.setup-spiced.outputs.SPICED_COMMIT }}"
+      - name: Display spiced commit
+        run: echo "SPICED_COMMIT=${{ steps.setup-spiced.outputs.SPICED_COMMIT }}"
 
       # - name: Build Testoperator
       #   uses: ./.github/actions/build-testoperator
@@ -174,9 +174,9 @@ jobs:
           MYSQL_TCP_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          TEST_POSTGRES_HOST: ${{ secrets.TEST_POSTGRES_HOST }}
           POSTGRES_RW_HOST: ${{ secrets.POSTGRES_RW_HOST }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          TEST_POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
           SPICEAI_TPCH_API_KEY: ${{ secrets.SPICE_SECRET_SPICEAI_TPCH_BENCHMARK_KEY }}
           SPICEAI_TPCDS_API_KEY: ${{ secrets.SPICE_SECRET_SPICEAI_TPCDS_BENCHMARK_KEY }}
           SPICEAI_CLICKBENCH_API_KEY: ${{ secrets.SPICE_SECRET_SPICEAI_CLICKBENCH_BENCHMARK_KEY }}
