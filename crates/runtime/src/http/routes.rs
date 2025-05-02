@@ -170,11 +170,11 @@ pub(crate) fn routes(
     authenticated_router = authenticated_router.merge(iceberg_router);
 
     // Enable Swagger UI & OpenAPI JSON for dev.
-    #[cfg(feature = "dev")]
-    {
-        authenticated_router = authenticated_router
-            .merge(SwaggerUi::new("/docs").url("/docs/openapi.json", get_api_doc()));
-    }
+    // #[cfg(feature = "dev")]
+    // {
+    //     authenticated_router = authenticated_router
+    //         .merge(SwaggerUi::new("/docs").url("/docs/openapi.json", get_api_doc()));
+    // }
 
     if cfg!(feature = "models") {
         authenticated_router = authenticated_router
