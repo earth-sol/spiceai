@@ -335,13 +335,6 @@ jobs:
           minio_endpoint: ${{ secrets.MINIO_ENDPOINT }}
           minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
           minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
-      
-      # Publish Mac binaries to MinIO
-      - name: Setup MinIO
-        if: matrix.target.target_os == 'darwin' && matrix.target.target_arch == 'aarch64'
-        run: |
-          brew install minio/stable/mc
-          mc alias set spice-minio ${{ secrets.TEST_MINIO_HOST }} ${{ secrets.TEST_MINIO_ACCESS_KEY }} ${{ secrets.TEST_MINIO_SECRET_KEY }}
 
   publish_to_minio:
     name: Publish Mac binaries to MinIO
