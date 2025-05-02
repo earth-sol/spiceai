@@ -145,7 +145,7 @@ jobs:
         run: |
           rm -rf .spice/data
           INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" testoperator run bench \
-            -s /usr/local/bin/spiced \
+            -s ~/spiced \
             -p ${{ github.event.inputs.spicepod_path }} \
             -d /opt/spiced/data \
             --query-set ${{ github.event.inputs.query_set }} \
@@ -196,7 +196,7 @@ jobs:
         run: |
           rm -rf .spice/data
           INSTA_WORKSPACE_ROOT="${PWD}" CARGO_MANIFEST_DIR="${PWD}" testoperator run bench \
-            -s /usr/local/bin/spiced \
+            -s ~/spiced \
             -p ${{ github.event.inputs.spicepod_path }} \
             -d /opt/spiced/data \
             --query-set ${{ github.event.inputs.query_set }} \
