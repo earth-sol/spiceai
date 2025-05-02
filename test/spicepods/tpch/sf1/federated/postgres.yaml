@@ -7,7 +7,7 @@ datasets:
     params: &postgres_params
       pg_host: ${secrets:TEST_POSTGRES_HOST}
       pg_port: 5432
-      pg_user: postgres
+      pg_user: benchmarker
       pg_pass: ${secrets:TEST_POSTGRES_PASSWORD}
       pg_db: tpch
       pg_sslmode: disable
