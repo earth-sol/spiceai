@@ -344,7 +344,7 @@ jobs:
       ARTIFACT_DIR: ./release
     steps:
       - uses: actions/checkout@v4
-      
+
       # macOS metal 
       - name: download artifacts - spiced_models_darwin_aarch64
         uses: actions/download-artifact@v4
@@ -356,9 +356,9 @@ jobs:
       - name: Setup MinIO
         uses: ./.github/actions/setup-minio
         with:
-          minio_endpoint: ${{ secrets.MINIO_ENDPOINT }}
-          minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
-          minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
+          minio_endpoint: ${{ secrets.TEST_MINIO_HOST }}
+          minio_access_key: ${{ secrets.TEST_MINIO_ACCESS_KEY }}
+          minio_secret_key: ${{ secrets.TEST_MINIO_SECRET_KEY }}
           target_os: "darwin"
 
       - name: Upload artifacts to Minio
