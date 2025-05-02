@@ -70,6 +70,6 @@ runs:
         else
           features="models"
         fi
-        mc cp spice-minio/artifacts/spiced/linux-x86_64/$SPICED_COMMIT/spiced_${features}_darwin_aarch64.tar.gz spiced_${features}_darwin_aarch64.tar.gz
+        mc cp spice-minio/artifacts/spiced/darwin-aarch64/$SPICED_COMMIT/spiced_${features}_darwin_aarch64.tar.gz spiced_${features}_darwin_aarch64.tar.gz
         tar -xzf spiced_${features}_darwin_aarch64.tar.gz
         sudo cp ./spiced /usr/local/bin/spiced
