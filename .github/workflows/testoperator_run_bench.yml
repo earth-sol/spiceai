@@ -90,6 +90,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test connection
+        run: |
+          PGPASSWORD=${{ secrets.TEST_POSTGRES_PASSWORD }} psql -U benchmarker -h ${{ secrets.TEST_POSTGRES_HOST }} -c "SELECT 1"
+          exit 1
+
       - name: Extract spicepod filename path
         id: extract_spicepod_filename
         run: |
