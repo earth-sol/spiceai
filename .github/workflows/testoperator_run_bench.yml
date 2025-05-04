@@ -93,7 +93,8 @@ jobs:
       - name: Test connection
         run: |
           brew install postgresql
-          PGPASSWORD=${{ secrets.TEST_POSTGRES_PASSWORD }} psql -U benchmarker -h 10.99.99.2 -c "SELECT 1"
+          ifconfig
+          PGPASSWORD=${{ secrets.TEST_POSTGRES_PASSWORD }} psql -U benchmarker -h ${{ secrets.TEST_POSTGRES_HOST }} -c "SELECT 1"
           exit 1
 
       - name: Extract spicepod filename path
