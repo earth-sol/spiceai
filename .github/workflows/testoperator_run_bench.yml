@@ -92,7 +92,7 @@ jobs:
 
       - name: Test connection
         run: |
-          brew install libpq
+          brew install postgres
           PGPASSWORD=${{ secrets.TEST_POSTGRES_PASSWORD }} psql -U benchmarker -h ${{ secrets.TEST_POSTGRES_HOST }} -c "SELECT 1"
           exit 1
 
