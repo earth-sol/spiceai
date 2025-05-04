@@ -100,6 +100,7 @@ impl Databricks {
             .ok_or_else(|p| MissingParameterSnafu { parameter: p.0 }.build())?;
 
         let auth_credentials = Self::build_auth_credentials(&params)?;
+
         match mode {
             "delta_lake" => {
                 let storage_options = params.to_secret_map();
@@ -129,7 +130,6 @@ impl Databricks {
                 })
             }
             "spark_connect" => {
-                let auth_credentials = Self::build_auth_credentials(&params)?;
                 let cluster_id = params
                     .get("cluster_id")
                     .ok_or_else(|p| MissingParameterSnafu { parameter: p.0 }.build())?;

@@ -12,29 +12,29 @@ on:
       - release-*
       - feature-*
     paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "README.md"
-      - "Makefile"
-      - "CONTRIBUTING.md"
-      - "SECURITY.md"
-      - "LICENSE"
-      - ".github/**"
-      - "version.txt"
-      - ".schema/**"
-      - ".vscode/**"
-      - "deploy/**"
-      - "install/**"
-      - "media/**"
-      - "monitoring/**"
-      - "acknowledgements.md"
-      - "Dockerfile*"
-      - "bin/spice/**"
+      - '**/*.md'
+      - 'docs/**'
+      - 'README.md'
+      - 'Makefile'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'LICENSE'
+      - '.github/**'
+      - 'version.txt'
+      - '.schema/**'
+      - '.vscode/**'
+      - 'deploy/**'
+      - 'install/**'
+      - 'media/**'
+      - 'monitoring/**'
+      - 'acknowledgements.md'
+      - 'Dockerfile*'
+      - 'bin/spice/**'
 
   workflow_dispatch:
     inputs:
       run_all_tests:
-        description: "Run all tests"
+        description: 'Run all tests'
         type: boolean
         required: false
         default: false
@@ -57,7 +57,7 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
         with:
-          os: "linux"
+          os: 'linux'
 
       - name: Set up make
         uses: ./.github/actions/setup-make
@@ -98,7 +98,7 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
         with:
-          os: "linux"
+          os: 'linux'
 
       # Download the test binary artifact
       - name: Download test binary
