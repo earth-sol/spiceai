@@ -7668,6 +7668,7 @@ dependencies = [
 [[package]]
 name = "mistralrs"
 version = "0.5.0"
+source = "git+https://github.com/spiceai/mistral.rs?rev=69a9442f0dfc67356a2a8a17583b64e5ef2180ba#69a9442f0dfc67356a2a8a17583b64e5ef2180ba"
 dependencies = [
  "anyhow",
  "candle-core 0.8.0",
@@ -7688,6 +7689,7 @@ dependencies = [
 [[package]]
 name = "mistralrs-core"
 version = "0.5.0"
+source = "git+https://github.com/spiceai/mistral.rs?rev=69a9442f0dfc67356a2a8a17583b64e5ef2180ba#69a9442f0dfc67356a2a8a17583b64e5ef2180ba"
 dependencies = [
  "akin",
  "anyhow",
@@ -7768,6 +7770,7 @@ dependencies = [
 [[package]]
 name = "mistralrs-paged-attn"
 version = "0.5.0"
+source = "git+https://github.com/spiceai/mistral.rs?rev=69a9442f0dfc67356a2a8a17583b64e5ef2180ba#69a9442f0dfc67356a2a8a17583b64e5ef2180ba"
 dependencies = [
  "anyhow",
  "bindgen_cuda 0.1.6",
@@ -7782,6 +7785,7 @@ dependencies = [
 [[package]]
 name = "mistralrs-quant"
 version = "0.5.0"
+source = "git+https://github.com/spiceai/mistral.rs?rev=69a9442f0dfc67356a2a8a17583b64e5ef2180ba#69a9442f0dfc67356a2a8a17583b64e5ef2180ba"
 dependencies = [
  "bindgen_cuda 0.1.5",
  "byteorder",
@@ -7808,6 +7812,7 @@ dependencies = [
 [[package]]
 name = "mistralrs-vision"
 version = "0.5.0"
+source = "git+https://github.com/spiceai/mistral.rs?rev=69a9442f0dfc67356a2a8a17583b64e5ef2180ba#69a9442f0dfc67356a2a8a17583b64e5ef2180ba"
 dependencies = [
  "candle-core 0.8.0",
  "image 0.25.5",
