@@ -15,7 +15,7 @@ limitations under the License.
 */
 #![allow(clippy::missing_errors_doc)]
 
-use async_openai::config::Config;
+use async_openai::{config::Config, error::OpenAIError};
 use reqwest::header::{
     AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue, InvalidHeaderValue,
 };
@@ -116,7 +116,7 @@ impl GenericAuthMechanism {
 }
 
 impl Config for HostedModelConfig {
-    fn headers(&self) -> HeaderMap {
+    async fn headers(&self) -> Result<HeaderMap, OpenAIError> {
         let mut headers = self.default_headers.clone();
 
         // Insert authentication header if available.
@@ -149,7 +149,7 @@ impl Config for HostedModelConfig {
             }
         }
 
-        headers
+        Ok(headers)
     }
 
     fn url(&self, path: &str) -> String {
@@ -164,12 +164,12 @@ impl Config for HostedModelConfig {
         &self.base_url
     }
 
-    fn api_key(&self) -> &SecretString {
+    async fn api_key(&self) -> Result<SecretString, OpenAIError> {
         // This is a bit of a hack, will result in valid, understandable auth errors.
-        match &self.auth {
-            Some(GenericAuthMechanism::ApiKey(key)) => key,
-            Some(GenericAuthMechanism::BearerToken(token)) => token,
-            None => &DUMMY_API_KEY,
-        }
+        Ok(match &self.auth {
+            Some(GenericAuthMechanism::ApiKey(key)) => key.clone(),
+            Some(GenericAuthMechanism::BearerToken(token)) => token.clone(),
+            None => DUMMY_API_KEY.clone(),
+        })
     }
 }

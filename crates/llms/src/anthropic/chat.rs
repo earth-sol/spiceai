@@ -63,7 +63,7 @@ impl Chat for Anthropic {
             Box<
                 dyn Stream<Item = Result<MessageCreateStreamResponse, AnthropicStreamError>> + Send,
             >,
-        > = self.client.post_stream("/messages", anth_req).await;
+        > = self.client.post_stream("/messages", anth_req).await?;
 
         Ok(transform_stream(stream))
     }
