@@ -97,7 +97,6 @@ jobs:
       - name: Test connection
         run: |
           brew install postgresql
-          ifconfig
           whoami
           ping -c 4 ${{ secrets.TEST_POSTGRES_HOST }}
           PGPASSWORD=${{ secrets.TEST_POSTGRES_PASSWORD }} psql -U benchmarker -h ${{ secrets.TEST_POSTGRES_HOST }} -c "SELECT 1"
