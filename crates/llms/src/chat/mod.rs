@@ -142,6 +142,16 @@ pub enum Error {
     #[snafu(display("Invalid value for parameter {param}. {message}"))]
     InvalidParamValueError { param: String, message: String },
 
+    #[snafu(display(
+        "Failed to load provider.\nAn error occurred: {source}\nReport a bug on GitHub: https://github.com/spiceai/spiceai/issues"
+    ))]
+    FailedToLoadProvider {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[snafu(display("Invalid configuration: {message}"))]
+    InvalidConfigError { message: &'static str },
+
     #[snafu(display("Expected `param.{param_key}`, but it was not provided"))]
     MissingParamError { param_key: &'static str },
 

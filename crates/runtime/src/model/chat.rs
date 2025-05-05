@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #![allow(clippy::implicit_hasher)]
+use async_openai::error::OpenAIError;
+use data_components::{
+    databricks::auth::DatabricksM2MTokenProvider,
+    token_provider::{StaticTokenProvider, TokenProvider},
+};
+use http::{HeaderMap, header::AUTHORIZATION};
 use llms::{
     anthropic::Anthropic,
     chat::{Chat, Error as LlmError},
@@ -21,7 +27,7 @@ use llms::{
     xai::Xai,
 };
 use llms::{config::GenericAuthMechanism, openai::DEFAULT_LLM_MODEL};
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
 use spicepod::component::model::{Model, ModelFileType, ModelSource};
 use std::{collections::HashMap, path::PathBuf, str::FromStr, sync::Arc};
@@ -51,7 +57,7 @@ pub async fn try_to_chat_model(
     params: &HashMap<String, SecretString>,
     rt: Arc<Runtime>,
 ) -> Result<Arc<dyn Chat>, LlmError> {
-    let model = construct_model(component, params)?;
+    let model = construct_model(component, params, Arc::clone(&rt)).await?;
 
     // Handle tool usage
     let spice_tool_opt: Option<SpiceToolsOptions> = extract_secret!(params, "tools")
@@ -85,9 +91,10 @@ pub async fn try_to_chat_model(
     Ok(tool_model)
 }
 
-pub fn construct_model(
+pub async fn construct_model(
     component: &spicepod::component::model::Model,
     params: &HashMap<String, SecretString>,
+    rt: Arc<Runtime>,
 ) -> Result<Arc<dyn Chat>, LlmError> {
     let model_id = component.get_model_id();
     let prefix = component.get_source().ok_or(LlmError::UnknownModelSource {
@@ -102,7 +109,7 @@ pub fn construct_model(
         ModelSource::Azure => azure(model_id, component.name.as_str(), params),
         ModelSource::Xai => xai(model_id.as_deref(), params),
         ModelSource::OpenAi => openai(model_id, params),
-        ModelSource::Databricks => databricks(model_id, params),
+        ModelSource::Databricks => databricks(model_id, params, Arc::clone(&rt)).await,
         ModelSource::SpiceAI => Err(LlmError::UnsupportedTaskForModel {
             from: "spiceai".into(),
             task: "llm".into(),
@@ -222,18 +229,14 @@ fn huggingface(
     llms::chat::create_hf_model(&id, model_type, gguf_path, hf_token)
 }
 
-fn databricks(
+async fn databricks(
     model_id: Option<String>,
     params: &HashMap<String, SecretString>,
+    rt: Arc<Runtime>,
 ) -> Result<Arc<dyn Chat>, LlmError> {
     let Some(endpoint) = extract_secret!(params, "databricks_endpoint") else {
         return Err(LlmError::MissingParamError {
             param_key: "databricks_endpoint",
-        });
-    };
-    let Some(token) = extract_secret!(params, "databricks_token") else {
-        return Err(LlmError::MissingParamError {
-            param_key: "databricks_token",
         });
     };
     let Some(model_id) = model_id else {
@@ -242,12 +245,70 @@ fn databricks(
         });
     };
 
-    Ok(Arc::new(llms::openai::new_openai_client(
-        model_id,
-        Some(format!("https://{endpoint}/serving-endpoints").as_str()),
-        Some(token),
-        None,
-        None,
+    let token_provider: Arc<dyn TokenProvider> = match (
+        params.get("databricks_token"),
+        params.get("databricks_client_id"),
+        params.get("databricks_client_secret"),
+    ) {
+        (Some(token), None, None) => {
+            Arc::new(StaticTokenProvider::new(SecretString::from(token.clone())))
+        }
+        (None, Some(client_id), Some(client_secret)) => {
+            match rt
+                .token_provider_registry()
+                .get_or_create_provider(
+                    format!("databricks_m2m_{}", client_id.expose_secret()),
+                    || async {
+                        DatabricksM2MTokenProvider::try_new(
+                            endpoint.to_string(),
+                            client_id.expose_secret().to_string(),
+                            client_secret.clone(),
+                        )
+                        .await
+                    },
+                )
+                .await
+            {
+                Ok(token_provider) => token_provider,
+                Err(err) => {
+                    return Err(LlmError::FailedToLoadProvider {
+                        source: format!("Failed to create Databricks token provider: {}", err)
+                            .into(),
+                    });
+                }
+            }
+        }
+        (None, None, None) => {
+            return Err(LlmError::InvalidConfigError {
+                message: "Missing `databricks_token` or `databricks_client_id` and `databricks_client_secret` parameters",
+            });
+        }
+        (None, Some(_), None) => {
+            return Err(LlmError::MissingParamError {
+                param_key: "databricks_client_secret",
+            });
+        }
+        (None, None, Some(_)) => {
+            return Err(LlmError::MissingParamError {
+                param_key: "databricks_client_id",
+            });
+        }
+        (Some(_), Some(_), Some(_)) => {
+            return Err(LlmError::InvalidConfigError {
+                message: "Choose either `databricks_token` or `databricks_client_id` and `databricks_client_secret`",
+            });
+        }
+        _ => {
+            return Err(LlmError::InvalidConfigError {
+                message: "Invalid authentication configuration. Choose either `databricks_token` or `databricks_client_id` and `databricks_client_secret`",
+            });
+        }
+    };
+
+    let config = DatabricksConfig::new(endpoint.to_string(), Arc::clone(&token_provider)).await?;
+
+    Ok(Arc::new(llms::openai::new_openai_client_with_config(
+        model_id, config,
     )) as Arc<dyn Chat>)
 }
 
@@ -370,4 +431,61 @@ fn file(
         generation_config.as_deref(),
         chat_template_literal,
     )
+}
+
+#[derive(Clone, Debug)]
+struct DatabricksConfig {
+    api_base: String,
+    token_provider: Arc<dyn TokenProvider>,
+}
+
+impl DatabricksConfig {
+    pub async fn new(
+        databricks_endpoint: String,
+        token_provider: Arc<dyn TokenProvider>,
+    ) -> Result<Self, LlmError> {
+        Ok(Self {
+            api_base: format!("https://{databricks_endpoint}/serving-endpoints"),
+            token_provider,
+        })
+    }
+}
+
+impl async_openai::config::Config for DatabricksConfig {
+    async fn headers(&self) -> Result<HeaderMap, OpenAIError> {
+        let mut headers = HeaderMap::new();
+
+        let api_key = self.api_key().await?;
+        headers.insert(
+            AUTHORIZATION,
+            format!("Bearer {}", api_key.expose_secret())
+                .as_str()
+                .parse()
+                .unwrap(),
+        );
+
+        Ok(headers)
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}{}", self.api_base, path)
+    }
+
+    fn api_base(&self) -> &str {
+        &self.api_base
+    }
+
+    async fn api_key(&self) -> Result<SecretString, OpenAIError> {
+        let token = self
+            .token_provider
+            .get_token()
+            .await
+            .map_err(|_| OpenAIError::ConfigError("".into()))?;
+
+        Ok(SecretString::from(token))
+    }
+
+    fn query(&self) -> Vec<(&str, &str)> {
+        vec![]
+    }
 }
