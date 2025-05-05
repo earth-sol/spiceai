@@ -372,7 +372,7 @@ fn validate_time_partition_format(
         | arrow::datatypes::DataType::RunEndEncoded(_, _) => {
             invalid = true;
         }
-    };
+    }
 
     if invalid {
         return Err(Error::TimeFormatMismatch {
@@ -381,7 +381,7 @@ fn validate_time_partition_format(
             expected_time_format: time_format.to_string(),
             actual_time_format: data_type.to_string(),
         });
-    };
+    }
 
     Ok(())
 }
@@ -426,6 +426,7 @@ pub struct Refresher {
     synchronize_with: Option<SynchronizedTable>,
 
     initial_load_completed: Arc<AtomicBool>,
+    disable_federation: bool,
 }
 
 impl Refresher {
@@ -450,6 +451,7 @@ impl Refresher {
             refresh_on_startup: RefreshOnStartup::default(),
             synchronize_with: None,
             initial_load_completed: Arc::new(AtomicBool::new(false)),
+            disable_federation: false,
         }
     }
 
@@ -477,6 +479,12 @@ impl Refresher {
     /// Synchronize further refreshes with an existing accelerated table after the initial load completes
     pub fn synchronize_with(&mut self, synchronized_table: SynchronizedTable) -> &mut Self {
         self.synchronize_with = Some(synchronized_table);
+        self
+    }
+
+    /// Disable refresh queries federation for this refresher
+    pub fn disable_federation(&mut self, disable: bool) -> &mut Self {
+        self.disable_federation = disable;
         self
     }
 
@@ -560,6 +568,7 @@ impl Refresher {
             self.federated_source.clone(),
             Arc::clone(&self.refresh),
             Arc::clone(&self.accelerator),
+            self.disable_federation,
         );
 
         let (start_refresh, mut on_refresh_complete) = refresh_task_runner.start();
@@ -641,7 +650,7 @@ impl Refresher {
                             if let Some(checkpointer) = &checkpointer {
                                 if let Err(e) = checkpointer.checkpoint(&federated_schema).await {
                                     tracing::warn!("Failed to checkpoint dataset {}: {e}", &dataset_name.to_string());
-                                };
+                                }
                             }
                         }
 
@@ -694,13 +703,16 @@ impl Refresher {
         &mut self,
         ready_sender: oneshot::Sender<()>,
     ) -> tokio::task::JoinHandle<()> {
-        let refresh_task = Arc::new(RefreshTask::new(
-            Arc::clone(&self.runtime_status),
-            self.dataset_name.clone(),
-            Arc::clone(&self.federated),
-            self.federated_source.clone(),
-            Arc::clone(&self.accelerator),
-        ));
+        let refresh_task = Arc::new(
+            RefreshTask::new(
+                Arc::clone(&self.runtime_status),
+                self.dataset_name.clone(),
+                Arc::clone(&self.federated),
+                self.federated_source.clone(),
+                Arc::clone(&self.accelerator),
+            )
+            .with_disable_federation(self.disable_federation),
+        );
 
         let refresh_defaults = Arc::clone(&self.refresh);
 
@@ -727,13 +739,16 @@ impl Refresher {
         changes_stream: ChangesStream,
         ready_sender: oneshot::Sender<()>,
     ) -> tokio::task::JoinHandle<()> {
-        let refresh_task = Arc::new(RefreshTask::new(
-            Arc::clone(&self.runtime_status),
-            self.dataset_name.clone(),
-            Arc::clone(&self.federated),
-            self.federated_source.clone(),
-            Arc::clone(&self.accelerator),
-        ));
+        let refresh_task = Arc::new(
+            RefreshTask::new(
+                Arc::clone(&self.runtime_status),
+                self.dataset_name.clone(),
+                Arc::clone(&self.federated),
+                self.federated_source.clone(),
+                Arc::clone(&self.accelerator),
+            )
+            .with_disable_federation(self.disable_federation),
+        );
 
         let cache_provider = self.cache_provider.clone();
         let refresh = Arc::clone(&self.refresh);
@@ -777,7 +792,7 @@ async fn notify_refresh_done(
 ) {
     if let Some(sender) = ready_sender.take() {
         sender.send(()).ok();
-    };
+    }
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -787,7 +802,7 @@ async fn notify_refresh_done(
     let refresh_guard = refresh.read().await;
     if let Some(sql) = &refresh_guard.sql {
         labels.push(KeyValue::new("sql", sql.to_string()));
-    };
+    }
 
     metrics::LAST_REFRESH_TIME_MS.record(now.as_secs_f64() * 1000.0, &labels);
 }

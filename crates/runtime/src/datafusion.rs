@@ -75,7 +75,7 @@ pub mod query;
 pub mod builder;
 pub mod dialect;
 pub mod error;
-mod extension;
+pub mod extension;
 pub mod filter_converter;
 pub mod param_utils;
 pub mod refresh_sql;
@@ -315,7 +315,7 @@ impl DataFusion {
     pub fn set_cache_provider(&self, cache_provider: QueryResultsCacheProvider) {
         if let Ok(mut a) = self.cache_provider.write() {
             *a = Some(Arc::new(cache_provider));
-        };
+        }
     }
 
     pub async fn has_table(&self, table_reference: &TableReference) -> bool {
@@ -880,8 +880,8 @@ impl DataFusion {
 
         accelerated_table_builder.initial_load_complete(initial_load_complete);
 
-        if acceleration_settings.disable_query_push_down {
-            accelerated_table_builder.disable_query_push_down();
+        if acceleration_settings.disable_federation {
+            accelerated_table_builder.disable_federation();
         }
 
         if refresh_mode == RefreshMode::Changes {
@@ -900,7 +900,7 @@ impl DataFusion {
                 return Err(Error::AppendRequiresTimeColumn {
                     from: dataset.from.clone(),
                 });
-            };
+            }
         }
 
         // If this is a localpod accelerated table, attempt to synchronize refreshes with the parent table
@@ -1167,7 +1167,7 @@ impl DataFusion {
                 )
                 .map_err(find_datafusion_root)
                 .context(UnableToRegisterTableToDataFusionSnafu)?;
-        };
+        }
         Ok(())
     }
 
@@ -1310,7 +1310,7 @@ impl DataFusion {
 
         // If accelerated view depends on other tables, wait until they are ready; this is required to complete
         // initial data load and avoid errors indicating that the load can't be completed because tables are still loading or connecting
-        wait_untill_dependent_tables_are_ready(table, dependent_tables, &runtime_status).await;
+        wait_until_dependent_tables_are_ready(table, dependent_tables, &runtime_status).await;
 
         let schema = view_table.schema();
         let federated_table = FederatedTable::new(Arc::new(view_table) as Arc<dyn TableProvider>);
@@ -1363,6 +1363,9 @@ impl DataFusion {
         builder.checkpointer_opt(DatasetCheckpoint::try_new(view).await.ok());
         builder.refresh_on_startup(acceleration.refresh_on_startup);
         builder.ready_state(view.ready_state);
+        if acceleration.disable_federation {
+            builder.disable_federation();
+        }
 
         let (accelerated_table, _) =
             builder
@@ -1525,7 +1528,7 @@ impl Drop for DataFusion {
     }
 }
 
-async fn wait_untill_dependent_tables_are_ready(
+async fn wait_until_dependent_tables_are_ready(
     table: &TableReference,
     dependent_tables: &[TableReference],
     runtime_status: &Arc<status::RuntimeStatus>,

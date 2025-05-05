@@ -280,7 +280,7 @@ pub struct Acceleration {
 
     pub on_conflict: HashMap<ColumnReference, OnConflictBehavior>,
 
-    pub disable_query_push_down: bool,
+    pub disable_federation: bool,
 }
 
 impl Acceleration {
@@ -358,13 +358,7 @@ impl TryFrom<spicepod_acceleration::Acceleration> for Acceleration {
 
         let mut params = acceleration.params.clone();
 
-        let disable_query_push_down = match params
-            .as_mut()
-            .and_then(|x| x.data.remove("disable_query_push_down"))
-        {
-            Some(spicepod::param::ParamValue::Bool(value)) => value,
-            _ => false,
-        };
+        let disable_federation = parse_is_query_federation_disabled(&mut params)?;
 
         let refresh_check_interval = try_parse_duration(
             "refresh_check_interval",
@@ -398,7 +392,7 @@ impl TryFrom<spicepod_acceleration::Acceleration> for Acceleration {
             retention_period: acceleration.retention_period,
             retention_check_interval: acceleration.retention_check_interval,
             retention_check_enabled: acceleration.retention_check_enabled,
-            disable_query_push_down,
+            disable_federation,
             on_zero_results: ZeroResultsAction::from(acceleration.on_zero_results),
             indexes,
             primary_key,
@@ -430,8 +424,63 @@ impl Default for Acceleration {
             indexes: HashMap::default(),
             primary_key: None,
             on_conflict: HashMap::default(),
-            disable_query_push_down: false,
+            disable_federation: false,
             refresh_on_startup: RefreshOnStartup::default(),
         }
+    }
+}
+
+/// Returns true if the `query_federation` parameter is set to "disabled".
+fn parse_is_query_federation_disabled(params: &mut Option<Params>) -> Result<bool, crate::Error> {
+    if let Some(params) = params {
+        if let Some(value) = params.data.remove("query_federation") {
+            match value {
+                spicepod::param::ParamValue::String(s) if s == "enabled" => return Ok(false),
+                spicepod::param::ParamValue::String(s) if s == "disabled" => return Ok(true),
+                _ => {
+                    return Err(crate::Error::InvalidAccelerationConfiguration {
+                        source:
+                            format!("Invalid 'query_federation' param value: {value:?}. Expected 'enabled' or 'disabled'.").into(),
+                    });
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_federation_disabled_param() {
+        let params_enabled = Params::from_string_map(HashMap::from([(
+            "query_federation".to_string(),
+            "enabled".to_string(),
+        )]));
+        let is_disabled =
+            parse_is_query_federation_disabled(&mut Some(params_enabled)).expect("to parse");
+        assert!(!is_disabled);
+
+        let params_disabled = Params::from_string_map(HashMap::from([(
+            "query_federation".to_string(),
+            "disabled".to_string(),
+        )]));
+        let is_disabled =
+            parse_is_query_federation_disabled(&mut Some(params_disabled)).expect("to parse");
+        assert!(is_disabled);
+
+        let params_invalid = Params::from_string_map(HashMap::from([(
+            "query_federation".to_string(),
+            "invalid".to_string(),
+        )]));
+        let result_invalid = parse_is_query_federation_disabled(&mut Some(params_invalid));
+        assert!(result_invalid.is_err());
+
+        let params_missing = Params::from_string_map(HashMap::new());
+        let is_disabled =
+            parse_is_query_federation_disabled(&mut Some(params_missing)).expect("to parse");
+        assert!(!is_disabled);
     }
 }

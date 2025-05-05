@@ -49,14 +49,12 @@ async fn databricks_delta_lake_integration_test_catalog() -> Result<(), anyhow::
                     .with_datafusion_configuration_fn(configure_test_datafusion)
                     .build()
                     .await;
-
             let cloned_rt = Arc::new(rt.clone());
-
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(120)) => {
                     panic!("Timeout waiting for components to load");
                 }
-                () = cloned_rt.load_components() => {}
+() = cloned_rt.load_components() => {}
             }
 
             runtime_ready_check(&rt).await;
@@ -127,11 +125,11 @@ fn get_params() -> Params {
         vec![
             (
                 "databricks_endpoint".to_string(),
-                "${ env:DATABRICKS_HOST }".to_string(),
+                "${ env:TEST_DATABRICKS_HOST }".to_string(),
             ),
             (
                 "databricks_token".to_string(),
-                "${ env:DATABRICKS_TOKEN }".to_string(),
+                "${ env:TEST_DATABRICKS_TOKEN }".to_string(),
             ),
             (
                 "databricks_aws_secret_access_key".to_string(),

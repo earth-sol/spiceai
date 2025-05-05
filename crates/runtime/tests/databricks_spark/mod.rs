@@ -35,23 +35,24 @@ fn make_catalog(path: &str, name: &str) -> Catalog {
 #[allow(clippy::expect_used)]
 fn get_params() -> Params {
     // Verify that the environment variables are set
-    let _ = std::env::var("DATABRICKS_HOST").expect("DATABRICKS_HOST is not set");
-    let _ = std::env::var("DATABRICKS_TOKEN").expect("DATABRICKS_TOKEN is not set");
-    let _ = std::env::var("DATABRICKS_CLUSTER_ID").expect("DATABRICKS_CLUSTER_ID is not set");
+    let _ = std::env::var("TEST_DATABRICKS_HOST").expect("TEST_DATABRICKS_HOST is not set");
+    let _ = std::env::var("TEST_DATABRICKS_TOKEN").expect("TEST_DATABRICKS_TOKEN is not set");
+    let _ =
+        std::env::var("TEST_DATABRICKS_CLUSTER_ID").expect("TEST_DATABRICKS_CLUSTER_ID is not set");
 
     Params::from_string_map(
         vec![
             (
                 "databricks_endpoint".to_string(),
-                "${ env:DATABRICKS_HOST }".to_string(),
+                "${ env:TEST_DATABRICKS_HOST }".to_string(),
             ),
             (
                 "databricks_token".to_string(),
-                "${ env:DATABRICKS_TOKEN }".to_string(),
+                "${ env:TEST_DATABRICKS_TOKEN }".to_string(),
             ),
             (
                 "databricks_cluster_id".to_string(),
-                "${ env:DATABRICKS_CLUSTER_ID }".to_string(),
+                "${ env:TEST_DATABRICKS_CLUSTER_ID }".to_string(),
             ),
             ("mode".to_string(), "spark_connect".to_string()),
         ]
@@ -85,7 +86,6 @@ async fn databricks_spark_integration_test() -> Result<(), anyhow::Error> {
                     .await;
 
             let cloned_rt = Arc::new(rt.clone());
-
             // Set a timeout for the test
             tokio::select! {
                 () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
