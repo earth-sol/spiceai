@@ -14,9 +14,12 @@ limitations under the License.
 #![allow(clippy::borrowed_box)]
 #![allow(clippy::needless_pass_by_value)]
 
-use crate::chat::message_to_mistral;
+use crate::chat::messages_and_images;
 
-use super::{Chat, Error as ChatError, FailedToRunModelSnafu, Result, nsql::SqlGeneration};
+use super::{
+    Chat, Error as ChatError, FailedToLoadModelSnafu, FailedToRunModelSnafu, InvalidModelFileSnafu,
+    Result, UnsupportedInferredModelTypeSnafu, nsql::SqlGeneration,
+};
 use async_openai::{
     error::{ApiError, OpenAIError},
     types::{
@@ -31,16 +34,19 @@ use async_openai::{
 use async_stream::stream;
 use async_trait::async_trait;
 use futures::{Stream, TryStreamExt};
+use hf_hub::{Repo, RepoType, api::sync::ApiBuilder};
 use mistralrs::{
     AdapterPaths, AutoDeviceMapParams, ChatCompletionChunkResponse, ChatCompletionResponse,
     ChunkChoice, Constraint, Device, DeviceMapSetting, Function, GGMLLoaderBuilder,
     GGMLSpecificConfig, GGUFLoaderBuilder, GGUFSpecificConfig, Loader, LocalModelPaths, MistralRs,
-    MistralRsBuilder, ModelDType, ModelPaths, NormalLoaderBuilder, NormalRequest, Pipeline,
-    Request as MistralRequest, RequestMessage, Response as MistralResponse, SamplingParams,
-    TokenSource, Tool, ToolCallResponse, ToolChoice, ToolType,
+    MistralRsBuilder, ModelDType, ModelPaths, NormalLoaderBuilder, NormalLoaderType, NormalRequest,
+    Pipeline, Request as MistralRequest, RequestMessage, Response as MistralResponse,
+    SamplingParams, TokenSource, Tool, ToolCallResponse, ToolChoice, ToolType, VisionLoader,
+    VisionLoaderType, VisionPromptPrefixer, VisionSpecificConfig,
 };
 
 use secrecy::{ExposeSecret, SecretString};
+use serde_json::Value;
 use snafu::ResultExt;
 use std::{
     collections::HashMap,
@@ -57,7 +63,81 @@ use tokio::sync::mpsc::{Receiver, Sender, channel};
 
 pub struct MistralLlama {
     pipeline: Arc<MistralRs>,
+    image_prefixer: Option<Arc<dyn VisionPromptPrefixer>>,
     counter: AtomicUsize,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum ModelLoaderType {
+    Text(NormalLoaderType),
+    Vision(VisionLoaderType),
+}
+
+impl ModelLoaderType {
+    fn from_hf(
+        model_id: &str,
+        revision: Option<&str>,
+        hf_token_literal: Option<&SecretString>,
+        _gguf_filename: Option<PathBuf>,
+    ) -> Result<Self> {
+        let api = ApiBuilder::new()
+            .with_progress(false)
+            .with_token(hf_token_literal.map(|s| s.expose_secret().into()))
+            .build()
+            .boxed()
+            .context(FailedToLoadModelSnafu)?;
+
+        let repo = if let Some(revision) = revision {
+            Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string())
+        } else {
+            Repo::new(model_id.to_string(), RepoType::Model)
+        };
+        let config_file = api
+            .repo(repo)
+            .get("config.json")
+            .boxed()
+            .context(FailedToLoadModelSnafu)?;
+        Self::from_config_file(config_file)
+    }
+
+    fn from_config_file(f: PathBuf) -> Result<Self> {
+        let fd = std::fs::File::open(&f)
+            .boxed()
+            .context(InvalidModelFileSnafu {
+                filename: f.to_string_lossy().to_string(),
+            })?;
+        let map: Value = serde_json::from_reader(fd)
+            .boxed()
+            .context(InvalidModelFileSnafu {
+                filename: f.to_string_lossy().to_string(),
+            })?;
+        let Some(Value::String(model_type)) = map.get("model_type") else {
+            return Err(ChatError::InvalidModelFile {
+                source: Box::from(
+                    "file was not valid JSON with 'model_type' key that maps to a string value.",
+                ),
+                filename: f.to_string_lossy().to_string(),
+            });
+        };
+
+        ModelLoaderType::from_str(model_type.as_str())
+            .map_err(Box::from)
+            .context(FailedToLoadModelSnafu)
+    }
+}
+
+impl FromStr for ModelLoaderType {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(text) = NormalLoaderType::from_str(s) {
+            return Ok(ModelLoaderType::Text(text));
+        };
+        if let Ok(vision) = VisionLoaderType::from_str(s) {
+            return Ok(ModelLoaderType::Vision(vision));
+        };
+
+        Err(format!("Invalid 'model_type' {s}."))
+    }
 }
 
 fn to_openai_response(
@@ -68,7 +148,7 @@ fn to_openai_response(
 }
 
 impl MistralLlama {
-    pub fn from(
+    pub fn from_files(
         model_weights: &[PathBuf],
         config: Option<&Path>,
         tokenizer: Option<&Path>,
@@ -84,12 +164,21 @@ impl MistralLlama {
             }
         }
 
+        // Currently, loader type cannot be used for GGUF so we aren't strict about its existence.
+        let mut loader_type: Option<ModelLoaderType> = None;
         if let Some(config) = config {
             if !config.exists() {
                 return Err(ChatError::LocalModelConfigNotFound {
                     expected_path: config.to_string_lossy().to_string(),
                 });
-            }
+            };
+            loader_type = Some(
+                ModelLoaderType::from_config_file(config.to_path_buf())
+                    .boxed()
+                    .context(UnsupportedInferredModelTypeSnafu {
+                        from: config.to_string_lossy().to_string(),
+                    })?,
+            );
         }
 
         if let Some(tokenizer) = tokenizer {
@@ -119,24 +208,96 @@ impl MistralLlama {
             .first()
             .map(|w| w.to_string_lossy().to_string())
             .unwrap_or_default();
-        let device = Self::get_device();
 
         let extension = model_weights
             .first()
             .and_then(|p| p.as_path().extension())
             .and_then(|e| e.to_str());
 
-        let pipeline = match extension {
-            Some("ggml") => {
-                Self::load_ggml_pipeline(paths, &device, &model_id, chat_template_literal)?
+        match (extension, loader_type) {
+            (Some("ggml"), _) => Ok(Self::from_pipeline(
+                Self::load_ggml_pipeline(paths, &model_id, chat_template_literal)?,
+                None,
+            )),
+            (Some("gguf"), _) => Ok(Self::from_pipeline(
+                Self::load_gguf_pipeline(paths, &model_id, chat_template_literal)?,
+                None,
+            )),
+            (_, Some(ref loader_type)) => Self::load_with_default(
+                Some(paths),
+                &model_id,
+                loader_type,
+                chat_template_literal.map(ToString::to_string),
+                None, // Don't need HF token
+            ),
+            (_, None) => {
+                Err(ChatError::UnsupportedInferredModelType {
+                    source: Box::from(
+                        "Model type isn't provided in `params.model_type` and no `config.json` provided".to_string()),
+                    from: "config.json".to_string()
+                })
             }
-            Some("gguf") => {
-                Self::load_gguf_pipeline(paths, &device, &model_id, chat_template_literal)?
-            }
-            _ => Self::load_default_pipeline(paths, &device, &model_id, chat_template_literal)?,
-        };
+        }
+    }
 
-        Ok(Self::from_pipeline(pipeline))
+    pub fn from_hf(
+        model_id: &str,
+        arch: Option<&str>,
+        hf_token_literal: Option<&SecretString>,
+        gguf_filename: Option<PathBuf>,
+    ) -> Result<Self> {
+        // Parse provided `model_type`, failing that check in `config.json` from huggingface.
+        // TODO: this will break when GGUF, no config.json will provide this.
+        let model_type = arch
+            .map(ModelLoaderType::from_str)
+            .transpose()
+            .map_err(|e| ChatError::UnsupportedModelType { source: e.into() })?
+            .unwrap_or(
+                ModelLoaderType::from_hf(model_id, None, hf_token_literal, gguf_filename.clone())
+                    .boxed()
+                    .context(UnsupportedInferredModelTypeSnafu {
+                        from: "huggingface".to_string(),
+                    })?,
+            );
+
+        let model_parts: Vec<&str> = model_id.split(':').collect();
+
+        if let Some(gguf) = gguf_filename {
+            // Loading the GGUF directly (as if it is a quantized model, although it need not be quantized).
+            let loader = GGUFLoaderBuilder::new(
+                None,
+                None,
+                model_parts[0].to_string(),
+                vec![gguf.to_string_lossy().to_string()],
+                GGUFSpecificConfig::default(),
+                false,
+                None,
+            )
+            .build();
+            let device = Self::get_device();
+            let token_source = hf_token_literal.map_or(TokenSource::CacheToken, |secret| {
+                tracing::debug!("A HuggingFace token was specified in parameters. The specified token will be used instead of any system/environment defaults.");
+                TokenSource::Literal(secret.expose_secret().to_string())
+            });
+            let pipeline = loader
+                .load_model_from_hf(
+                    model_parts.get(1).map(|&x| x.to_string()),
+                    token_source,
+                    &ModelDType::Auto,
+                    &device,
+                    false,
+                    DeviceMapSetting::Auto(match model_type {
+                        ModelLoaderType::Text(_) => AutoDeviceMapParams::default_text(),
+                        ModelLoaderType::Vision(_) => AutoDeviceMapParams::default_vision(),
+                    }),
+                    None,
+                    None,
+                )
+                .map_err(|e| ChatError::FailedToLoadModel { source: e.into() })?;
+            Ok(Self::from_pipeline(pipeline, None))
+        } else {
+            Self::load_with_default(None, model_id, &model_type, None, hf_token_literal)
+        }
     }
 
     /// Create paths object, [`ModelPaths`], to create new [`MistralLlama`].
@@ -166,38 +327,100 @@ impl MistralLlama {
         ))
     }
 
-    fn load_default_pipeline(
-        paths: Box<dyn ModelPaths>,
-        device: &Device,
+    /// Load from default model files (e.g. separate config.json, tokenizer.json, etc).
+    ///
+    /// If [`paths_opt.is_none()`], will attempt to load from Huggingface.
+    fn load_with_default(
+        paths_opt: Option<Box<dyn ModelPaths>>,
         model_id: &str,
-        chat_template_literal: Option<&str>,
-    ) -> Result<Arc<tokio::sync::Mutex<dyn Pipeline + Sync + Send>>> {
+        model_type: &ModelLoaderType,
+        chat_template_literal: Option<String>,
+        hf_token_literal: Option<&SecretString>,
+    ) -> Result<Self> {
+        let device = Self::get_device();
         let model_parts: Vec<&str> = model_id.split(':').collect();
-        NormalLoaderBuilder::new(
-            mistralrs::NormalSpecificConfig::default(),
-            chat_template_literal.map(ToString::to_string),
-            None,
-            model_parts.first().map(ToString::to_string),
-            false, // enable KV cache,
-            None,
-        )
-        .build(None) // Infer loader type
-        .map_err(|e| ChatError::FailedToLoadModel { source: e.into() })?
-        .load_model_from_path(
-            &paths,
-            &ModelDType::Auto,
-            device,
-            true,
-            DeviceMapSetting::Auto(AutoDeviceMapParams::default_text()),
-            None,
-            None,
-        )
-        .map_err(|e| ChatError::FailedToLoadModel { source: e.into() })
+
+        let mut image_prefixer = None;
+        let loader: Result<Box<dyn Loader>> = match model_type {
+            ModelLoaderType::Text(loader_type) => {
+                let builder = NormalLoaderBuilder::new(
+                    mistralrs::NormalSpecificConfig::default(),
+                    chat_template_literal,
+                    None,
+                    Some(model_parts[0].to_string()),
+                    false,
+                    None,
+                );
+
+                builder
+                    .build(Some(loader_type.clone()))
+                    .map_err(|e| ChatError::FailedToLoadModel { source: e.into() })
+            }
+            ModelLoaderType::Vision(vision_type) => {
+                let builder = mistralrs_core::VisionLoaderBuilder::new(
+                    VisionSpecificConfig {
+                        use_flash_attn: false,
+                        prompt_chunksize: None,
+                        topology: None,
+                        write_uqff: None,
+                        from_uqff: None,
+                        max_edge: None, // Most vision models handles this internally
+                        imatrix: None,
+                        calibration_file: None,
+                        hf_cache_path: None,
+                    },
+                    chat_template_literal,
+                    None,
+                    Some(model_parts[0].to_string()),
+                    None,
+                );
+
+                let ldr: Box<VisionLoader> = builder.build_as_vision(vision_type.clone());
+                image_prefixer = Some(ldr.get_prefixer());
+
+                Ok(ldr as Box<dyn Loader>)
+            }
+        };
+
+        let pipeline = if let Some(paths) = paths_opt {
+            loader?.load_model_from_path(
+                &paths,
+                &ModelDType::Auto,
+                &device,
+                true,
+                DeviceMapSetting::Auto(match model_type {
+                    ModelLoaderType::Text(_) => AutoDeviceMapParams::default_text(),
+                    ModelLoaderType::Vision(_) => AutoDeviceMapParams::default_vision(),
+                }),
+                None,
+                None,
+            )
+        } else {
+            let token_source = hf_token_literal.map_or(TokenSource::CacheToken, |secret| {
+                tracing::debug!("A HuggingFace token was specified in parameters. The specified token will be used instead of any system/environment defaults.");
+                TokenSource::Literal(secret.expose_secret().to_string())
+            });
+
+            loader?.load_model_from_hf(
+                model_parts.get(1).map(|&x| x.to_string()),
+                token_source,
+                &ModelDType::Auto,
+                &device,
+                false,
+                DeviceMapSetting::Auto(match model_type {
+                    ModelLoaderType::Text(_) => AutoDeviceMapParams::default_text(),
+                    ModelLoaderType::Vision(_) => AutoDeviceMapParams::default_vision(),
+                }),
+                None,
+                None,
+            )
+        }.map_err(|e| ChatError::FailedToLoadModel { source: e.into() })?;
+
+        Ok(Self::from_pipeline(pipeline, image_prefixer))
     }
 
     fn load_gguf_pipeline(
         paths: Box<dyn ModelPaths>,
-        device: &Device,
         model_id: &str,
         chat_template_literal: Option<&str>,
     ) -> Result<Arc<tokio::sync::Mutex<dyn Pipeline + Sync + Send>>> {
@@ -245,7 +468,7 @@ impl MistralLlama {
         .load_model_from_path(
             &paths,
             &ModelDType::Auto,
-            device,
+            &Self::get_device(),
             true,
             DeviceMapSetting::Auto(AutoDeviceMapParams::default_text()),
             None,
@@ -256,7 +479,6 @@ impl MistralLlama {
 
     fn load_ggml_pipeline(
         paths: Box<dyn ModelPaths>,
-        device: &Device,
         model_id: &str,
         chat_template_literal: Option<&str>,
     ) -> Result<Arc<tokio::sync::Mutex<dyn Pipeline + Sync + Send>>> {
@@ -275,7 +497,7 @@ impl MistralLlama {
         .load_model_from_path(
             &paths,
             &ModelDType::Auto,
-            device,
+            &Self::get_device(),
             true,
             DeviceMapSetting::Auto(AutoDeviceMapParams::default_text()),
             None,
@@ -301,74 +523,11 @@ impl MistralLlama {
         }
     }
 
-    pub fn from_hf(
-        model_id: &str,
-        arch: Option<&str>,
-        hf_token_literal: Option<&SecretString>,
-        gguf_filename: Option<PathBuf>,
-    ) -> Result<Self> {
-        let model_parts: Vec<&str> = model_id.split(':').collect();
-
-        // Loading the GGUF directly (as if it is a quantized model, although it need not be quantized).
-        let loader: Result<Box<dyn Loader>> = if let Some(gguf) = gguf_filename {
-            Ok(GGUFLoaderBuilder::new(
-                None,
-                None,
-                model_parts[0].to_string(),
-                vec![gguf.to_string_lossy().to_string()],
-                GGUFSpecificConfig::default(),
-                false,
-                None,
-            )
-            .build())
-        } else {
-            // Hardcoded model architecture can ensure correct loading type.
-            // If not provided, it will be inferred (generally from `.model_type` in a downloaded `config.json`)
-            let loader_type = arch
-                .map(|a| {
-                    mistralrs::NormalLoaderType::from_str(a)
-                        .map_err(|e| ChatError::UnsupportedModelType { source: e.into() })
-                })
-                .transpose()?;
-
-            let builder = NormalLoaderBuilder::new(
-                mistralrs::NormalSpecificConfig::default(),
-                None,
-                None,
-                Some(model_parts[0].to_string()),
-                false,
-                None,
-            );
-
-            builder
-                .build(loader_type)
-                .map_err(|e| ChatError::FailedToLoadModel { source: e.into() })
-        };
-
-        let device = Self::get_device();
-        let token_source = hf_token_literal.map_or(TokenSource::CacheToken, |secret| {
-            tracing::debug!("A HuggingFace token was specified in parameters. The specified token will be used instead of any system/environment defaults.");
-            TokenSource::Literal(secret.expose_secret().to_string())
-        });
-
-        let pipeline = loader?
-            .load_model_from_hf(
-                model_parts.get(1).map(|&x| x.to_string()),
-                token_source,
-                &ModelDType::Auto,
-                &device,
-                false,
-                DeviceMapSetting::Auto(AutoDeviceMapParams::default_text()),
-                None,
-                None,
-            )
-            .map_err(|e| ChatError::FailedToLoadModel { source: e.into() })?;
-
-        Ok(Self::from_pipeline(pipeline))
-    }
-
     #[allow(clippy::expect_used)]
-    fn from_pipeline(p: Arc<tokio::sync::Mutex<dyn Pipeline + Sync + Send>>) -> Self {
+    fn from_pipeline(
+        p: Arc<tokio::sync::Mutex<dyn Pipeline + Sync + Send>>,
+        image_prefixer: Option<Arc<dyn VisionPromptPrefixer>>,
+    ) -> Self {
         Self {
             pipeline: MistralRsBuilder::new(
                 p,
@@ -382,6 +541,7 @@ impl MistralLlama {
             )
             .build(),
             counter: AtomicUsize::new(0),
+            image_prefixer,
         }
     }
 
@@ -418,12 +578,13 @@ impl MistralLlama {
         &self,
         req: CreateChatCompletionRequest,
     ) -> Result<Receiver<MistralResponse>> {
-        let message = RequestMessage::Chat(
-            req.messages
-                .iter()
-                .map(message_to_mistral)
-                .collect::<Vec<_>>(),
-        );
+        let (messages, images) =
+            messages_and_images(&req.messages, self.image_prefixer.as_ref()).await?;
+        let message: RequestMessage = if images.is_empty() {
+            RequestMessage::Chat(messages)
+        } else {
+            RequestMessage::VisionChat { images, messages }
+        };
 
         let tools: Option<Vec<Tool>> = req.tools.map(|t| t.iter().map(convert_tool).collect());
         let tool_choice: Option<ToolChoice> = req.tool_choice.map(|s| convert_tool_choice(&s));
