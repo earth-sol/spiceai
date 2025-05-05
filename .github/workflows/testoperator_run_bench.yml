@@ -87,6 +87,10 @@ jobs:
         env:
           MSSQL_SA_PASSWORD: S3cretP@ssw0rd
           DB_NAME: tpch_sf1
+    strategy:
+      fail-fast: false
+      matrix:
+        runners: [2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
 
@@ -97,6 +101,9 @@ jobs:
           whoami
           ping -c 4 ${{ secrets.TEST_POSTGRES_HOST }}
           PGPASSWORD=${{ secrets.TEST_POSTGRES_PASSWORD }} psql -U benchmarker -h ${{ secrets.TEST_POSTGRES_HOST }} -c "SELECT 1"
+      
+      - name: Exit
+        run: |
           exit 1
 
       - name: Extract spicepod filename path
