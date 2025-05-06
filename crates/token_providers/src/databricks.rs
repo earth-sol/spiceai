@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+#![allow(clippy::missing_errors_doc)]
 
 use async_trait::async_trait;
 use secrecy::{ExposeSecret, SecretString};
@@ -23,7 +24,7 @@ use std::{fmt, sync::Arc};
 use tokio::{sync::watch, task::JoinHandle, time::sleep};
 use util::fibonacci_backoff::FibonacciBackoffBuilder;
 
-use crate::token_provider::{Result, TokenProvider};
+use crate::{Result, TokenProvider};
 
 const TOKEN_REFRESH_BUFFER_SECS: u64 = 300;
 

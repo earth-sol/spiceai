@@ -29,7 +29,6 @@ use data_components::{
         provider::GraphQLTableProviderBuilder,
     },
     rate_limit::RateLimiter,
-    token_provider::{StaticTokenProvider, TokenProvider},
 };
 use datafusion::{
     common::Column,
@@ -39,7 +38,6 @@ use datafusion::{
     prelude::Expr,
     scalar::ScalarValue,
 };
-use github_app_token_provider::GitHubAppTokenProvider;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use graphql_parser::query::{
     Definition, InlineFragment, OperationDefinition, Query, Selection, SelectionSet,
@@ -52,6 +50,8 @@ use stargazers::StargazersTableArgs;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::{any::Any, future::Future, pin::Pin, str::FromStr, sync::Arc};
+use token_providers::github_app_token::GitHubAppTokenProvider;
+use token_providers::{StaticTokenProvider, TokenProvider};
 use url::Url;
 
 use super::{
@@ -60,7 +60,6 @@ use super::{
 };
 
 mod commits;
-mod github_app_token_provider;
 mod issues;
 mod pull_requests;
 mod rate_limit;
