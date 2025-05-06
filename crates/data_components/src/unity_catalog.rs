@@ -79,6 +79,7 @@ pub struct UnityCatalog {
     endpoint: String,
     token_provider: Option<Arc<dyn TokenProvider>>,
     client: reqwest::Client,
+    user_agent: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -107,6 +108,7 @@ impl UnityCatalog {
             endpoint: endpoint_str,
             token_provider,
             client: reqwest::Client::new(),
+            user_agent,
         }
     }
 
