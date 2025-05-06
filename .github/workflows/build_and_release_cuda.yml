@@ -51,6 +51,15 @@ on:
           - "89"
           - "90"
         default: "all"
+      profile_option:
+        description: "Which Rust build profile to use? (Default is release)"
+        required: false
+        type: choice
+        options:
+          - "debug"
+          - "release"
+          - "optimized"
+        default: "release"
 
 jobs:
   setup-matrix:
@@ -159,6 +168,8 @@ jobs:
     name: Build CUDA ${{ matrix.target.compute_cap }} binaries
     runs-on: ${{ matrix.target.runner }}
     needs: setup-matrix
+    env:
+      RUST_PROFILE: ${{ github.event.inputs.profile_option || 'release' }}
     strategy:
       fail-fast: false
       matrix:
@@ -198,8 +209,9 @@ jobs:
         with:
           cuda-version: "12.4.1"
           cuda-compute-capability: ${{ matrix.target.compute_cap }}
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
+          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}_${{ env.RUST_PROFILE }}
           target_os: ${{ matrix.target.target_os }}
+          rust-profile: ${{ env.RUST_PROFILE }}
 
   publish-minio:
     name: Publish linux-x86_64 CUDA binaries to Minio
@@ -211,6 +223,7 @@ jobs:
       MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
       MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       COMMIT_SHA: ${{ github.sha }}
+      RUST_PROFILE: ${{ github.event.inputs.profile_option || 'release' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -223,7 +236,7 @@ jobs:
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          pattern: spiced_models_cuda_*_linux_x86_64
+          pattern: spiced_models_cuda_*_linux_x86_64_${{ env.RUST_PROFILE }}
           path: ${{ env.ARTIFACT_DIR }}
           merge-multiple: true
 
@@ -235,8 +248,7 @@ jobs:
           sudo chmod +x /usr/local/bin/mc
           mc alias set spice-minio ${{ env.MINIO_ENDPOINT }} ${{ env.MINIO_ACCESS_KEY }} ${{ env.MINIO_SECRET_KEY }}
 
-          # Upload any CUDA artifacts that were successfully built
-          for file in ${{ env.ARTIFACT_DIR }}/spiced_models_cuda_*_linux_x86_64.tar.gz; do
+          for file in ${{ env.ARTIFACT_DIR }}/spiced_models_cuda_*_linux_x86_64_${{ env.RUST_PROFILE }}.tar.gz; do
             if [ -f "$file" ]; then
               echo "Uploading $file to Minio..."
               mc cp "$file" spice-minio/artifacts/spiced/linux-x86_64/${{ env.COMMIT_SHA }}/
@@ -249,6 +261,7 @@ jobs:
     if: startswith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request'
     env:
       ARTIFACT_DIR: ./release
+      RUST_PROFILE: ${{ github.event.inputs.profile_option || 'release' }}
 
     runs-on: ubuntu-latest
     steps:
@@ -265,13 +278,14 @@ jobs:
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
+          pattern: spiced_models_cuda_*_*_${{ env.RUST_PROFILE }}
           path: ${{ env.ARTIFACT_DIR }}
           merge-multiple: true
 
-      - name: lists artifacts
+      - name: List artifacts
         run: ls -l ${{ env.ARTIFACT_DIR }}
 
-      - name: publish CUDA binaries to github
+      - name: Publish CUDA binaries to GitHub
         run: |
           # Parse repository to get owner and repo names
           OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
