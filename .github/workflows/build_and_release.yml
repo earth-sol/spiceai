@@ -350,13 +350,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: spiced_models_darwin_aarch64
-          path: ${{ env.ARTIFACT_DIR }}
         
       # Publish Mac binaries to MinIO
       - name: Setup MinIO
         uses: ./.github/actions/setup-minio
         with:
-          minio_endpoint: ${{ secrets.TEST_MINIO_HOST }}
+          minio_endpoint: ${{ secrets.TEST_MINIO_ENDPOINT }}
           minio_access_key: ${{ secrets.TEST_MINIO_ACCESS_KEY }}
           minio_secret_key: ${{ secrets.TEST_MINIO_SECRET_KEY }}
           target_os: "darwin"

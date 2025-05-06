@@ -1,10 +1,17 @@
 name: Setup ODBC
 description: 'composite action'
 
+inputs:
+  target_os:
+    description: 'OS'
+    required: true
+    default: 'linux'
+    type: string
 runs:
   using: 'composite'
   steps:
     - name: Install Databricks ODBC driver
+      if: ${{ inputs.target_os == 'linux' }}
       shell: bash
       run: |
         sudo apt-get install unixodbc unixodbc-dev unzip libsasl2-modules-gssapi-mit -y
@@ -21,6 +28,7 @@ runs:
         sudo cp /tmp/odbcinst.ini /etc/odbcinst.ini
 
     - name: Install Athena ODBC driver
+      if: ${{ inputs.target_os == 'linux' }}
       shell: bash
       run: |
         sudo apt-get install alien -y
