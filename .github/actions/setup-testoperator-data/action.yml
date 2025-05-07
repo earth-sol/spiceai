@@ -21,21 +21,7 @@ runs:
         rm -rf /opt/spiced/data
         mkdir -p /opt/spiced/data
 
-    - name: Download DuckDB TPCH Data
-      shell: bash
-      if: inputs.query_set == 'tpch' || inputs.query_set == 'tpch[parameterized]'
-      run: |
-        cd /opt/spiced/data
-        mc cp spice-minio/benchmarks/duckdb/tpch.db ./
-
-    - name: Download DuckDB TPCDS Data
-      shell: bash
-      if: inputs.query_set == 'tpcds'
-      run: |
-        cd /opt/spiced/data
-        mc cp spice-minio/benchmarks/duckdb/tpcds.db ./
-
-    - name: Download File Connector TPCH Data
+    - name: Download TPCH Data
       shell: bash
       if: inputs.query_set == 'tpch' || inputs.query_set == 'tpch[parameterized]'
       run: |
@@ -43,7 +29,7 @@ runs:
         mkdir ./tpch_sf1
         mc cp spice-minio/benchmarks/tpch_sf1/ ./tpch_sf1/ --recursive
     
-    - name: Download File Connector TPCDS Data
+    - name: Download TPCDS Data
       shell: bash
       if: inputs.query_set == 'tpcds'
       run: |
