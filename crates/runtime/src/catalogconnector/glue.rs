@@ -18,6 +18,7 @@ use super::{CatalogConnector, ParameterSpec, Parameters};
 use crate::{Runtime, component::catalog::Catalog, dataconnector::ConnectorParams};
 use async_trait::async_trait;
 use data_components::RefreshableCatalogProvider;
+use datafusion::catalog::CatalogProvider;
 use snafu::prelude::*;
 use std::{any::Any, sync::Arc};
 
@@ -53,6 +54,27 @@ impl CatalogConnector for GlueCatalog {
         _runtime: Arc<Runtime>,
         catalog: &Catalog,
     ) -> super::Result<Arc<dyn RefreshableCatalogProvider>> {
+        todo!()
+    }
+}
+
+impl CatalogProvider for GlueCatalog {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn schema_names(&self) -> Vec<String> {
+        todo!()
+    }
+
+    fn schema(&self, name: &str) -> Option<Arc<dyn datafusion::catalog::SchemaProvider>> {
+        todo!()
+    }
+}
+
+#[async_trait]
+impl RefreshableCatalogProvider for GlueCatalog {
+    async fn refresh(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         todo!()
     }
 }
