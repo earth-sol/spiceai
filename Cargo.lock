@@ -834,7 +834,7 @@ dependencies = [
 [[package]]
 name = "async-openai"
 version = "0.28.0"
-source = "git+https://github.com/spiceai/async-openai?rev=c3db38ec439b55d5e1e7c515d1159632575fb091#c3db38ec439b55d5e1e7c515d1159632575fb091"
+source = "git+https://github.com/spiceai/async-openai?rev=21373192d0c3fa94c4438b8e677a9cc2350c7fca#21373192d0c3fa94c4438b8e677a9cc2350c7fca"
 dependencies = [
  "async-openai-macros",
  "backoff",
@@ -860,7 +860,7 @@ dependencies = [
 [[package]]
 name = "async-openai-macros"
 version = "0.1.0"
-source = "git+https://github.com/spiceai/async-openai?rev=c3db38ec439b55d5e1e7c515d1159632575fb091#c3db38ec439b55d5e1e7c515d1159632575fb091"
+source = "git+https://github.com/spiceai/async-openai?rev=21373192d0c3fa94c4438b8e677a9cc2350c7fca#21373192d0c3fa94c4438b8e677a9cc2350c7fca"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7124,12 +7124,14 @@ dependencies = [
  "text-embeddings-core",
  "text-splitter",
  "tiktoken-rs",
+ "token_providers",
  "tokenizers",
  "tokio",
  "tracing",
  "tracing-futures",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
