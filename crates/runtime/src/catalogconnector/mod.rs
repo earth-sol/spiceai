@@ -141,6 +141,11 @@ pub async fn register_all() {
     );
 
     registry.insert(
+        "glue".to_string(),
+        CatalogConnectorFactory::new(glue::GlueCatalog::new_connector, "glue", glue::PARAMETERS),
+    );
+
+    registry.insert(
         "spice.ai".to_string(),
         CatalogConnectorFactory::new(
             spice_cloud::SpiceCloudPlatformCatalog::new_connector,
