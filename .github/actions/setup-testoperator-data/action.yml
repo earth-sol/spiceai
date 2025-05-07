@@ -18,9 +18,8 @@ runs:
     - name: Prepare file-based data directory
       shell: bash
       run: |
-        sudo rm -rf /opt/spiced/data
-        sudo mkdir -p /opt/spiced/data
-        sudo chown runner:runner -R /opt/spiced/data
+        rm -rf /opt/spiced/data
+        mkdir -p /opt/spiced/data
 
     - name: Download DuckDB TPCH Data
       shell: bash
