@@ -47,9 +47,12 @@ use middleware::{RequestContextLayer, WriteRateLimitLayer};
 use runtime_auth::{FlightBasicAuth, layer::flight::BasicAuthLayer};
 use secrecy::ExposeSecret;
 use snafu::prelude::*;
+use socket2::{Domain, Socket, Type};
 use std::collections::HashMap;
 use std::num::NonZeroU32;
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::sync::Arc;
+use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tokio::sync::broadcast::Sender;
 use tokio_util::sync::CancellationToken;
@@ -375,9 +378,20 @@ pub async fn start(
         .layer(auth_layer)
         .add_service(svc);
 
+    let socket = Socket::new(Domain::IPV4, Type::STREAM, None).unwrap();
+    socket.set_reuse_address(true).unwrap();
+    socket.set_reuse_port(true).unwrap();
+    socket.bind(&bind_address.into()).unwrap();
+    socket.listen(128).unwrap();
+
+    let listener = TcpListener::from_std(socket.into()).unwrap();
+
     if let Some(token) = shutdown_signal {
         server
-            .serve_with_shutdown(bind_address, token.cancelled())
+            .serve_with_incoming_shutdown(
+                tokio_stream::wrappers::TcpListenerStream::new(listener),
+                token.cancelled(),
+            )
             .await
     } else {
         server.serve(bind_address).await
