@@ -96,6 +96,13 @@ impl UnityCatalog {
             endpoint_str = format!("https://{endpoint_str}");
         }
 
+        let mut user_agent: Option<String> = None;
+        #[cfg(feature = "databricks")]
+        // Include user_agent, if connects to Databricks instance
+        if endpoint.0.contains("databricks") {
+            user_agent = Some(crate::databricks::user_agent().to_string());
+        }
+
         Self {
             endpoint: endpoint_str,
             token_provider,
