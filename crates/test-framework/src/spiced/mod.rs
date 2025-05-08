@@ -154,7 +154,7 @@ impl SpicedInstance {
         let mut cmd = Command::new(start_request.spiced_path);
         cmd.current_dir(tempdir.path());
         cmd.arg("--telemetry-enabled=false");
-        cmd.arg("--flight=0.0.0.0:51252");
+        cmd.arg("--flight=0.0.0.0:51253");
         let child = cmd.spawn()?;
 
         Ok(Self {
@@ -190,7 +190,7 @@ impl SpicedInstance {
         };
 
         Ok(
-            FlightClient::try_new("http://127.0.0.1:51252".into(), credentials, Some(metadata))
+            FlightClient::try_new("http://127.0.0.1:51253".into(), credentials, Some(metadata))
                 .await?,
         )
     }
