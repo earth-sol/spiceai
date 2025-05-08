@@ -189,7 +189,7 @@ impl SpicedInstance {
         };
 
         Ok(
-            FlightClient::try_new("http://localhost:50051".into(), credentials, Some(metadata))
+            FlightClient::try_new("http://127.0.0.1:50051".into(), credentials, Some(metadata))
                 .await?,
         )
     }
@@ -214,7 +214,7 @@ impl SpicedInstance {
         // Wait for the spiced instance to be ready by polling the `/v1/ready` endpoint
         let client = self.http_client()?;
         if !wait_until_true(timeout, || async {
-            let response = client.get("http://localhost:8090/v1/ready").send().await;
+            let response = client.get("http://127.0.0.1:8090/v1/ready").send().await;
             match response {
                 Ok(response) => response.status().is_success(),
                 Err(_) => false,
@@ -231,7 +231,7 @@ impl SpicedInstance {
         let Ok(client) = self.http_client() else {
             return false;
         };
-        let response = client.get("http://localhost:8090/v1/ready").send().await;
+        let response = client.get("http://127.0.0.1:8090/v1/ready").send().await;
         match response {
             Ok(response) => response.status().is_success(),
             Err(_) => false,
