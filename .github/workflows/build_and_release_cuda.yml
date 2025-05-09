@@ -56,9 +56,8 @@ on:
         required: false
         type: choice
         options:
-          - "debug"
           - "release"
-          - "optimized"
+          - "release-lto"
         default: "release"
 
 jobs:
@@ -209,7 +208,7 @@ jobs:
         with:
           cuda-version: "12.4.1"
           cuda-compute-capability: ${{ matrix.target.compute_cap }}
-          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}_${{ env.RUST_PROFILE }}
+          artifact-tag: ${{ matrix.target.target_os }}_${{ matrix.target.target_arch }}
           target_os: ${{ matrix.target.target_os }}
           rust-profile: ${{ env.RUST_PROFILE }}
 
@@ -236,7 +235,7 @@ jobs:
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          pattern: spiced_models_cuda_*_linux_x86_64_${{ env.RUST_PROFILE }}
+          pattern: spiced_models_cuda_*_linux_x86_64
           path: ${{ env.ARTIFACT_DIR }}
           merge-multiple: true
 
@@ -248,7 +247,8 @@ jobs:
           sudo chmod +x /usr/local/bin/mc
           mc alias set spice-minio ${{ env.MINIO_ENDPOINT }} ${{ env.MINIO_ACCESS_KEY }} ${{ env.MINIO_SECRET_KEY }}
 
-          for file in ${{ env.ARTIFACT_DIR }}/spiced_models_cuda_*_linux_x86_64_${{ env.RUST_PROFILE }}.tar.gz; do
+          # Upload any CUDA artifacts that were successfully built
+          for file in ${{ env.ARTIFACT_DIR }}/spiced_models_cuda_*_linux_x86_64.tar.gz; do
             if [ -f "$file" ]; then
               echo "Uploading $file to Minio..."
               mc cp "$file" spice-minio/artifacts/spiced/linux-x86_64/${{ env.COMMIT_SHA }}/
@@ -278,7 +278,6 @@ jobs:
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          pattern: spiced_models_cuda_*_*_${{ env.RUST_PROFILE }}
           path: ${{ env.ARTIFACT_DIR }}
           merge-multiple: true
 
