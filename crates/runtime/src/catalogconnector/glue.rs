@@ -69,7 +69,7 @@ impl fmt::Debug for GlueCatalogProvider {
 }
 
 struct Inner {
-    glue: Client,
+    _glue: Client,
     databases: HashMap<DatabaseName, Vec<TableName>>,
 }
 
@@ -137,7 +137,8 @@ impl GlueCatalogProvider {
                 .table_list()
                 .iter()
                 .filter_map(|t| {
-                    if is_supported(t) && is_included(&catalog.include, &db.name, t.name()) {
+                    if is_supported(t) && is_included(catalog.include.as_ref(), &db.name, t.name())
+                    {
                         Some(t.name().to_string())
                     } else {
                         None
@@ -150,7 +151,10 @@ impl GlueCatalogProvider {
             }
         }
 
-        let inner = Arc::new(Inner { glue, databases });
+        let inner = Arc::new(Inner {
+            _glue: glue,
+            databases,
+        });
 
         Ok(Self { inner })
     }
@@ -160,21 +164,19 @@ fn is_supported(table: &Table) -> bool {
     let is_iceberg = table
         .parameters
         .as_ref()
-        .and_then(|params| dbg!(params).get("table_type"))
-        .map(|value| value.to_lowercase() == "iceberg")
-        .unwrap_or(false);
+        .and_then(|params| params.get("table_type"))
+        .is_some_and(|value| value.to_lowercase() == "iceberg");
 
-    let is_parquet = if !is_iceberg {
+    let is_parquet = if is_iceberg {
+        false
+    } else {
         table
             .storage_descriptor
             .as_ref()
-            .and_then(|sd| dbg!(sd).input_format.as_ref())
-            .map(|input_format| {
+            .and_then(|sd| sd.input_format.as_ref())
+            .is_some_and(|input_format| {
                 input_format == "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
             })
-            .unwrap_or(false)
-    } else {
-        false
     };
 
     let is_supported = is_iceberg || is_parquet;
@@ -189,7 +191,7 @@ fn is_supported(table: &Table) -> bool {
     is_supported
 }
 
-fn is_included(include: &Option<GlobSet>, schema: &str, table: &str) -> bool {
+fn is_included(include: Option<&GlobSet>, schema: &str, table: &str) -> bool {
     let schema_with_table = format!("{schema}.{table}");
     tracing::debug!("Checking if table {} should be included", schema_with_table);
     if let Some(include) = include {
@@ -283,7 +285,7 @@ async fn load_config(params: &Parameters) -> SdkConfig {
         .get("glue_aws_region")
         .expose()
         .ok()
-        .unwrap()
+        .unwrap_or("us-east-1")
         .to_string();
 
     let access_key_id = params
@@ -304,7 +306,7 @@ async fn load_config(params: &Parameters) -> SdkConfig {
         .ok()
         .map(ToString::to_string);
 
-    let config = match (access_key_id, secret_access_key) {
+    match (access_key_id, secret_access_key) {
         (Some(access_key_id), Some(secret_access_key)) => {
             let credentials = Credentials::new(
                 access_key_id,
@@ -327,7 +329,5 @@ async fn load_config(params: &Parameters) -> SdkConfig {
                 .load()
                 .await
         }
-    };
-
-    config
+    }
 }
