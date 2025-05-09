@@ -15,18 +15,36 @@ limitations under the License.
 */
 
 use super::{CatalogConnector, ParameterSpec, Parameters};
-use crate::{Runtime, component::catalog::Catalog, dataconnector::ConnectorParams};
+use crate::{
+    Runtime,
+    component::catalog::Catalog,
+    dataconnector::{ConnectorComponent, ConnectorParams},
+};
 use async_trait::async_trait;
 use aws_config::{BehaviorVersion, Region, SdkConfig};
-use aws_sdk_glue::Client;
+use aws_sdk_glue::{
+    Client,
+    error::SdkError,
+    operation::{get_databases::GetDatabasesError, get_tables::GetTablesError},
+};
 use aws_sdk_sts::config::Credentials;
 use data_components::RefreshableCatalogProvider;
-use datafusion::catalog::CatalogProvider;
+use datafusion::{
+    catalog::{CatalogProvider, SchemaProvider, TableProvider},
+    common::Result as DFResult,
+};
+use globset::GlobSet;
 use snafu::prelude::*;
-use std::{any::Any, sync::Arc};
+use std::fmt;
+use std::{any::Any, collections::HashMap, sync::Arc};
 
 #[derive(Debug, Snafu)]
-pub enum Error {}
+pub enum Error {
+    #[snafu(display("Failed to get Glue databases: {}", source))]
+    GetDatabases { source: SdkError<GetDatabasesError> },
+    #[snafu(display("Failed to get Glue tables: {}", source))]
+    GetTables { source: SdkError<GetTablesError> },
+}
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -35,26 +53,114 @@ pub struct GlueCatalog {
     params: Parameters,
 }
 
-#[derive(Debug)]
+type DatabaseName = String;
+type TableName = String;
+
 pub struct GlueCatalogProvider {
+    inner: Arc<Inner>,
+}
+
+impl fmt::Debug for GlueCatalogProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GlueCatalogProvider")
+            .finish_non_exhaustive()
+    }
+}
+
+struct Inner {
     glue: Client,
-    schema_names: Vec<String>,
+    databases: HashMap<DatabaseName, Vec<TableName>>,
+}
+
+pub struct GlueSchemaProvider {
+    schema: String,
+    inner: Arc<Inner>,
+}
+
+impl fmt::Debug for GlueSchemaProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GlueSchemaProvider")
+            .field("schema", &self.schema)
+            .finish_non_exhaustive()
+    }
+}
+
+#[async_trait]
+impl SchemaProvider for GlueSchemaProvider {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn table_names(&self) -> Vec<String> {
+        self.inner
+            .databases
+            .get(&self.schema)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn table_exist(&self, name: &str) -> bool {
+        self.inner.databases.contains_key(name)
+    }
+
+    async fn table(&self, name: &str) -> DFResult<Option<Arc<dyn TableProvider>>> {
+        // TODO
+        eprintln!("todo: load table {name}");
+        Ok(None)
+    }
 }
 
 impl GlueCatalogProvider {
-    pub async fn new(params: &Parameters) -> Self {
+    pub async fn new(params: &Parameters, catalog: &Catalog) -> Result<Self> {
         let config = load_config(params).await;
-        let glue = Client::new(dbg!(&config));
+        let glue = Client::new(&config);
 
-        let list_schemas_output = glue.list_schemas().send().await.unwrap();
-        let schema_names = dbg!(list_schemas_output)
-            .schemas()
-            .iter()
-            .filter_map(|item| item.schema_name.clone())
-            .collect();
+        let get_databases_output = glue
+            .get_databases()
+            .send()
+            .await
+            .context(GetDatabasesSnafu)?;
 
-        Self { glue, schema_names }
+        let mut databases = HashMap::new();
+        for db in get_databases_output.database_list {
+            // TODO: would be nice to skip this network call if we can tell that
+            // the Glue database is not in the include
+            let get_tables_output = glue
+                .get_tables()
+                .database_name(&db.name)
+                .send()
+                .await
+                .context(GetTablesSnafu)?;
+
+            let mut table_names = get_tables_output
+                .table_list()
+                .iter()
+                .map(|t| t.name.clone())
+                .collect::<Vec<_>>();
+
+            table_names.retain(|table_name| include_table(&catalog.include, &db.name, table_name));
+
+            if !table_names.is_empty() {
+                databases.insert(db.name, table_names);
+            }
+        }
+
+        let inner = Arc::new(Inner { glue, databases });
+
+        Ok(Self { inner })
     }
+}
+
+fn include_table(include: &Option<GlobSet>, schema: &str, table: &str) -> bool {
+    let schema_with_table = format!("{schema}.{table}");
+    tracing::debug!("Checking if table {} should be included", schema_with_table);
+    if let Some(include) = include {
+        if !include.is_match(&schema_with_table) {
+            tracing::debug!("Table {} is not included", schema_with_table);
+            return false;
+        }
+    }
+    true
 }
 
 impl GlueCatalog {
@@ -92,7 +198,15 @@ impl CatalogConnector for GlueCatalog {
         _runtime: Arc<Runtime>,
         catalog: &Catalog,
     ) -> super::Result<Arc<dyn RefreshableCatalogProvider>> {
-        Ok(Arc::new(GlueCatalogProvider::new(&self.params).await))
+        Ok(Arc::new(
+            GlueCatalogProvider::new(&self.params, catalog)
+                .await
+                .map_err(|e| super::Error::UnableToGetCatalogProvider {
+                    connector: "glue".to_string(),
+                    connector_component: ConnectorComponent::from(catalog),
+                    source: Box::new(e),
+                })?,
+        ))
     }
 }
 
@@ -102,11 +216,19 @@ impl CatalogProvider for GlueCatalogProvider {
     }
 
     fn schema_names(&self) -> Vec<String> {
-        self.schema_names.clone()
+        self.inner.databases.keys().cloned().collect()
     }
 
     fn schema(&self, name: &str) -> Option<Arc<dyn datafusion::catalog::SchemaProvider>> {
-        None
+        if self.inner.databases.contains_key(name) {
+            let schema_provider = GlueSchemaProvider {
+                schema: name.to_string(),
+                inner: Arc::clone(&self.inner),
+            };
+            Some(Arc::new(schema_provider))
+        } else {
+            None
+        }
     }
 }
 
