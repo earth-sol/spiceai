@@ -26,6 +26,7 @@ use aws_sdk_glue::{
     Client,
     error::SdkError,
     operation::{get_databases::GetDatabasesError, get_tables::GetTablesError},
+    types::Table,
 };
 use aws_sdk_sts::config::Credentials;
 use data_components::RefreshableCatalogProvider;
@@ -132,13 +133,17 @@ impl GlueCatalogProvider {
                 .await
                 .context(GetTablesSnafu)?;
 
-            let mut table_names = get_tables_output
+            let table_names = get_tables_output
                 .table_list()
                 .iter()
-                .map(|t| t.name.clone())
+                .filter_map(|t| {
+                    if is_supported(t) && is_included(&catalog.include, &db.name, t.name()) {
+                        Some(t.name().to_string())
+                    } else {
+                        None
+                    }
+                })
                 .collect::<Vec<_>>();
-
-            table_names.retain(|table_name| include_table(&catalog.include, &db.name, table_name));
 
             if !table_names.is_empty() {
                 databases.insert(db.name, table_names);
@@ -151,7 +156,40 @@ impl GlueCatalogProvider {
     }
 }
 
-fn include_table(include: &Option<GlobSet>, schema: &str, table: &str) -> bool {
+fn is_supported(table: &Table) -> bool {
+    let is_iceberg = table
+        .parameters
+        .as_ref()
+        .and_then(|params| dbg!(params).get("table_type"))
+        .map(|value| value.to_lowercase() == "iceberg")
+        .unwrap_or(false);
+
+    let is_parquet = if !is_iceberg {
+        table
+            .storage_descriptor
+            .as_ref()
+            .and_then(|sd| dbg!(sd).input_format.as_ref())
+            .map(|input_format| {
+                input_format == "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
+            })
+            .unwrap_or(false)
+    } else {
+        false
+    };
+
+    let is_supported = is_iceberg || is_parquet;
+
+    if !is_supported {
+        tracing::debug!(
+            "table {} is not supported. Iceberg and Hive tables are currently supported",
+            table.name()
+        );
+    }
+
+    is_supported
+}
+
+fn is_included(include: &Option<GlobSet>, schema: &str, table: &str) -> bool {
     let schema_with_table = format!("{schema}.{table}");
     tracing::debug!("Checking if table {} should be included", schema_with_table);
     if let Some(include) = include {
