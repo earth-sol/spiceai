@@ -239,11 +239,7 @@ async fn databricks(
             param_key: "databricks_endpoint",
         });
     };
-    let Some(token) = extract_secret!(params, "databricks_token") else {
-        return Err(LlmError::MissingParamError {
-            param_key: "databricks_token",
-        });
-    };
+
     let Some(model_id) = model_id else {
         return Err(LlmError::ModelNotProvided {
             model_source: "databricks".to_string(),
