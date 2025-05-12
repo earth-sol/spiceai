@@ -72,7 +72,7 @@ _T: Time-Bound_
 
 <!--
 
-Release notes for this enhancement, to be filled once completed. These release notes will be included as highlights on the next release.
+Release notes for this enhancement, to be completed at the beginning because we [start from the end](https://productstrategy.co/working-backwards-the-amazon-prfaq-for-product-innovation/). These release notes will be included as highlights on the next release.
 
 Example:
 
