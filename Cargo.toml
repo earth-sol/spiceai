@@ -104,7 +104,7 @@ mailparse = "0.15.0"
 moka = { version = "0.12", features = ["future"] }
 mysql_async = { version = "0.35.1", features = ["native-tls-tls", "chrono"] }
 object_store = { version = "0.11" }
-odbc-api = { version = "12.0.1" }
+odbc-api = { version = "12.2.0" }
 opentelemetry = { version = "0.27", default-features = false, features = [
     "metrics",
     "trace",
