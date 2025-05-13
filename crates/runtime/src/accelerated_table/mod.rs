@@ -453,7 +453,6 @@ impl Builder {
         if let Some(synchronize_with) = &self.synchronize_with {
             refresher.synchronize_with(synchronize_with.clone());
         }
-
         if let Some(semaphore) = self.refresh_semaphore {
             refresher.semaphore(semaphore);
         }
