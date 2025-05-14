@@ -281,10 +281,11 @@ impl PhysicalJobExecutor {
 
     async fn loop_success_validator(
         &self,
-        req: CreateChatCompletionRequest,
+        mut req: CreateChatCompletionRequest,
         model: &dyn Chat,
     ) -> Result<(VerificationResponse, String), anyhow::Error> {
         let mut iteration = 0;
+        let mut messages = req.messages.clone();
         loop {
             let response = model.chat_request(req.clone()).await?;
             let verification: Result<VerificationResponse, ConversionError> =
@@ -306,7 +307,7 @@ impl PhysicalJobExecutor {
                     return Err(anyhow::anyhow!("Failed to parse tool step: {e}"));
                 }
                 Err(ConversionError::JsonSchema(e)) => {
-                    if iteration > 3 {
+                    if iteration > 5 {
                         return Err(anyhow::anyhow!("Failed to validate tool step: {e}"));
                     }
 
@@ -314,6 +315,25 @@ impl PhysicalJobExecutor {
                         "Structured output for success validation was invalid. Retrying..."
                     );
                     iteration += 1;
+
+                    // 1) Include the assistant’s previous, invalid payload
+                    messages.push(ChatCompletionRequestMessage::Assistant(
+                        message.clone().into(),
+                    ));
+
+                    // 2) Push a user message with the precise validation feedback
+                    messages.push(
+                        ChatCompletionRequestMessage::User(
+                            format!(
+                                "Your last response did not pass the structured output schema validation: {}.\n\
+                                Please re-generate the response exactly matching the structured output schema, \
+                                including all required fields (status, reason, wait) and no extra properties.",
+                                e
+                            ).into()
+                        )
+                    );
+
+                    req.messages = messages.clone();
                     continue;
                 }
             }
@@ -362,7 +382,7 @@ impl PhysicalJobExecutor {
                 3. Make a tool call to retrieve the relevant terminal logs.
                 4. The terminal logs include no error messages, and the command output is as expected.
                 5. The tool call is classified as successful.
-                
+
                 ## Example Successful Classification Process
                 1. Inspect the tool output. The tool output shows that a background service `postgres` was started with a command that exited with status code 0.
                 2. Make a tool call to check if the daemon process is running with `ps -aux | grep postgres`.
@@ -571,7 +591,7 @@ impl PhysicalJobExecutor {
         let message = ChatCompletionRequestUserMessageContent::Text(format!(
             "# Task Execution Summary
             {summary}
-            
+
             ## Instructions
             - Use this summary as context for subsequent tasks
             - Reference key findings and outcomes when relevant
