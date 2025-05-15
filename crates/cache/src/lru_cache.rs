@@ -24,16 +24,17 @@ use async_trait::async_trait;
 use datafusion::sql::TableReference;
 use moka::future::Cache;
 use snafu::ResultExt;
+use std::hash::BuildHasher;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub struct LruCache {
-    cache: Cache<u64, CachedQueryResult>,
+pub struct LruCache<T: BuildHasher + Clone + Send + Sync> {
+    cache: Cache<u64, CachedQueryResult, T>,
 }
 
-impl LruCache {
-    pub fn new(cache_max_size: u64, ttl: Duration) -> Self {
-        let cache: Cache<u64, CachedQueryResult> = Cache::builder()
+impl<T: BuildHasher + Clone + Send + Sync + 'static> LruCache<T> {
+    pub fn new(cache_max_size: u64, ttl: Duration, hasher: T) -> Self {
+        let cache: Cache<u64, CachedQueryResult, T> = Cache::builder()
             .time_to_live(ttl)
             .weigher(|_key, value: &CachedQueryResult| -> u32 {
                 let val: usize = value
@@ -58,14 +59,14 @@ impl LruCache {
             .max_capacity(cache_max_size)
             .eviction_policy(moka::policy::EvictionPolicy::lru())
             .support_invalidation_closures()
-            .build();
+            .build_with_hasher(hasher);
 
         LruCache { cache }
     }
 }
 
 #[async_trait]
-impl QueryResultCache for LruCache {
+impl<T: BuildHasher + Clone + Send + Sync + 'static> QueryResultCache for LruCache<T> {
     async fn get<'a>(&self, key: CacheKey<'a>) -> Result<Option<CachedQueryResult>> {
         let raw_key = key.as_raw_key();
         self.get_raw_key(raw_key).await
@@ -116,6 +117,7 @@ mod tests {
     use super::*;
     use arrow::array::{Int32Array, RecordBatch};
     use arrow::datatypes::{DataType, Field, Schema};
+    use rstest::rstest;
     use std::collections::HashSet;
     use std::time::Duration;
 
@@ -140,9 +142,14 @@ mod tests {
         }
     }
 
+    #[rstest]
+    #[case::ahash(ahash::RandomState::default())]
+    #[case::siphash(std::hash::RandomState::default())]
     #[tokio::test]
-    async fn test_cache_put_and_get() {
-        let cache = LruCache::new(10, Duration::from_secs(60));
+    async fn test_cache_put_and_get<T: BuildHasher + Clone + Send + Sync + 'static>(
+        #[case] hasher: T,
+    ) {
+        let cache = LruCache::new(10, Duration::from_secs(60), hasher);
         let key = CacheKey::Query("test_query", None);
         let result = create_test_cached_result();
 
@@ -163,9 +170,12 @@ mod tests {
         );
     }
 
+    #[rstest]
+    #[case::ahash(ahash::RandomState::default())]
+    #[case::siphash(std::hash::RandomState::default())]
     #[tokio::test]
-    async fn test_cache_miss() {
-        let cache = LruCache::new(10, Duration::from_secs(60));
+    async fn test_cache_miss<T: BuildHasher + Clone + Send + Sync + 'static>(#[case] hasher: T) {
+        let cache = LruCache::new(10, Duration::from_secs(60), hasher);
         let key = CacheKey::Query("nonexistent_query", None);
 
         // Try to get a non-existent key
@@ -173,9 +183,14 @@ mod tests {
         assert!(retrieved.is_none());
     }
 
+    #[rstest]
+    #[case::ahash(ahash::RandomState::default())]
+    #[case::siphash(std::hash::RandomState::default())]
     #[tokio::test]
-    async fn test_cache_put_raw_key() {
-        let cache = LruCache::new(10, Duration::from_secs(60));
+    async fn test_cache_put_raw_key<T: BuildHasher + Clone + Send + Sync + 'static>(
+        #[case] hasher: T,
+    ) {
+        let cache = LruCache::new(10, Duration::from_secs(60), hasher);
         let raw_key = CacheKey::Query("test_query", None).as_raw_key();
         let result = create_test_cached_result();
 
@@ -196,9 +211,14 @@ mod tests {
         );
     }
 
+    #[rstest]
+    #[case::ahash(ahash::RandomState::default())]
+    #[case::siphash(std::hash::RandomState::default())]
     #[tokio::test]
-    async fn test_cache_invalidate_for_table() {
-        let cache = LruCache::new(10, Duration::from_secs(60));
+    async fn test_cache_invalidate_for_table<T: BuildHasher + Clone + Send + Sync + 'static>(
+        #[case] hasher: T,
+    ) {
+        let cache = LruCache::new(10, Duration::from_secs(60), hasher);
         let table_ref = TableReference::Bare {
             table: Arc::from("test_table"),
         };
@@ -233,9 +253,12 @@ mod tests {
         assert!(retrieved.is_none());
     }
 
+    #[rstest]
+    #[case::ahash(ahash::RandomState::default())]
+    #[case::siphash(std::hash::RandomState::default())]
     #[tokio::test]
-    async fn test_cache_ttl() {
-        let cache = LruCache::new(10, Duration::from_millis(100));
+    async fn test_cache_ttl<T: BuildHasher + Clone + Send + Sync + 'static>(#[case] hasher: T) {
+        let cache = LruCache::new(10, Duration::from_millis(100), hasher);
         let key = || CacheKey::Query("test_query", None);
         let result = create_test_cached_result();
 

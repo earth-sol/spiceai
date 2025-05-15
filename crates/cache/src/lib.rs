@@ -37,6 +37,7 @@ use datafusion::sql::TableReference;
 use fundu::ParseError;
 use lru_cache::LruCache;
 use snafu::{ResultExt, Snafu};
+use spicepod::component::runtime::HashingAlgorithm;
 use spicepod::component::runtime::ResultsCache;
 
 mod lru_cache;
@@ -198,7 +199,19 @@ impl QueryResultsCacheProvider {
         };
 
         let cache_provider = QueryResultsCacheProvider {
-            cache: Arc::new(LruCache::new(cache_max_size, ttl)),
+            // specifying the match here simplifies needing to specify type annotations everywhere else
+            cache: match config.hashing_algorithm {
+                HashingAlgorithm::Ahash => Arc::new(LruCache::new(
+                    cache_max_size,
+                    ttl,
+                    ahash::RandomState::default(),
+                )),
+                HashingAlgorithm::Siphash => Arc::new(LruCache::new(
+                    cache_max_size,
+                    ttl,
+                    std::hash::RandomState::default(),
+                )),
+            },
             cache_max_size,
             ttl,
             metrics_reported_last_time: AtomicU64::new(0),

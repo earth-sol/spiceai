@@ -249,7 +249,7 @@ mod tests {
     use futures::TryStreamExt;
 
     use cache::{CacheKey, QueryResultsCacheProvider, QueryResultsCacheStatus};
-    use spicepod::component::runtime::ResultsCache;
+    use spicepod::component::runtime::{HashingAlgorithm, ResultsCache};
 
     use crate::{
         builder::RuntimeBuilder,
@@ -289,6 +289,7 @@ mod tests {
             item_ttl: Some("10m".to_string()),
             eviction_policy: None,
             cache_key_type: spicepod::component::runtime::CacheKeyType::Sql,
+            hashing_algorithm: HashingAlgorithm::default(),
         };
         let cache_provider =
             QueryResultsCacheProvider::try_new(&results_cache_config, Box::new([]))
@@ -410,6 +411,7 @@ mod tests {
             item_ttl: Some("10m".to_string()),
             eviction_policy: None,
             cache_key_type: spicepod::component::runtime::CacheKeyType::Sql,
+            hashing_algorithm: HashingAlgorithm::default(),
         };
         let cache_provider =
             QueryResultsCacheProvider::try_new(&results_cache_config, Box::new([]))
@@ -470,6 +472,7 @@ mod tests {
             item_ttl: Some("10m".to_string()),
             eviction_policy: None,
             cache_key_type: spicepod::component::runtime::CacheKeyType::Plan,
+            hashing_algorithm: HashingAlgorithm::default(),
         };
         let cache_provider =
             QueryResultsCacheProvider::try_new(&results_cache_config, Box::new([]))
