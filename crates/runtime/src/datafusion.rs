@@ -1482,9 +1482,8 @@ impl DataFusion {
         &self,
         session: &SessionState,
         sql: &str,
+        key: RawCacheKey,
     ) -> Result<LogicalPlan, DataFusionError> {
-        let key = CacheKey::Query(sql, None).as_raw_key();
-
         if let Some(plan) = self.cached_plans.get(&key).await {
             tracing::trace!("using cached plan for {sql}");
             return Ok(plan);
@@ -1579,6 +1578,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_or_create_logical_plan() {
         static SQL: &str = "SELECT 1";
+        let sql_raw_cache_key: RawCacheKey = CacheKey::Query(SQL, None).as_raw_key();
 
         let runtime = RuntimeBuilder::new().build().await;
         let df = Arc::new(
@@ -1591,7 +1591,7 @@ mod tests {
 
         let session = df.ctx.state();
 
-        df.get_or_create_logical_plan(&session, SQL)
+        df.get_or_create_logical_plan(&session, SQL, sql_raw_cache_key)
             .await
             .expect("logical plan");
 
@@ -1599,7 +1599,7 @@ mod tests {
         assert_eq!(df.cached_plans.entry_count(), 1);
 
         // Reusing the same query should no longer at to the cache
-        df.get_or_create_logical_plan(&session, SQL)
+        df.get_or_create_logical_plan(&session, SQL, sql_raw_cache_key)
             .await
             .expect("logical plan");
 

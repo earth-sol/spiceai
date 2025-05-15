@@ -64,6 +64,19 @@ pub enum Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+pub trait WithHashingAlgorithm {
+    fn hasher(&self) -> Box<dyn Hasher + Send + Sync>;
+}
+
+impl WithHashingAlgorithm for HashingAlgorithm {
+    fn hasher(&self) -> Box<dyn Hasher + Send + Sync> {
+        match self {
+            HashingAlgorithm::Ahash => Box::new(ahash::AHasher::default()),
+            HashingAlgorithm::Siphash => Box::new(DefaultHasher::default()),
+        }
+    }
+}
+
 pub struct QueryResult {
     pub data: SendableRecordBatchStream,
     pub results_cache_status: QueryResultsCacheStatus,
@@ -99,6 +112,7 @@ impl CacheKey<'_> {
     #[must_use]
     pub fn as_raw_key(&self) -> RawCacheKey {
         let mut hasher = DefaultHasher::new();
+        // let mut hasher = ahash::AHasher::default();
         match self {
             Self::LogicalPlan(logical_plan) => logical_plan.hash(&mut hasher),
             Self::Query(sql, param_values) => {
@@ -163,6 +177,7 @@ pub struct QueryResultsCacheProvider {
     cache_max_size: u64,
     ttl: std::time::Duration,
     metrics_reported_last_time: AtomicU64,
+    hashing_algorithm: HashingAlgorithm,
 
     ignore_schemas: Box<[Box<str>]>,
 }
@@ -201,17 +216,24 @@ impl QueryResultsCacheProvider {
         let cache_provider = QueryResultsCacheProvider {
             // specifying the match here simplifies needing to specify type annotations everywhere else
             cache: match config.hashing_algorithm {
-                HashingAlgorithm::Ahash => Arc::new(LruCache::new(
-                    cache_max_size,
-                    ttl,
-                    ahash::RandomState::default(),
-                )),
-                HashingAlgorithm::Siphash => Arc::new(LruCache::new(
-                    cache_max_size,
-                    ttl,
-                    std::hash::RandomState::default(),
-                )),
+                HashingAlgorithm::Ahash => {
+                    println!("Using ahash");
+                    Arc::new(LruCache::new(
+                        cache_max_size,
+                        ttl,
+                        ahash::RandomState::default(),
+                    ))
+                }
+                HashingAlgorithm::Siphash => {
+                    println!("Using siphash");
+                    Arc::new(LruCache::new(
+                        cache_max_size,
+                        ttl,
+                        std::hash::RandomState::default(),
+                    ))
+                }
             },
+            hashing_algorithm: config.hashing_algorithm,
             cache_max_size,
             ttl,
             metrics_reported_last_time: AtomicU64::new(0),
