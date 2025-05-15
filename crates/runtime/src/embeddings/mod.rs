@@ -20,7 +20,6 @@ pub mod execution_plan;
 pub mod metrics;
 pub mod table;
 pub mod task;
-pub mod vector_search;
 
 /// Converts string-like Arrow types into an iterator [`Option<Box<dyn Iterator<Item = Option<&str>>>>`]. If the downcast conversion
 /// fails, returns `None`.

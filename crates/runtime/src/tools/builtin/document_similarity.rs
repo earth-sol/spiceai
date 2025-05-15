@@ -22,7 +22,7 @@ use tracing_futures::Instrument;
 
 use crate::{
     Runtime,
-    embeddings::vector_search::{
+    search::vector_search::{
         SearchRequest, SearchRequestAIJson, VectorSearch, parse_explicit_primary_keys,
     },
     tools::{SpiceModelTool, utils::parameters},

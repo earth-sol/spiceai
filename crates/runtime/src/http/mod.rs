@@ -30,9 +30,8 @@ use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Runtime, config,
-    embeddings::vector_search::{self, parse_explicit_primary_keys},
-    metrics as runtime_metrics,
+    Runtime, config, metrics as runtime_metrics,
+    search::vector_search::{self, parse_explicit_primary_keys},
     tls::TlsConfig,
 };
 

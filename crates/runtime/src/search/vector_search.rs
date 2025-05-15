@@ -23,6 +23,8 @@ use arrow_schema::{Schema, SchemaRef};
 use arrow_tools::format::to_markdown_documents;
 use async_openai::types::EmbeddingInput;
 use datafusion::common::utils::quote_identifier;
+use datafusion::error::DataFusionError;
+use datafusion::execution::SendableRecordBatchStream;
 use datafusion::sql::sqlparser;
 use datafusion::sql::sqlparser::ast::{Expr, SelectItem, TableFactor, TableWithJoins};
 use datafusion::sql::sqlparser::dialect::GenericDialect;
@@ -34,17 +36,20 @@ use datafusion_federation::FederatedTableProviderAdaptor;
 use futures::TryStreamExt;
 use itertools::Itertools;
 use schemars::JsonSchema;
+use search::CandidateGeneration;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use tokio_stream::StreamExt;
 use tracing::{Instrument, Span};
 
 use crate::accelerated_table::AcceleratedTable;
 use crate::datafusion::query::write_to_json_string;
 use crate::datafusion::{SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA};
+use crate::search::VectorGeneration;
 use crate::{convert_string_arrow_to_iterator, embedding_col, offset_col};
 use crate::{datafusion::DataFusion, model::EmbeddingModelStore};
 
-use super::table::EmbeddingTable;
+use crate::embeddings::table::EmbeddingTable;
 use snafu::prelude::*;
 
 #[derive(Debug, Snafu)]
@@ -67,6 +72,9 @@ pub enum Error {
     DataFusionError {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
+
+    #[snafu(display("Error occurred retrieving candidate search results: {source}"))]
+    CandidateGenerationError { source: search::Error },
 
     #[snafu(display("Error occurred processing Arrow records: {source}"))]
     RecordProcessingError { source: ArrowError },
@@ -383,56 +391,68 @@ impl SearchRequest {
             .collect::<Result<Vec<String>>>()
     }
 
+    pub fn validate_keyword_to_ilike(k: &str, target_column: &str) -> Result<Expr> {
+        let expression = format!("{target_column} ILIKE \"%{}%\"", k.to_lowercase());
+        let parser = Parser::new(&GenericDialect);
+        let mut parser = parser.try_with_sql(&expression).map_err(|err| {
+            tracing::trace!("vector_search keyword parsing failed. {err}");
+            InvalidKeywordSnafu { keyword: k.clone() }.build()
+        })?;
+
+        // The keyword will exist on its own if nothing else is present.
+        let ilike_expr = parser.parse_expr().map_err(|err| {
+            tracing::trace!("vector_search keyword parsing failed. {err}");
+            InvalidKeywordSnafu { keyword: k.clone() }.build()
+        })?;
+
+        let Expr::ILike { expr, pattern, .. } = &ilike_expr else {
+            tracing::trace!(
+                "vector_search keyword parsing failed. expected ILIKE, but got {ilike_expr:?}"
+            );
+            return Err(InvalidKeywordSnafu { keyword: k.clone() }.build());
+        };
+
+        if let (Expr::Identifier(id), Expr::Identifier(v)) = (*expr.clone(), *pattern.clone()) {
+            if id.value.to_lowercase() != "target_column" {
+                tracing::trace!(
+                    "vector_search keyword parsing failed. expected 'target_column', but got {}",
+                    id.value
+                );
+                return Err(InvalidKeywordSnafu { keyword: k.clone() }.build());
+            }
+
+            if v.value.to_lowercase() != format!("%{}%", k.to_lowercase()) {
+                tracing::trace!(
+                    "vector_search keyword parsing failed. expected '%{}%', but got {}",
+                    k.to_lowercase(),
+                    v.value
+                );
+                return Err(InvalidKeywordSnafu { keyword: k.clone() }.build());
+            }
+        } else {
+            tracing::trace!(
+                "vector_search keyword parsing failed. expected identifiers, but got {expr:?} - {pattern:?}"
+            );
+            return Err(InvalidKeywordSnafu { keyword: k.clone() }.build());
+        }
+
+        // Ensure the expression is the last token.
+        let next_token = parser.next_token();
+        if next_token != Token::EOF {
+            tracing::trace!(
+                "vector_search keyword parsing failed. expected EOF, but got {next_token:?}"
+            );
+            return Err(InvalidKeywordSnafu { keyword: k.clone() }.build());
+        }
+
+        Ok(ilike_expr)
+    }
+
     pub fn parse_keywords(keywords: &[String]) -> Result<Vec<String>> {
         keywords
             .iter()
             .map(|k| {
-                let expression = format!("target_column ILIKE \"%{}%\"", k.to_lowercase()); // emulate the use of the keyword in the query.
-                let parser = Parser::new(&GenericDialect);
-                let mut parser = parser.try_with_sql(&expression).map_err(|err| {
-                    tracing::trace!("vector_search keyword parsing failed. {err}");
-                    InvalidKeywordSnafu {
-                        keyword: k.clone(),
-                    }
-                    .build()
-                })?;
-
-                // The keyword will exist on its own if nothing else is present.
-                let expr = parser.parse_expr().map_err(|err| {
-                    tracing::trace!("vector_search keyword parsing failed. {err}");
-                    InvalidKeywordSnafu {
-                        keyword: k.clone(),
-                    }
-                    .build()
-                })?;
-
-                let Expr::ILike { expr, pattern, .. } = expr else {
-                    tracing::trace!("vector_search keyword parsing failed. expected ILIKE, but got {expr:?}");
-                    return Err(InvalidKeywordSnafu { keyword: k.clone() }.build());
-                };
-
-                if let (Expr::Identifier(id), Expr::Identifier(v)) = (*expr.clone(), *pattern.clone()) {
-                    if id.value.to_lowercase() != "target_column" {
-                        tracing::trace!("vector_search keyword parsing failed. expected 'target_column', but got {}", id.value);
-                        return Err(InvalidKeywordSnafu { keyword: k.clone() }.build());
-                    }
-
-                    if v.value.to_lowercase() != format!("%{}%", k.to_lowercase()) {
-                        tracing::trace!("vector_search keyword parsing failed. expected '%{}%', but got {}", k.to_lowercase(), v.value);
-                        return Err(InvalidKeywordSnafu { keyword: k.clone() }.build());
-                    }
-                } else {
-                    tracing::trace!("vector_search keyword parsing failed. expected identifiers, but got {expr:?} - {pattern:?}");
-                    return Err(InvalidKeywordSnafu { keyword: k.clone() }.build());
-                }
-
-                // Ensure the expression is the last token.
-                let next_token = parser.next_token();
-                if next_token != Token::EOF {
-                    tracing::trace!("vector_search keyword parsing failed. expected EOF, but got {next_token:?}");
-                    return Err(InvalidKeywordSnafu { keyword: k.clone() }.build());
-                }
-
+                Self::validate_keyword_to_ilike(k.as_str(), "target_column")?; // emulate the use of the keyword in the query.
                 Ok(k.clone())
             })
             .collect::<Result<Vec<String>>>()
@@ -941,17 +961,14 @@ impl VectorSearch {
         let vector_search_result = async {
             tracing::info!(target: "task_history", tables = tables.iter().join(","), limit = %limit, "labels");
 
-            let per_table_embeddings = self
-                .calculate_embeddings_per_table(query, &tables)
-                .await?;
-
             let table_primary_keys = self
                 .get_primary_keys_with_overrides(&self.explicit_primary_keys, &tables)
                 .await?;
 
             let keywords = keywords.iter().map(String::as_str).collect::<Vec<&str>>();
 
-            let search_futures = per_table_embeddings.into_iter().map(|(tbl, search_vectors)| {
+            // Search for each table is independent, but done in parallel.
+            let search_futures = tables.into_iter().map(|tbl| {
                 let keywords = keywords.clone();
                 let primary_keys = table_primary_keys.get(&tbl).map_or(&[] as &[String], |v| v.as_slice());
 
@@ -973,38 +990,52 @@ impl VectorSearch {
                         });
                     };
 
-                    let embedding_columns = embedding_table.get_embedding_columns();
-                    let Some(embedding_column) = embedding_columns.first() else {
+                    let Some(embedding_column) = embedding_table.get_embedding_columns().first().cloned() else {
                         return Err(Error::NoEmbeddingColumns {
                             data_source: tbl.clone(),
                         });
                     };
-
-                    if search_vectors.len() != 1 {
-                        return Err(Error::IncorrectNumberOfEmbeddingColumns {
-                            data_source: tbl.clone(),
-                            num_embeddings: search_vectors.len(),
+                    let Some(model_name) = embedding_table.get_embedding_models_used().first().cloned() else {
+                        return Err(Error::CannotVectorSearchDataset {
+                            data_source: tbl.clone()
                         });
+                    };
+
+                    let Some(embed) = self.embeddings
+                        .read()
+                        .await
+                        .iter()
+                        .find_map(|(name, model)| {
+                            if *name == model_name {
+                                return Some(Arc::clone(&model))
+                            }
+                            return None
+                        }) else {
+                            return Err(Error::CannotVectorSearchDataset {
+                                data_source: tbl.clone()
+                            });
+                        };
+
+
+                    let filters = keywords.iter().map(|k| {
+                        SearchRequest::validate_keyword_to_ilike(k, embedding_column.as_str() )
+                    }).collect::<Result<Vec<Expr>>>()?;
+                    let mut filter_refs: Vec<&Expr> = filters.iter().collect();
+
+                    if let Some(filter_expr) = where_cond {
+                        filter_refs.push(filter_expr);
                     }
-                    match search_vectors.first() {
-                        None => unreachable!("Vector search can only be performed on one embedding column, and the column exists"),
-                        Some(embedding) => {
-                            let result = self
-                                .individual_search(
-                                    &tbl,
-                                    embedding.clone(),
-                                    primary_keys,
-                                    embedding_column,
-                                    embedding_table.is_chunked(embedding_column),
-                                    additional_columns,
-                                    where_cond.as_ref(),
-                                    &keywords,
-                                    *limit,
-                                )
-                                .await?;
-                            Ok::<_, Error>((tbl.clone(), result))
-                        }
-                    }
+
+                    // TODO add projection columns.
+                    let projection: Vec<&Expr> = vec![];
+                    let generator = VectorGeneration::new(&self.df, &tbl, &embed, primary_keys, embedding_column.as_str(), embedding_table.is_chunked(embedding_column.as_str()));
+
+                    let search_result = generator.search(query.clone(), filter_refs.as_slice(), projection.as_slice()).await.map_err(|e| Error::CandidateGenerationError{source: e})?;
+
+                    // TODO: do not prematurely collect all results.
+                    let data = collect_batches(search_result).await.boxed().context(DataFusionSnafu)?;
+
+                    Ok((tbl, VectorSearchTableResult{data, primary_keys: primary_keys.to_vec(), embedding_column: embedding_column.clone(), additional_columns: additional_columns.clone()}))
                 }
             }).collect::<Vec<_>>();
 
@@ -1190,6 +1221,21 @@ impl VectorSearch {
             })
             .collect())
     }
+}
+
+async fn collect_batches(
+    stream: SendableRecordBatchStream,
+) -> std::result::Result<Vec<RecordBatch>, DataFusionError> {
+    let mut batches = Vec::new();
+
+    // Use while let to iterate over the stream and collect results
+    let mut stream = stream;
+    while let Some(batch) = stream.next().await {
+        // Use try to handle potential errors in stream items
+        batches.push(batch?);
+    }
+
+    Ok(batches)
 }
 
 /// Convert a list of column names to a list of column indices. If a column name is not found in the schema, it is ignored.
