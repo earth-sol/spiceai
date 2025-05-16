@@ -89,15 +89,15 @@ impl VectorSearch {
 
         let vector_search_result = async {
             tracing::info!(target: "task_history", tables = tables.iter().join(","), limit = %limit, "labels");
-
             let table_primary_keys = self
-                .get_primary_keys_with_overrides(&self.explicit_primary_keys, &tables)
+                .get_primary_keys_with_overrides(&tables)
                 .await?;
+
 
             // Search for each table is independent, but done in parallel.
             let search_futures = tables.into_iter().map(|tbl| {
                 let keywords = keywords.clone();
-                let primary_keys = self.get_primary_keys_with_overrides(&tbl).await?;
+                let primary_keys = table_primary_keys.get(&tbl).map_or(&[] as &[String], |v| v.as_slice());
 
                 async move {
                     tracing::debug!("Running vector search for table {:#?}", tbl);
@@ -153,7 +153,6 @@ impl VectorSearch {
                         filter_refs.push(filter_expr);
                     }
 
-                    // TODO add projection columns.
                     let projection: Vec<Expr> = primary_keys
                         .iter()
                         .cloned()
@@ -168,8 +167,12 @@ impl VectorSearch {
 
                     let search_result = generator.search(query.clone(), filter_refs.as_slice(), projection_refs.as_slice()).await.map_err(|e| Error::CandidateGenerationError{source: e})?;
 
-                    // TODO: do not prematurely collect all results.
+                    // TODO: Do not prematurely collect all results. https://github.com/spiceai/spiceai/issues/5848
                     let data = collect_batches(search_result).await.boxed().context(DataFusionSnafu)?;
+
+                    // TODO: Filter results after the fact for filters that aren't supported by [`CandidateGeneration::supports_filter_pushdown`]. https://github.com/spiceai/spiceai/issues/5849
+
+                    // TODO: Retrieve columns from projection that aren't provided by candidate generator (see [`CandidateGeneration::supports_columns`]) https://github.com/spiceai/spiceai/issues/5850
 
                     Ok((tbl, VectorSearchTableResult{data, primary_keys: primary_keys.to_vec(), embedding_column: embedding_column.clone(), additional_columns: additional_columns.clone()}))
                 }
@@ -242,21 +245,29 @@ impl VectorSearch {
             .context(DataFusionSnafu)
     }
 
-    /// Get primary keys of a table. Attempt to determine the primary key(s) of the
+    /// For a set of tables, get their primary keys. Attempt to determine the primary key(s) of the
     /// table from the [`TableProvider`] constraints, and if not provided, use the explicit primary
     /// keys defined in the spicepod configuration.
-    async fn get_primary_keys_with_overrides(self, table: &TableReference) -> Result<Vec<String>> {
-        // `explicit_primary_keys` are [`ResolvedTableReference`], must resolve with spice defaults first.
-        // Equivalent to using [`TableReference::resolve_eq`] on `explicit_primary_keys` keys.
-        let resolved_tbl: TableReference = tbl
-            .clone()
-            .resolve(SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA)
-            .into();
-        let pks = self.get_primary_keys(&resolved_tbl).await?;
-        if !pks.is_empty() {
-            return Ok(pks);
-        } else if let Some(explicit_pks) = self.explicit_primary_keys.get(&resolved_tbl) {
-            return Ok(explicit_pks.clone());
+    async fn get_primary_keys_with_overrides(
+        &self,
+        tables: &[TableReference],
+    ) -> Result<HashMap<TableReference, Vec<String>>> {
+        let mut tbl_to_pks: HashMap<TableReference, Vec<String>> = HashMap::new();
+
+        for tbl in tables {
+            // `explicit_primary_keys` are [`ResolvedTableReference`], must resolve with spice defaults first.
+            // Equivalent to using [`TableReference::resolve_eq`] on `explicit_primary_keys` keys.
+            let resolved_tbl: TableReference = tbl
+                .clone()
+                .resolve(SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA)
+                .into();
+            let pks = self.get_primary_keys(&resolved_tbl).await?;
+            if !pks.is_empty() {
+                tbl_to_pks.insert(tbl.clone(), pks);
+            } else if let Some(explicit_pks) = explicit_primary_keys.get(&resolved_tbl) {
+                tbl_to_pks.insert(tbl.clone(), explicit_pks.clone());
+            }
         }
+        Ok(tbl_to_pks)
     }
 }
