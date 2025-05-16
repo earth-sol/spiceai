@@ -39,6 +39,8 @@ pub trait CandidateGeneration: Sync + Send {
     /// Generates candidates for a query term.
     ///
     /// Any filter within `opt_filters` where [`CandidateGeneration::supports_filters_pushdown`] evaluates to [`true`] is expected to be applied. No assumptions are made on other filters.
+    ///
+    /// TODO: projection should be additional beyond queried column and scores.
     async fn search(
         &self,
         query: String,
