@@ -153,19 +153,12 @@ impl VectorSearch {
                         filter_refs.push(filter_expr);
                     }
 
-                    let projection: Vec<Expr> = primary_keys
-                        .iter()
-                        .cloned()
-                        .chain(Some(embedding_column.to_string()))
-                        .chain(additional_columns.iter().cloned())
-                        .unique()
-                        .map(|s| Expr::Identifier(Ident::new(s)))
-                        .collect();
-                    let projection_refs: Vec<&Expr> = projection.iter().collect();
+                    let additional_columns: Vec<Expr> = additional_columns.iter().map(|s| Expr::Identifier(Ident::new(s))).collect();
+                    let col_refs: Vec<&Expr> = additional_columns.iter().collect();
 
                     let generator = VectorGeneration::new(&self.df, &tbl, &embed, primary_keys, embedding_column.as_str(), embedding_table.is_chunked(embedding_column.as_str()));
 
-                    let search_result = generator.search(query.clone(), filter_refs.as_slice(), projection_refs.as_slice()).await.map_err(|e| Error::CandidateGenerationError{source: e})?;
+                    let search_result = generator.search(query.clone(), filter_refs.as_slice(), col_refs.as_slice()).await.map_err(|e| Error::CandidateGenerationError{source: e})?;
 
                     // TODO: Do not prematurely collect all results. https://github.com/spiceai/spiceai/issues/5848
                     let data = collect_batches(search_result).await.boxed().context(DataFusionSnafu)?;
@@ -174,7 +167,7 @@ impl VectorSearch {
 
                     // TODO: Retrieve columns from projection that aren't provided by candidate generator (see [`CandidateGeneration::supports_columns`]) https://github.com/spiceai/spiceai/issues/5850
 
-                    Ok((tbl, VectorSearchTableResult{data, primary_keys: primary_keys.to_vec(), embedding_column: embedding_column.clone(), additional_columns: additional_columns.clone()}))
+                    Ok((tbl, VectorSearchTableResult{data, primary_keys: primary_keys.to_vec(), embedding_column: embedding_column.clone(), additional_columns: additional_columns.iter().map(|e| e.to_string()).collect()}))
                 }
             }).collect::<Vec<_>>();
 
@@ -264,7 +257,7 @@ impl VectorSearch {
             let pks = self.get_primary_keys(&resolved_tbl).await?;
             if !pks.is_empty() {
                 tbl_to_pks.insert(tbl.clone(), pks);
-            } else if let Some(explicit_pks) = explicit_primary_keys.get(&resolved_tbl) {
+            } else if let Some(explicit_pks) = self.explicit_primary_keys.get(&resolved_tbl) {
                 tbl_to_pks.insert(tbl.clone(), explicit_pks.clone());
             }
         }

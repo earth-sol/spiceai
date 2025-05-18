@@ -25,8 +25,11 @@ use futures::{StreamExt, TryStreamExt, stream};
 use runtime::{
     dataupdate::DataUpdate,
     request::{Protocol, RequestContext, UserAgent},
-    search::vector_search::{
-        self, SearchRequest, VectorSearch, VectorSearchResult, parse_explicit_primary_keys,
+    search::{
+        request::SearchRequest,
+        types::VectorSearchResult,
+        util::parse_explicit_primary_keys,
+        vector_search::{self, VectorSearch},
     },
 };
 use spicepod::acceleration::{self, Acceleration};

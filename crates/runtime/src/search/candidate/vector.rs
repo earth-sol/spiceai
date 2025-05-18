@@ -16,8 +16,10 @@ limitations under the License.
 use std::sync::Arc;
 
 use crate::search::Error as VectorSearchError;
+use crate::{embedding_col, offset_col};
 use async_openai::types::EmbeddingInput;
 use datafusion::logical_expr::sqlparser::ast::Expr;
+use datafusion::sql::sqlparser::ast::Ident;
 use datafusion::{execution::SendableRecordBatchStream, sql::TableReference};
 use llms::embeddings::Embed;
 use search::CandidateGeneration;
@@ -76,6 +78,173 @@ impl VectorGeneration {
                 )),
             })
     }
+
+    fn chunked_sql(
+        &self,
+        additional_columns: &[&Expr],
+        embedding: &[f32],
+        opt_filters: &[&Expr],
+        n: usize,
+    ) -> String {
+        let (pks, distances_cte, proj_table) =
+            self.score_cte_sql(additional_columns, embedding, opt_filters);
+        let projection: Vec<Expr> = self
+            .primary_keys
+            .iter()
+            .map(|s| Expr::Identifier(Ident::new(s)))
+            .chain(additional_columns.iter().map(|&e| e.clone()))
+            .collect();
+        let final_projection_str = if projection.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "{},",
+                // `t.` refers to the table name alias in SQL below.
+                projection.iter().map(|s| format!("t.{s}")).join(", ")
+            )
+        };
+
+        format!(
+                "{distances_cte},
+                ranks as (
+                    SELECT
+                        {pks},
+                        scores.offset,
+                        scores.score,
+                        ROW_NUMBER() OVER (PARTITION BY ({pks}) ORDER BY scores.score DESC) AS chunk_rank
+                    FROM scores
+                ),
+                ranked_docs as (
+                    select {pks}, ranks.score, ranks.offset
+                    from ranks
+                    WHERE chunk_rank = 1
+                    ORDER by score DESC
+                    LIMIT {n}
+                )
+                SELECT
+                    substring(t.{embed_col}, rd.offset[1], rd.offset[2] - rd.offset[1]) AS {chunk_col},
+                    {projection_str}
+                    rd.score
+                FROM ranked_docs rd
+                JOIN {proj_table} t ON {join_on_conditions}",
+                embed_col= self.embedding_column,
+                chunk_col = Expr::Identifier(Ident::new(format!("{}_chunk", self.embedding_column))),
+                pks = pks.iter().join(", "),
+                projection_str = final_projection_str,
+                join_on_conditions = pks
+                    .iter()
+                    .map(|pk| format!("rd.{p} = t.{p}", p = datafusion::common::utils::quote_identifier(pk)))
+                    .join(" AND "),
+            )
+    }
+
+    /// Intermediate result of vector search on chunk-based table.
+    ///
+    /// Returns:
+    ///   0: primary keys (could be artificial from temporary table if none exist in underlying table)
+    ///   1: SQL query for CTE of scores. Will have at least one CTE of the form: `WITH scores AS ()`.
+    ///   2: Where extra columns for the final projection can be found (for table without primary key we must retrieve additional columns instead of depending on the underlying table.)
+    fn score_cte_sql(
+        &self,
+        additional_columns: &[&Expr],
+        embedding: &[f32],
+        opt_filters: &[&Expr],
+    ) -> (Vec<String>, String, String) {
+        if self.primary_keys.is_empty() {
+            self.score_cte_sql_without_pks(additional_columns, embedding, opt_filters)
+        } else {
+            let projection: Vec<Expr> = self
+                .primary_keys
+                .iter()
+                .cloned()
+                .chain(Some(self.embedding_column.to_string()))
+                .unique()
+                .map(|s| Expr::Identifier(Ident::new(s)))
+                .chain(additional_columns.iter().map(|&c| c.clone()))
+                .collect();
+
+            let cte = format!(
+                "WITH scores as (
+                     SELECT
+                         {projection},
+                         unnest({embed_col_offset}) AS offset,
+                         1.0 - cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS 'score'
+                     FROM {table_name}
+                     {where_cond}
+                 )",
+                projection = projection.iter().map(|e| format!("{}", *e)).join(", "),
+                embed_col_offset=Expr::Identifier(Ident::new(offset_col!(self.embedding_column))),
+                embed_col_embedding=Expr::Identifier(Ident::new(embedding_col!(self.embedding_column))),
+                table_name = self.tbl,
+                where_cond = opt_filters.iter().map(|e| format!("{}", *e)).join(" AND ")
+            );
+            (self.primary_keys.clone(), cte, self.tbl.to_string())
+        }
+    }
+
+    /// Intermediate result of vector search on chunk-based table that do not have existing primary key(s).
+    ///
+    /// We use an additional surrogate temp table and a generated primary key.
+    /// An alternative approach is using the full content as the primary key, but it is less efficient as primary keys
+    /// are duplicated along with unnest, resulting in large memory allocation and inefficient final selection (join condition).
+    fn score_cte_sql_without_pks(
+        &self,
+        additional_columns: &[&Expr],
+        embedding: &[f32],
+        opt_filters: &[&Expr],
+    ) -> (Vec<String>, String, String) {
+        // embedding_column is always added so we must filter it out from the projection if it is duplicated in the additional columns.
+        let additional_columns = {
+            let filtered: Vec<_> = additional_columns
+                .iter()
+                .filter(|c| {
+                    matches!(
+                        c,
+                        Expr::Identifier(Ident {
+                            value,
+                            ..
+                        }) if *value != *self.embedding_column
+                    )
+                })
+                .collect();
+
+            if filtered.is_empty() {
+                String::new()
+            } else {
+                format!("{},", filtered.iter().join(", "))
+            }
+        };
+
+        (
+            vec![VSS_TEMP_GEN_ID_COLUMN.to_string()],
+            format!(
+                "WITH {VSS_TEMP_TABLE_NAME} AS (
+               SELECT
+                   ROW_NUMBER() OVER () AS {VSS_TEMP_GEN_ID_COLUMN},
+                   {additional_columns}
+                   {embedding_column},
+                   {embed_col_offset},
+                   {embed_col_embedding}
+               FROM {table_name}
+               {where_cond}
+           ),
+           scores as (
+               SELECT
+                   {VSS_TEMP_GEN_ID_COLUMN},
+                   unnest({embed_col_offset}) AS offset,
+                   1.0 - cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS 'score'
+               FROM {VSS_TEMP_TABLE_NAME}
+           )",
+                embedding_column = self.embedding_column,
+                embed_col_offset = Expr::Identifier(Ident::new(offset_col!(self.embedding_column))),
+                embed_col_embedding =
+                    Expr::Identifier(Ident::new(embedding_col!(self.embedding_column))),
+                table_name = self.tbl,
+                where_cond = opt_filters.iter().map(|e| format!("{}", *e)).join(" AND ")
+            ),
+            VSS_TEMP_TABLE_NAME.to_string(),
+        )
+    }
 }
 
 #[async_trait::async_trait]
@@ -84,7 +253,7 @@ impl CandidateGeneration for VectorGeneration {
         &self,
         query: String,
         opt_filters: &[&Expr],
-        projection: &[&Expr],
+        addition_projection: &[&Expr],
     ) -> Result<SendableRecordBatchStream, search::Error> {
         let embedding = self
             .embed_query(query.as_str())
@@ -93,10 +262,17 @@ impl CandidateGeneration for VectorGeneration {
             .map_err(|e| search::Error::InternalError { source: e })?;
 
         let query = if self.is_chunked {
-            return Err(search::Error::InternalError {
-                source: Box::from(format!("We just haven't implemented this yet")),
-            });
+            self.chunked_sql(addition_projection, embedding.as_slice(), opt_filters, 100)
         } else {
+            let projection: Vec<Expr> = self
+                .primary_keys
+                .iter()
+                .cloned()
+                .chain(Some(self.embedding_column.to_string()))
+                .unique()
+                .map(|s| Expr::Identifier(Ident::new(s)))
+                .chain(addition_projection.iter().map(|&e| e.clone()))
+                .collect();
             format!(
                 "SELECT * FROM (
                         SELECT

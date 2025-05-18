@@ -43,10 +43,9 @@ macro_rules! convert_string_arrow_to_iterator {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
-    use datafusion::sql::sqlparser::ast::{BinaryOperator, Expr};
-    use schemars::schema_for;
-    use snafu::ResultExt;
+    use datafusion::common::utils::quote_identifier;
+
+    use crate::{embedding_col, offset_col};
 
     #[test]
     fn test_quoting_embedding_columns() {

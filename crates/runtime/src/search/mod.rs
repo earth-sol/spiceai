@@ -16,7 +16,7 @@ limitations under the License.
 pub mod candidate;
 pub mod request;
 pub mod types;
-pub(crate) mod util;
+pub mod util;
 pub mod vector_search;
 
 use arrow_schema::ArrowError;

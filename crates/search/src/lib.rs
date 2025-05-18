@@ -40,12 +40,12 @@ pub trait CandidateGeneration: Sync + Send {
     ///
     /// Any filter within `opt_filters` where [`CandidateGeneration::supports_filters_pushdown`] evaluates to [`true`] is expected to be applied. No assumptions are made on other filters.
     ///
-    /// TODO: projection should be additional beyond queried column and scores.
+    /// [`RecordBatch`] expects at least two columns: a 'score' column, and a column returning the underlying data that matched. Any column in `addition_projection` that evaluates to true in [`CandidateGeneration::supports_columns`] must also be returned. No assumptions are made on other columns.
     async fn search(
         &self,
         query: String,
         opt_filters: &[&Expr],
-        projection: &[&Expr],
+        addition_projection: &[&Expr],
     ) -> Result<SendableRecordBatchStream>;
 
     /// Whether candidates can be filtered during generation, i.e. [`CandidateGeneration::search`].
