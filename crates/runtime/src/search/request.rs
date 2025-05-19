@@ -289,7 +289,7 @@ impl SearchRequest {
         };
 
         if let (Expr::Identifier(id), Expr::Identifier(v)) = (*expr.clone(), *pattern.clone()) {
-            if id.value.to_lowercase() != "target_column" {
+            if id.value.to_lowercase() != target_column {
                 tracing::trace!(
                     "vector_search keyword parsing failed. expected 'target_column', but got {}",
                     id.value
@@ -361,6 +361,7 @@ pub(crate) mod tests {
         // Test basic comparison
         let result = SearchRequest::parse_where_cond("column = 'value'".to_string());
         assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_string(), "column = 'value'");
 
         // Test with WHERE keyword
         let result = SearchRequest::parse_where_cond("WHERE column = 'value'".to_string());

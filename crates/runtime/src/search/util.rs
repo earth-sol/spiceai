@@ -76,16 +76,29 @@ pub async fn parse_explicit_primary_keys(
         app.datasets
             .iter()
             .filter_map(|d| {
-                d.embeddings.iter().find_map(|e| {
-                    e.primary_keys.as_ref().map(|pks| {
-                        (
-                            TableReference::parse_str(&d.name)
-                                .resolve(SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA)
-                                .into(),
-                            pks.clone(),
-                        )
-                    })
-                })
+                let primary_keys_from_embeddings: Option<Vec<String>> =
+                    d.embeddings.iter().find_map(|e| e.primary_keys.clone());
+
+                let primary_keys_from_columns: Option<Vec<String>> = d
+                    .columns
+                    .iter()
+                    .find_map(|c| c.embeddings.iter().find_map(|e| e.row_ids.clone()));
+
+                let primary_keys = match (primary_keys_from_columns, primary_keys_from_embeddings) {
+                    (Some(pks), None) | (None, Some(pks)) => pks,
+                    (Some(pks), Some(_)) => {
+                        tracing::warn!("Dataset '{}' provided primary keys in both `.columns[].embeddings[].row_id` and `.embeddings[].primary_keys`. Using the former.", d.name);
+                        pks
+                    }
+                    (None, None) => return None,
+                };
+
+                Some((
+                    TableReference::parse_str(&d.name)
+                        .resolve(SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA)
+                        .into(),
+                    primary_keys,
+                ))
             })
             .collect::<HashMap<TableReference, Vec<_>>>()
     })

@@ -176,7 +176,7 @@ impl VectorGeneration {
                 embed_col_offset=Expr::Identifier(Ident::new(offset_col!(self.embedding_column))),
                 embed_col_embedding=Expr::Identifier(Ident::new(embedding_col!(self.embedding_column))),
                 table_name = self.tbl,
-                where_cond = opt_filters.iter().map(|e| format!("{}", *e)).join(" AND ")
+                where_cond = where_and(opt_filters)
             );
             (self.primary_keys.clone(), cte, self.tbl.to_string())
         }
@@ -240,7 +240,7 @@ impl VectorGeneration {
                 embed_col_embedding =
                     Expr::Identifier(Ident::new(embedding_col!(self.embedding_column))),
                 table_name = self.tbl,
-                where_cond = opt_filters.iter().map(|e| format!("{}", *e)).join(" AND ")
+                where_cond = where_and(opt_filters)
             ),
             VSS_TEMP_TABLE_NAME.to_string(),
         )
@@ -286,7 +286,7 @@ impl CandidateGeneration for VectorGeneration {
                 projection_str = projection.iter().map(|e| format!("{}", *e)).join(", "),
                 embedding_column = self.embedding_column,
                 tbl = self.tbl,
-                where_str = opt_filters.iter().map(|e| format!("{}", *e)).join(" AND "),
+                where_str = where_and(opt_filters),
             )
         };
         tracing::trace!("running SQL: {query}");
@@ -310,4 +310,15 @@ impl CandidateGeneration for VectorGeneration {
     fn supports_columns(&self, _projection: &[&Expr]) -> Result<Vec<bool>, search::Error> {
         Ok(vec![])
     }
+}
+
+// Constructs a `WHERE` clause of aggregating ['Expr'] by AND conditions.
+//
+// Empty string returned for no filters.
+pub fn where_and(filters: &[&Expr]) -> String {
+    if filters.is_empty() {
+        return String::new();
+    }
+    let combined = filters.iter().map(|e| format!("{}", *e)).join(" AND ");
+    format!("WHERE {combined}")
 }

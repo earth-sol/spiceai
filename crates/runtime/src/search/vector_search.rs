@@ -167,7 +167,13 @@ impl VectorSearch {
 
                     // TODO: Retrieve columns from projection that aren't provided by candidate generator (see [`CandidateGeneration::supports_columns`]) https://github.com/spiceai/spiceai/issues/5850
 
-                    Ok((tbl, VectorSearchTableResult{data, primary_keys: primary_keys.to_vec(), embedding_column: embedding_column.clone(), additional_columns: additional_columns.iter().map(|e| e.to_string()).collect()}))
+                    let embedding_column = if embedding_table.is_chunked(embedding_column.as_str()) {
+                        format!("{embedding_column}_chunk")
+                    } else {
+                        embedding_column.clone()
+                    };
+
+                    Ok((tbl, VectorSearchTableResult{data, primary_keys: primary_keys.to_vec(), embedding_column, additional_columns: additional_columns.iter().map(|e| e.to_string()).collect()}))
                 }
             }).collect::<Vec<_>>();
 
