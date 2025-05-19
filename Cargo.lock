@@ -1607,16 +1607,14 @@ dependencies = [
 
 [[package]]
 name = "azure_core"
-version = "0.22.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c749d6035e8835014fa4897173792d772f0a65fac32e57c3cd9d676c8114e8a"
+checksum = "0f5e6bcc9dfd4587f3132818b6922b9157f00a4df7fd7bf76395ddf37f58983d"
 dependencies = [
  "async-lock",
  "async-trait",
  "bytes",
  "futures",
- "once_cell",
- "paste",
  "pin-project",
  "rustc_version",
  "serde",
@@ -10645,7 +10643,7 @@ dependencies = [
  "aws-sdk-sts",
  "axum 0.8.3",
  "axum-extra",
- "azure_core 0.22.0",
+ "azure_core 0.24.0",
  "azure_storage",
  "azure_storage_blobs",
  "base64 0.22.1",
@@ -13602,21 +13600,21 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 
 [[package]]
 name = "typespec"
-version = "0.2.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f39c392e9cb463e8f1f9b86d2d5934ef391ee83724095e7f813aa0202e4e8d3b"
+checksum = "c2cb5cb7292822e6d81f385ce512e0a5936a8c93cb194d2ff41477dfd8d1e21f"
 dependencies = [
  "base64 0.22.1",
- "http-types",
+ "serde",
  "serde_json",
  "url",
 ]
 
 [[package]]
 name = "typespec_client_core"
-version = "0.1.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0839582d301a1ba457905b6940f10879ff16b43b98ff66477cb4a44cbea81a92"
+checksum = "1a543a33b2bd2b918a6f487522d4df324c194cc3e9ea89871a202dd237713a61"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -13624,9 +13622,9 @@ dependencies = [
  "dyn-clone",
  "futures",
  "getrandom 0.2.15",
- "http-types",
  "pin-project",
  "rand 0.8.5",
+ "reqwest 0.12.15",
  "serde",
  "serde_json",
  "time",
