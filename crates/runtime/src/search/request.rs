@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 use datafusion::sql::sqlparser;
-use datafusion::sql::sqlparser::ast::{Expr, SelectItem, TableFactor, TableWithJoins};
-use datafusion::sql::sqlparser::dialect::GenericDialect;
+use datafusion::sql::sqlparser::ast::{Expr, SelectItem, TableFactor, TableWithJoins, Value};
+use datafusion::sql::sqlparser::dialect::{GenericDialect, PostgreSqlDialect};
 use datafusion::sql::sqlparser::keywords::Keyword;
 use datafusion::sql::sqlparser::parser::Parser;
 use datafusion::sql::sqlparser::tokenizer::Token;
@@ -262,8 +262,8 @@ impl SearchRequest {
     }
 
     pub fn validate_keyword_to_ilike(k: &str, target_column: &str) -> Result<Expr> {
-        let expression = format!("{target_column} ILIKE \"%{}%\"", k.to_lowercase());
-        let parser = Parser::new(&GenericDialect);
+        let expression = format!("{target_column} ILIKE '%{}%'", k.to_lowercase());
+        let parser = Parser::new(&GenericDialect {});
         let mut parser = parser.try_with_sql(&expression).map_err(|err| {
             tracing::trace!("vector_search keyword parsing failed. {err}");
             Error::InvalidKeyword {
@@ -288,7 +288,9 @@ impl SearchRequest {
             });
         };
 
-        if let (Expr::Identifier(id), Expr::Identifier(v)) = (*expr.clone(), *pattern.clone()) {
+        if let (Expr::Identifier(id), Expr::Value(Value::SingleQuotedString(v))) =
+            (*expr.clone(), *pattern.clone())
+        {
             if id.value.to_lowercase() != target_column {
                 tracing::trace!(
                     "vector_search keyword parsing failed. expected 'target_column', but got {}",
@@ -299,11 +301,11 @@ impl SearchRequest {
                 });
             }
 
-            if v.value.to_lowercase() != format!("%{}%", k.to_lowercase()) {
+            if v != format!("%{}%", k.to_lowercase()) {
                 tracing::trace!(
                     "vector_search keyword parsing failed. expected '%{}%', but got {}",
                     k.to_lowercase(),
-                    v.value
+                    v
                 );
                 return Err(Error::InvalidKeyword {
                     keyword: k.to_string(),
