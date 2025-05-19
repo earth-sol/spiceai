@@ -59,6 +59,7 @@ impl VectorSearch {
     }
 
     // Prepare an individual [`impl search::CandidateGeneration`] (specifically a [`VectorGeneration`]) based on the [`TableReference`], and use it to generate search candidates based on the provided query and additional parameters.
+    #[allow(clippy::too_many_arguments)]
     pub async fn individual_vector_search(
         &self,
         tbl: TableReference,
@@ -113,9 +114,9 @@ impl VectorSearch {
             .iter()
             .find_map(|(name, model)| {
                 if *name == model_name {
-                    return Some(Arc::clone(&model));
+                    return Some(Arc::clone(model));
                 }
-                return None;
+                None
             })
         else {
             return Err(Error::CannotVectorSearchDataset {
@@ -180,7 +181,7 @@ impl VectorSearch {
                 data,
                 primary_keys: primary_keys.to_vec(),
                 embedding_column,
-                additional_columns: additional_columns.iter().map(|e| e.to_string()).collect(),
+                additional_columns: additional_columns.iter().map(ToString::to_string).collect(),
             },
         ))
     }

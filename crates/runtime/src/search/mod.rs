@@ -24,7 +24,7 @@ use datafusion::sql::TableReference;
 use itertools::Itertools;
 use snafu::prelude::*;
 
-pub static SEARCH_SCORE_COLUMN_NAME: &'static str = "score";
+pub static SEARCH_SCORE_COLUMN_NAME: &str = "score";
 
 #[derive(Debug, Snafu)]
 pub enum Error {

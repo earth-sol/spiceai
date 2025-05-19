@@ -323,6 +323,7 @@ impl CandidateGeneration for VectorGeneration {
 // Constructs a `WHERE` clause of aggregating ['Expr'] by AND conditions.
 //
 // Empty string returned for no filters.
+#[must_use]
 pub fn where_and(filters: &[&Expr]) -> String {
     if filters.is_empty() {
         return String::new();

@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
+#![allow(clippy::implicit_hasher)]
 use std::{collections::HashMap, sync::Arc};
 
 use app::App;
@@ -159,7 +159,7 @@ pub async fn get_primary_keys_with_overrides(
             .clone()
             .resolve(SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA)
             .into();
-        let pks = get_primary_keys(&df, &resolved_tbl).await?;
+        let pks = get_primary_keys(df, &resolved_tbl).await?;
         if !pks.is_empty() {
             tbl_to_pks.insert(tbl.clone(), pks);
         } else if let Some(explicit_pks) = explicit_primary_keys.get(&resolved_tbl) {
