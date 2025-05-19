@@ -18,15 +18,17 @@ use std::{collections::HashMap, sync::Arc};
 
 use app::App;
 use arrow::array::RecordBatch;
+use datafusion::common::Constraint;
 use datafusion::error::DataFusionError;
 use datafusion::execution::SendableRecordBatchStream;
 use datafusion::{datasource::TableProvider, sql::TableReference};
 use datafusion_federation::FederatedTableProviderAdaptor;
+use snafu::ResultExt;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 
 use crate::accelerated_table::AcceleratedTable;
-use crate::datafusion::{SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA};
+use crate::datafusion::{DataFusion, SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA};
 
 use crate::embeddings::table::EmbeddingTable;
 
@@ -102,4 +104,86 @@ pub async fn parse_explicit_primary_keys(
             })
             .collect::<HashMap<TableReference, Vec<_>>>()
     })
+}
+
+async fn get_primary_keys(
+    df: &Arc<DataFusion>,
+    table: &TableReference,
+) -> super::Result<Vec<String>> {
+    let tbl_ref = df
+        .get_table(table)
+        .await
+        .ok_or_else(|| super::Error::DataSourcesNotFound {
+            data_source: vec![table.clone()],
+        })?;
+
+    let constraint_idx = tbl_ref
+        .constraints()
+        .map(|c| c.iter())
+        .unwrap_or_default()
+        .find_map(|c| match c {
+            Constraint::PrimaryKey(columns) => Some(columns),
+            Constraint::Unique(_) => None,
+        })
+        .cloned()
+        .unwrap_or(Vec::new());
+
+    tbl_ref
+        .schema()
+        .project(&constraint_idx)
+        .map(|schema_projection| {
+            schema_projection
+                .fields()
+                .iter()
+                .map(|f| f.name().clone())
+                .collect::<Vec<_>>()
+        })
+        .boxed()
+        .map_err(|e| super::Error::DataFusionError { source: e })
+}
+
+/// For a set of tables, get their primary keys. Attempt to determine the primary key(s) of the
+/// table from the [`TableProvider`] constraints, and if not provided, use the explicit primary
+/// keys defined in the spicepod configuration.
+pub async fn get_primary_keys_with_overrides(
+    df: &Arc<DataFusion>,
+    tables: &[TableReference],
+    explicit_primary_keys: &HashMap<TableReference, Vec<String>>,
+) -> super::Result<HashMap<TableReference, Vec<String>>> {
+    let mut tbl_to_pks: HashMap<TableReference, Vec<String>> = HashMap::new();
+
+    for tbl in tables {
+        // `explicit_primary_keys` are [`ResolvedTableReference`], must resolve with spice defaults first.
+        // Equivalent to using [`TableReference::resolve_eq`] on `explicit_primary_keys` keys.
+        let resolved_tbl: TableReference = tbl
+            .clone()
+            .resolve(SPICE_DEFAULT_CATALOG, SPICE_DEFAULT_SCHEMA)
+            .into();
+        let pks = get_primary_keys(&df, &resolved_tbl).await?;
+        if !pks.is_empty() {
+            tbl_to_pks.insert(tbl.clone(), pks);
+        } else if let Some(explicit_pks) = explicit_primary_keys.get(&resolved_tbl) {
+            tbl_to_pks.insert(tbl.clone(), explicit_pks.clone());
+        }
+    }
+    Ok(tbl_to_pks)
+}
+
+pub async fn user_tables_with_embeddings(
+    df: &Arc<DataFusion>,
+) -> super::Result<Vec<TableReference>> {
+    let tables = df.get_user_table_names();
+    let mut tables_with_embeddings = Vec::new();
+
+    for t in tables {
+        let table_provider = df
+            .get_table(&t)
+            .await
+            // we should not fail here, as we are iterating over the tables that we know exist
+            .ok_or_else(|| super::Error::DataSourceNotFound { table: t.clone() })?;
+        if get_embedding_table(&table_provider).await.is_some() {
+            tables_with_embeddings.push(t);
+        }
+    }
+    Ok(tables_with_embeddings)
 }

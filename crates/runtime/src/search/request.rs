@@ -15,7 +15,7 @@ limitations under the License.
 */
 use datafusion::sql::sqlparser;
 use datafusion::sql::sqlparser::ast::{Expr, SelectItem, TableFactor, TableWithJoins, Value};
-use datafusion::sql::sqlparser::dialect::{GenericDialect, PostgreSqlDialect};
+use datafusion::sql::sqlparser::dialect::GenericDialect;
 use datafusion::sql::sqlparser::keywords::Keyword;
 use datafusion::sql::sqlparser::parser::Parser;
 use datafusion::sql::sqlparser::tokenizer::Token;
