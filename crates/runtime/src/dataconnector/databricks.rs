@@ -84,6 +84,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct Databricks {
     read_provider: Arc<dyn Read>,
+    deferred_load: bool,
 }
 
 impl std::fmt::Debug for Databricks {
@@ -108,24 +109,33 @@ impl Databricks {
         match mode {
             "delta_lake" => {
                 let storage_options = params.to_secret_map();
-                let token_provider = match auth_credentials {
-                    AuthCredentials::Token(token) => {
-                        Arc::new(StaticTokenProvider::new(token.clone()))
-                    }
-                    AuthCredentials::ServicePrincipal(client_id, client_secret) => {
-                        Self::get_m2m_token_provider(
-                            endpoint,
-                            client_id,
-                            client_secret,
-                            &token_provider_registry,
-                        )
-                        .await?
-                    }
-                    AuthCredentials::U2M(client_id) => {
-                        Self::get_u2m_token_provider(endpoint, client_id, &token_provider_registry)
-                            .await?
-                    }
-                };
+                let (token_provider, deferred_load): (Arc<dyn TokenProvider>, bool) =
+                    match auth_credentials {
+                        AuthCredentials::Token(token) => (
+                            Arc::new(StaticTokenProvider::new(token.clone()))
+                                as Arc<dyn TokenProvider>,
+                            false,
+                        ),
+                        AuthCredentials::ServicePrincipal(client_id, client_secret) => (
+                            Self::get_m2m_token_provider(
+                                endpoint,
+                                client_id,
+                                client_secret,
+                                &token_provider_registry,
+                            )
+                            .await?,
+                            false,
+                        ),
+                        AuthCredentials::U2M(client_id) => (
+                            Self::get_u2m_token_provider(
+                                endpoint,
+                                client_id,
+                                &token_provider_registry,
+                            )
+                            .await?,
+                            true,
+                        ),
+                    };
 
                 let read_provider = DatabricksDelta::new(
                     Endpoint(endpoint.to_string()),
@@ -135,6 +145,7 @@ impl Databricks {
 
                 Ok(Self {
                     read_provider: Arc::new(read_provider),
+                    deferred_load,
                 })
             }
             "spark_connect" => {
@@ -211,15 +222,20 @@ impl Databricks {
         cluster_id: &SecretString,
         databricks_use_ssl: bool,
     ) -> Result<Self> {
-        let databricks_spark = match auth_credentials {
-            AuthCredentials::Token(token) => DatabricksSparkConnect::new(
-                endpoint.to_string(),
-                cluster_id.expose_secret().to_string(),
-                token.expose_secret().to_string(),
-                databricks_use_ssl,
-            )
-            .await
-            .context(UnableToConstructDatabricksSparkSnafu)?,
+        let (read_provider, deferred_load): (Arc<dyn Read>, bool) = match auth_credentials {
+            AuthCredentials::Token(token) => (
+                Arc::new(
+                    DatabricksSparkConnect::new(
+                        endpoint.to_string(),
+                        cluster_id.expose_secret().to_string(),
+                        token.expose_secret().to_string(),
+                        databricks_use_ssl,
+                    )
+                    .await
+                    .context(UnableToConstructDatabricksSparkSnafu)?,
+                ),
+                false,
+            ),
 
             AuthCredentials::ServicePrincipal(client_id, client_secret) => {
                 let token_provider = Self::get_m2m_token_provider(
@@ -230,14 +246,19 @@ impl Databricks {
                 )
                 .await?;
 
-                DatabricksSparkConnect::from_token_provider(
-                    endpoint.to_string(),
-                    cluster_id.expose_secret().to_string(),
-                    databricks_use_ssl,
-                    token_provider,
+                (
+                    Arc::new(
+                        DatabricksSparkConnect::from_token_provider(
+                            endpoint.to_string(),
+                            cluster_id.expose_secret().to_string(),
+                            databricks_use_ssl,
+                            token_provider,
+                        )
+                        .await
+                        .context(UnableToConstructDatabricksSparkSnafu)?,
+                    ),
+                    false,
                 )
-                .await
-                .context(UnableToConstructDatabricksSparkSnafu)?
             }
 
             AuthCredentials::U2M(client_id) => {
@@ -245,19 +266,25 @@ impl Databricks {
                     Self::get_u2m_token_provider(endpoint, client_id, &token_provider_registry)
                         .await?;
 
-                DatabricksSparkConnect::from_token_provider(
-                    endpoint.to_string(),
-                    cluster_id.expose_secret().to_string(),
-                    databricks_use_ssl,
-                    token_provider,
+                (
+                    Arc::new(
+                        DatabricksSparkConnect::from_token_provider(
+                            endpoint.to_string(),
+                            cluster_id.expose_secret().to_string(),
+                            databricks_use_ssl,
+                            token_provider,
+                        )
+                        .await
+                        .context(UnableToConstructDatabricksSparkSnafu)?,
+                    ),
+                    true,
                 )
-                .await
-                .context(UnableToConstructDatabricksSparkSnafu)?
             }
         };
 
         Ok(Self {
-            read_provider: Arc::new(databricks_spark),
+            read_provider,
+            deferred_load,
         })
     }
 
@@ -439,6 +466,10 @@ impl DataConnector for Databricks {
                 dataconnector: "databricks",
                 connector_component: ConnectorComponent::from(dataset),
             })?)
+    }
+
+    fn deferred_load(&self) -> bool {
+        self.deferred_load
     }
 }
 
