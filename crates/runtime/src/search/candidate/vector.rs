@@ -158,9 +158,9 @@ impl VectorGeneration {
                 .iter()
                 .cloned()
                 .chain(Some(self.embedding_column.to_string()))
-                .unique()
                 .map(|s| Expr::Identifier(Ident::new(s)))
                 .chain(additional_columns.iter().map(|&c| c.clone()))
+                .unique()
                 .collect();
 
             let cte = format!(
@@ -254,6 +254,7 @@ impl CandidateGeneration for VectorGeneration {
         query: String,
         opt_filters: &[&Expr],
         addition_projection: &[&Expr],
+        limit: usize,
     ) -> Result<SendableRecordBatchStream, search::Error> {
         let embedding = self
             .embed_query(query.as_str())
@@ -262,17 +263,23 @@ impl CandidateGeneration for VectorGeneration {
             .map_err(|e| search::Error::InternalError { source: e })?;
 
         let query = if self.is_chunked {
-            self.chunked_sql(addition_projection, embedding.as_slice(), opt_filters, 100)
+            self.chunked_sql(
+                addition_projection,
+                embedding.as_slice(),
+                opt_filters,
+                limit,
+            )
         } else {
             let projection: Vec<Expr> = self
                 .primary_keys
                 .iter()
                 .cloned()
                 .chain(Some(self.embedding_column.to_string()))
-                .unique()
                 .map(|s| Expr::Identifier(Ident::new(s)))
                 .chain(addition_projection.iter().map(|&e| e.clone()))
+                .unique()
                 .collect();
+
             format!(
                 "SELECT * FROM (
                         SELECT
@@ -282,7 +289,8 @@ impl CandidateGeneration for VectorGeneration {
                         {where_str}
                     ) subq
                     WHERE 'score' IS NOT NULL
-                    ORDER BY 'score' DESC",
+                    ORDER BY 'score' DESC
+                    LIMIT {limit}",
                 projection_str = projection.iter().map(|e| format!("{}", *e)).join(", "),
                 embedding_column = self.embedding_column,
                 tbl = self.tbl,

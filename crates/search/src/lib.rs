@@ -46,6 +46,7 @@ pub trait CandidateGeneration: Sync + Send {
         query: String,
         opt_filters: &[&Expr],
         addition_projection: &[&Expr],
+        limit: usize,
     ) -> Result<SendableRecordBatchStream>;
 
     /// Whether candidates can be filtered during generation, i.e. [`CandidateGeneration::search`].

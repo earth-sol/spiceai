@@ -158,7 +158,7 @@ impl VectorSearch {
 
                     let generator = VectorGeneration::new(&self.df, &tbl, &embed, primary_keys, embedding_column.as_str(), embedding_table.is_chunked(embedding_column.as_str()));
 
-                    let search_result = generator.search(query.clone(), filter_refs.as_slice(), col_refs.as_slice()).await.map_err(|e| Error::CandidateGenerationError{source: e})?;
+                    let search_result = generator.search(query.clone(), filter_refs.as_slice(), col_refs.as_slice(), *limit).await.map_err(|e| Error::CandidateGenerationError{source: e})?;
 
                     // TODO: Do not prematurely collect all results. https://github.com/spiceai/spiceai/issues/5848
                     let data = collect_batches(search_result).await.boxed().context(DataFusionSnafu)?;
