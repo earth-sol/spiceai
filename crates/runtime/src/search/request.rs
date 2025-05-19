@@ -521,7 +521,7 @@ pub(crate) mod tests {
         assert!(result.is_ok());
 
         // Test escaping keyword
-        let keywords = vec!["\"); DROP TABLE testing;".to_string()];
+        let keywords = vec!["'); DROP TABLE testing;".to_string()];
         let result = SearchRequest::parse_keywords(&keywords);
         assert!(result.is_err());
     }
