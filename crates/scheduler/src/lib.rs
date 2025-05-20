@@ -16,88 +16,28 @@ limitations under the License.
 
 use std::{collections::HashMap, hash::Hash, sync::Arc, time::Instant};
 
-use datafusion::sql::TableReference;
+use component::ScheduleableComponent;
 use runtime::Runtime;
 use snafu::prelude::*;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Snafu)]
-pub enum Error {}
+pub(crate) enum Error {}
 
-pub type Result<T, E = Error> = std::result::Result<T, E>;
+pub(crate) type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Eq, PartialEq, Hash)]
-pub enum ScheduleableComponent {
-    Dataset(Arc<str>),
-    Worker(Arc<str>),
-    #[cfg(test)]
-    TestComponent(Arc<str>),
-}
+mod component;
+mod cron;
 
-impl ScheduleableComponent {
-    /// Executes the defined component.
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn execute(&self, runtime: &Arc<Runtime>) -> Result<()> {
-        match self {
-            ScheduleableComponent::Dataset(dataset) => {
-                // Implement the logic to refresh the dataset
-                let app_lock = runtime.app();
-                let app_lock = app_lock.read().await;
-                let Some(app) = app_lock.as_ref() else {
-                    todo!("Handle when app is not found");
-                };
-
-                let dataset = app.datasets.iter().find(|d| *d.name.as_str() == **dataset);
-                let Some(dataset) = dataset else {
-                    todo!("Handle when dataset is not found");
-                };
-
-                match runtime
-                    .datafusion()
-                    .refresh_table(&TableReference::parse_str(dataset.name.as_str()), None)
-                    .await
-                {
-                    Ok(()) => {
-                        // Successfully refreshed the dataset
-                    }
-                    Err(e) => {
-                        // Handle the error
-                        todo!("Handle when refresh fails: {e}");
-                    }
-                }
-
-                Ok(())
-            }
-            ScheduleableComponent::Worker(_worker) => {
-                // Implement the logic to execute the worker
-                Ok(())
-            }
-            #[cfg(test)]
-            ScheduleableComponent::TestComponent(test_component) => {
-                self.execute_test_component(test_component).await;
-                Ok(())
-            }
-        }
-    }
-}
-
-pub trait ScheduleEvaluator: Hash + Eq + PartialEq + Send + Sync {
+#[allow(dead_code)]
+pub(crate) trait ScheduleEvaluator: Hash + Eq + PartialEq + Send + Sync {
     fn evaluate(&self) -> Instant;
 }
 
 #[derive(Eq, PartialEq, Hash)]
 #[allow(dead_code)]
-pub struct CronSchedule(Arc<str>);
-impl ScheduleEvaluator for CronSchedule {
-    fn evaluate(&self) -> Instant {
-        // Implement the logic to evaluate the cron schedule
-        Instant::now()
-    }
-}
-
-#[derive(Eq, PartialEq, Hash)]
-pub struct Schedule<T: ScheduleEvaluator> {
+pub(crate) struct Schedule<T: ScheduleEvaluator> {
     evaluator: T,
     components: Vec<ScheduleableComponent>,
 }
@@ -108,7 +48,8 @@ impl<T: ScheduleEvaluator> Schedule<T> {
     /// # Errors
     ///
     /// - Only when the executor encounters an error while executing the component, not when the component itself fails.
-    pub async fn execute(&self, runtime: &Arc<Runtime>) -> Result<()> {
+    #[allow(dead_code)]
+    pub(crate) async fn execute(&self, runtime: &Arc<Runtime>) -> Result<()> {
         let mut failed_components = Vec::new();
         for component in &self.components {
             if let Err(e) = component.execute(runtime).await {
@@ -124,7 +65,8 @@ impl<T: ScheduleEvaluator> Schedule<T> {
     }
 }
 
-pub struct Scheduler<T: ScheduleEvaluator> {
+#[allow(dead_code)]
+pub(crate) struct Scheduler<T: ScheduleEvaluator> {
     name: Arc<str>,
     schedules: Vec<Arc<Schedule<T>>>,
     cancellation_token: Arc<CancellationToken>,
@@ -132,7 +74,8 @@ pub struct Scheduler<T: ScheduleEvaluator> {
 
 impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
     #[must_use]
-    pub fn new(name: Arc<str>, schedules: Vec<Arc<Schedule<T>>>) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn new(name: Arc<str>, schedules: Vec<Arc<Schedule<T>>>) -> Self {
         Self {
             name,
             schedules,
@@ -141,22 +84,26 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
     }
 
     #[must_use]
-    pub fn cancellation_token(&self) -> Arc<CancellationToken> {
+    #[allow(dead_code)]
+    pub(crate) fn cancellation_token(&self) -> Arc<CancellationToken> {
         Arc::clone(&self.cancellation_token)
     }
 
     #[must_use]
-    pub fn name(&self) -> Arc<str> {
+    #[allow(dead_code)]
+    pub(crate) fn name(&self) -> Arc<str> {
         Arc::clone(&self.name)
     }
 
     #[must_use]
-    pub fn schedules(&self) -> Vec<Arc<Schedule<T>>> {
+    #[allow(dead_code)]
+    pub(crate) fn schedules(&self) -> Vec<Arc<Schedule<T>>> {
         self.schedules.iter().map(Arc::clone).collect()
     }
 
     #[must_use]
-    pub fn run(&self, runtime: &Arc<Runtime>) -> JoinHandle<Result<()>> {
+    #[allow(dead_code)]
+    pub(crate) fn run(&self, runtime: &Arc<Runtime>) -> JoinHandle<Result<()>> {
         let runtime = Arc::clone(runtime);
         let cancellation_token = Arc::clone(&self.cancellation_token);
         let schedules = self.schedules();
