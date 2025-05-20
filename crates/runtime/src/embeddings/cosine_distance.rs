@@ -229,10 +229,10 @@ fn compute_cosine_distance(
         return exec_err!("Both arrays must have the same length");
     }
 
-    Ok(Some(cosine_distance(float_vals1, float_vals2)))
+    Ok(Some(cosine_distance(&float_vals1, &float_vals2)))
 }
 
-fn cosine_distance(x: Float64Array, y: Float64Array) -> f64 {
+fn cosine_distance(x: &Float64Array, y: &Float64Array) -> f64 {
     let mut x_length: f64 = 0.0;
     let mut y_length: f64 = 0.0;
 
@@ -291,21 +291,21 @@ mod tests {
         assert_eq!(
             0.0,
             cosine_distance(
-                Float64Array::from(vec![1.0, 2.0, 3.0]),
-                Float64Array::from(vec![1.0, 2.0, 3.0])
+                &Float64Array::from(vec![1.0, 2.0, 3.0]),
+                &Float64Array::from(vec![1.0, 2.0, 3.0])
             )
         );
 
         assert_eq!(
             1.0,
             cosine_distance(
-                Float64Array::from(vec![1.0, 2.0, 3.0]),
-                Float64Array::from(vec![-1.0, -2.0, -3.0])
+                &Float64Array::from(vec![1.0, 2.0, 3.0]),
+                &Float64Array::from(vec![-1.0, -2.0, -3.0])
             )
         );
         let dist = cosine_distance(
-            Float64Array::from(vec![1000.0, 2000.0, 30.0]),
-            Float64Array::from(vec![-42.0, 123.0, -3.0]),
+            &Float64Array::from(vec![1000.0, 2000.0, 30.0]),
+            &Float64Array::from(vec![-42.0, 123.0, -3.0]),
         );
         assert!(0.0 <= dist && dist <= 1.0);
     }
