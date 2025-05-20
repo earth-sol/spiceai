@@ -93,6 +93,7 @@ impl VectorGeneration {
             .iter()
             .map(|s| Expr::Identifier(Ident::new(s)))
             .chain(additional_columns.iter().map(|&e| e.clone()))
+            .unique()
             .collect();
         let final_projection_str = if projection.is_empty() {
             String::new()
@@ -168,7 +169,7 @@ impl VectorGeneration {
                      SELECT
                          {projection},
                          unnest({embed_col_offset}) AS offset,
-                         1.0 - cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS 'score'
+                         1.0 - cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS score
                      FROM {table_name}
                      {where_cond}
                  )",
@@ -232,7 +233,7 @@ impl VectorGeneration {
                SELECT
                    {VSS_TEMP_GEN_ID_COLUMN},
                    unnest({embed_col_offset}) AS offset,
-                   1.0 - cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS 'score'
+                   1.0 - cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS score
                FROM {VSS_TEMP_TABLE_NAME}
            )",
                 embedding_column = self.embedding_column,
@@ -284,12 +285,12 @@ impl CandidateGeneration for VectorGeneration {
                 "SELECT * FROM (
                         SELECT
                             {projection_str},
-                            cosine_distance({embedding_column}_embedding, {embedding:?}) as 'score'
+                            1.0 - cosine_distance({embedding_column}_embedding, {embedding:?}) as score
                         FROM {tbl}
                         {where_str}
                     ) subq
-                    WHERE 'score' IS NOT NULL
-                    ORDER BY 'score' DESC
+                    WHERE score IS NOT NULL
+                    ORDER BY score DESC
                     LIMIT {limit}",
                 projection_str = projection.iter().map(|e| format!("{}", *e)).join(", "),
                 embedding_column = self.embedding_column,
