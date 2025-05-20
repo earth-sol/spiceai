@@ -28,6 +28,8 @@ mod abfs;
 mod acceleration;
 mod cache;
 mod catalog;
+#[cfg(feature = "duckdb")]
+mod clickbench;
 mod cors;
 #[cfg(all(feature = "delta_lake", feature = "databricks"))]
 mod databricks_delta;
@@ -71,6 +73,8 @@ mod refresh_retry;
 mod refresh_sql;
 mod results_cache;
 mod s3;
+#[cfg(feature = "postgres")]
+mod schema_evolution;
 #[cfg(feature = "snowflake")]
 mod snowflake;
 #[cfg(feature = "spark")]

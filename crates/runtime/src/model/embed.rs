@@ -19,6 +19,7 @@ use crate::token_providers::databricks::{DatabricksM2MTokenProvider, DatabricksU
 use crate::{get_params_with_secrets, secrets::Secrets};
 use bytes::Bytes;
 use itertools::Itertools;
+use llms::HealthCheck;
 use llms::embeddings::{
     Embed, Error as EmbedError,
     candle::{download_hf_file, tei::TeiEmbed},
@@ -119,7 +120,7 @@ async fn databricks(
                 source: "Either `databricks_token` or `databricks_client_id` and `databricks_client_secret` should be provided, not both.".into(),
             })
         }
-        (None, None, None) => {
+        (Some(_), Some(_), None)|(None, None, None) => {
             Err(EmbedError::FailedToInstantiateEmbeddingModel {
                 source: "Either `databricks_token` or `databricks_client_id` and `databricks_client_secret` should be provided.".into(),
             })
@@ -127,11 +128,6 @@ async fn databricks(
         (None, None, Some(_client_secret)) => {
             Err(EmbedError::FailedToInstantiateEmbeddingModel {
                 source: "If `databricks_client_secret` is provided, `databricks_client_id` must also be provided.".into(),
-            })
-        }
-        (None, Some(_client_id), None) => {
-            Err(EmbedError::FailedToInstantiateEmbeddingModel {
-                source: "If `databricks_client_id` is provided, `databricks_client_secret` must also be provided.".into(),
             })
         }
         (Some(token), None, None) => Ok(Arc::new(llms::databricks::from_access_token(
@@ -163,16 +159,16 @@ async fn databricks(
                     model_id.as_str(),
                     token_provider,
                     user_agent,
+                    HealthCheck::Required,
                 ),
             ) as Arc<dyn Embed>)
         }
-        (Some(token),  Some(client_id), None) => {
+        (None, Some(client_id), None) => {
             let token_provider = token_provider_registry
                 .get_or_create_provider::<DatabricksU2MTokenProvider, std::convert::Infallible, _, _>(format!("databricks_u2m_{client_id}"), || async {
                     Ok(DatabricksU2MTokenProvider::new(
                         endpoint.to_string(),
                         client_id.to_string(),
-                        token.into(),
                     ))
                 })
                 .await
@@ -187,6 +183,7 @@ async fn databricks(
                     model_id.as_str(),
                     token_provider,
                     user_agent,
+                    HealthCheck::Skip,
                 ),
             ) as Arc<dyn Embed>)
         }
