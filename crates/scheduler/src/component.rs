@@ -16,63 +16,34 @@ limitations under the License.
 
 use std::sync::Arc;
 
-use datafusion::sql::TableReference;
-use runtime::Runtime;
+use async_trait::async_trait;
+use runtime::{Runtime, component::dataset::Dataset};
 
 use crate::Result;
 
-#[derive(Eq, PartialEq, Hash)]
-#[allow(dead_code)]
-pub(crate) enum ScheduleableComponent {
-    Dataset(Arc<str>),
-    Worker(Arc<str>),
-    #[cfg(test)]
-    TestComponent(Arc<str>),
+#[async_trait]
+pub(crate) trait ScheduleableComponent: Send + Sync {
+    /// Executes the defined component.
+    ///
+    /// # Errors
+    ///
+    /// - Only when the executor encounters an error while executing the component, not when the component itself fails.
+    async fn execute(&self, runtime: &Arc<Runtime>) -> Result<()>;
 }
 
-impl ScheduleableComponent {
-    /// Executes the defined component.
-    #[allow(clippy::missing_errors_doc, dead_code)]
-    pub(crate) async fn execute(&self, runtime: &Arc<Runtime>) -> Result<()> {
-        match self {
-            ScheduleableComponent::Dataset(dataset) => {
-                // Implement the logic to refresh the dataset
-                let app_lock = runtime.app();
-                let app_lock = app_lock.read().await;
-                let Some(app) = app_lock.as_ref() else {
-                    todo!("Handle when app is not found");
-                };
-
-                let dataset = app.datasets.iter().find(|d| *d.name.as_str() == **dataset);
-                let Some(dataset) = dataset else {
-                    todo!("Handle when dataset is not found");
-                };
-
-                match runtime
-                    .datafusion()
-                    .refresh_table(&TableReference::parse_str(dataset.name.as_str()), None)
-                    .await
-                {
-                    Ok(()) => {
-                        // Successfully refreshed the dataset
-                    }
-                    Err(e) => {
-                        // Handle the error
-                        todo!("Handle when refresh fails: {e}");
-                    }
-                }
-
-                Ok(())
+#[async_trait]
+impl ScheduleableComponent for Arc<Dataset> {
+    async fn execute(&self, runtime: &Arc<Runtime>) -> Result<()> {
+        match runtime.datafusion().refresh_table(&self.name, None).await {
+            Ok(()) => {
+                // Successfully refreshed the dataset
             }
-            ScheduleableComponent::Worker(_worker) => {
-                // Implement the logic to execute the worker
-                Ok(())
-            }
-            #[cfg(test)]
-            ScheduleableComponent::TestComponent(test_component) => {
-                self.execute_test_component(test_component).await;
-                Ok(())
+            Err(e) => {
+                // Handle the error
+                todo!("Handle when refresh fails: {e}");
             }
         }
+
+        Ok(())
     }
 }

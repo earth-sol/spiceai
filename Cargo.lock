@@ -11152,6 +11152,7 @@ dependencies = [
  "async-trait",
  "datafusion",
  "futures",
+ "model_components",
  "moka",
  "opentelemetry 0.27.1",
  "runtime",

@@ -14,7 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{collections::HashMap, hash::Hash, sync::Arc, time::Instant};
+use std::{
+    collections::HashMap,
+    hash::Hash,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use component::ScheduleableComponent;
 use runtime::Runtime;
@@ -35,12 +40,25 @@ pub(crate) trait ScheduleEvaluator: Hash + Eq + PartialEq + Send + Sync {
     fn evaluate(&self) -> Instant;
 }
 
-#[derive(Eq, PartialEq, Hash)]
+// #[derive(Eq, PartialEq, Hash)]
 #[allow(dead_code)]
 pub(crate) struct Schedule<T: ScheduleEvaluator> {
     evaluator: T,
-    components: Vec<ScheduleableComponent>,
+    components: Vec<Arc<dyn ScheduleableComponent>>,
 }
+
+impl<T: ScheduleEvaluator> Hash for Schedule<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.evaluator.hash(state);
+    }
+}
+
+impl<T: ScheduleEvaluator> PartialEq for Schedule<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.evaluator == other.evaluator
+    }
+}
+impl<T: ScheduleEvaluator> Eq for Schedule<T> {}
 
 impl<T: ScheduleEvaluator> Schedule<T> {
     /// Executes the components defined by this schedule.
@@ -70,6 +88,7 @@ pub(crate) struct Scheduler<T: ScheduleEvaluator> {
     name: Arc<str>,
     schedules: Vec<Arc<Schedule<T>>>,
     cancellation_token: Arc<CancellationToken>,
+    evaluation_period: Duration,
 }
 
 impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
@@ -80,7 +99,15 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
             name,
             schedules,
             cancellation_token: Arc::new(CancellationToken::new()),
+            evaluation_period: Duration::from_secs(60), // default 1 minute expression evaluation period
         }
+    }
+
+    #[must_use]
+    #[allow(dead_code)]
+    pub(crate) fn with_evaluation_period(mut self, evaluation_period: Duration) -> Self {
+        self.evaluation_period = evaluation_period;
+        self
     }
 
     #[must_use]
@@ -104,6 +131,7 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
     #[must_use]
     #[allow(dead_code)]
     pub(crate) fn run(&self, runtime: &Arc<Runtime>) -> JoinHandle<Result<()>> {
+        let evaluation_period = self.evaluation_period;
         let runtime = Arc::clone(runtime);
         let cancellation_token = Arc::clone(&self.cancellation_token);
         let schedules = self.schedules();
@@ -113,7 +141,7 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
 
             loop {
                 // TODO: make this sleep check a more reasonable time, maybe a configuration?
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(evaluation_period).await;
                 if cancellation_token.is_cancelled() {
                     break;
                 }
@@ -152,6 +180,7 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
 
 #[cfg(test)]
 mod test {
+    use async_trait::async_trait;
     use std::sync::LazyLock;
     use tokio::sync::RwLock;
 
@@ -171,13 +200,21 @@ mod test {
         RwLock::new(map)
     });
 
-    impl ScheduleableComponent {
-        #[allow(clippy::missing_panics_doc)]
-        pub async fn execute_test_component(&self, name: &Arc<str>) {
+    struct TestComponent {
+        name: Arc<str>,
+    }
+
+    #[async_trait]
+    impl ScheduleableComponent for TestComponent {
+        async fn execute(&self, _runtime: &Arc<Runtime>) -> Result<()> {
             let mut map_lock = TEST_EXECUTION_COUNT.write().await;
 
-            let count = map_lock.get_mut(name).expect("To get test execution count");
+            let count = map_lock
+                .get_mut(self.name.as_ref())
+                .expect("To get test execution count");
             *count += 1;
+
+            Ok(())
         }
     }
 
@@ -187,12 +224,13 @@ mod test {
 
         let schedule = Schedule {
             evaluator: TestEvaluator {},
-            components: vec![ScheduleableComponent::TestComponent(
-                "test_scheduler".into(),
-            )],
+            components: vec![Arc::new(TestComponent {
+                name: "test_scheduler".into(),
+            })],
         };
 
-        let scheduler = Scheduler::new("test_scheduler".into(), vec![Arc::new(schedule)]);
+        let scheduler = Scheduler::new("test_scheduler".into(), vec![Arc::new(schedule)])
+            .with_evaluation_period(std::time::Duration::from_secs(1));
         let scheduler_handle = scheduler.run(&runtime);
 
         tokio::time::sleep(std::time::Duration::from_secs(4)).await;

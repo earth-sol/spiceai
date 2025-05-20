@@ -21,6 +21,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 runtime = { path = "../runtime" }
+model_components = { path = "../model_components" }
 
 [features]
 default = []
