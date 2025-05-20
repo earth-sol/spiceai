@@ -15,10 +15,13 @@ limitations under the License.
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::doc_markdown)]
 
-use async_trait::async_trait;
-use datafusion::execution::SendableRecordBatchStream;
-use datafusion::logical_expr::sqlparser::ast::Expr;
 use snafu::Snafu;
+
+pub mod aggregation;
+pub mod generation;
+
+pub static SEARCH_SCORE_COLUMN_NAME: &str = "score";
+pub static SEARCH_VALUE_COLUMN_NAME: &str = "value";
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -28,30 +31,3 @@ pub enum Error {
     },
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-/// Standard interface to generate search candidates from a given table/dataset/source for subsequent aggregation in a hybrid search system.
-/// The candidate generation phase should:
-///  - Accept optional filter pushdown.
-///  - Emit RecordBatch, or RecordBatch streams
-///  - Would be nice if `impl TableProvider for CandidateGeneration` works.
-#[async_trait]
-pub trait CandidateGeneration: Sync + Send {
-    /// Generates candidates for a query term.
-    ///
-    /// Any filter within `opt_filters` where [`CandidateGeneration::supports_filters_pushdown`] evaluates to [`true`] is expected to be applied. No assumptions are made on other filters.
-    ///
-    /// [`RecordBatch`] expects at least two columns: a 'score' column, and a column returning the underlying data that matched. Any column in `addition_projection` that evaluates to true in [`CandidateGeneration::supports_columns`] must also be returned. No assumptions are made on other columns.
-    async fn search(
-        &self,
-        query: String,
-        opt_filters: &[&Expr],
-        addition_projection: &[&Expr],
-        limit: usize,
-    ) -> Result<SendableRecordBatchStream>;
-
-    /// Whether candidates can be filtered during generation, i.e. [`CandidateGeneration::search`].
-    fn supports_filters_pushdown(&self, filters: &[&Expr]) -> Result<Vec<bool>>;
-
-    /// Whether additional columns of the underlying source can also be retrieved during generation.
-    fn supports_columns(&self, projection: &[&Expr]) -> Result<Vec<bool>>;
-}

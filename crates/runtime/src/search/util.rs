@@ -187,3 +187,22 @@ pub async fn user_tables_with_embeddings(
     }
     Ok(tables_with_embeddings)
 }
+
+pub async fn embedding_columns_from_table(
+    df: &Arc<DataFusion>,
+    tbl: &TableReference,
+) -> super::Result<Vec<String>> {
+    let table_provider = df
+        .get_table(tbl)
+        .await
+        .ok_or(super::Error::DataSourcesNotFound {
+            data_source: vec![tbl.clone()],
+        })?;
+
+    let Some(embedding_table) = get_embedding_table(&table_provider).await else {
+        return Err(super::Error::CannotVectorSearchDataset {
+            data_source: tbl.clone(),
+        });
+    };
+    Ok(embedding_table.get_embedding_columns())
+}

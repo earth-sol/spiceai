@@ -22,7 +22,8 @@ use datafusion::logical_expr::sqlparser::ast::Expr;
 use datafusion::sql::sqlparser::ast::Ident;
 use datafusion::{execution::SendableRecordBatchStream, sql::TableReference};
 use llms::embeddings::Embed;
-use search::CandidateGeneration;
+use search::generation::CandidateGeneration;
+use search::{SEARCH_SCORE_COLUMN_NAME, SEARCH_VALUE_COLUMN_NAME};
 use snafu::ResultExt;
 use tract_core::tract_data::itertools::Itertools;
 
@@ -123,13 +124,12 @@ impl VectorGeneration {
                     LIMIT {n}
                 )
                 SELECT
-                    substring(t.{embed_col}, rd.offset[1], rd.offset[2] - rd.offset[1]) AS {chunk_col},
+                    substring(t.{embed_col}, rd.offset[1], rd.offset[2] - rd.offset[1]) AS {SEARCH_VALUE_COLUMN_NAME},
                     {projection_str}
                     rd.score
                 FROM ranked_docs rd
                 JOIN {proj_table} t ON {join_on_conditions}",
                 embed_col= self.embedding_column,
-                chunk_col = Expr::Identifier(Ident::new(format!("{}_chunk", self.embedding_column))),
                 pks = pks.iter().join(", "),
                 projection_str = final_projection_str,
                 join_on_conditions = pks
@@ -169,7 +169,7 @@ impl VectorGeneration {
                      SELECT
                          {projection},
                          unnest({embed_col_offset}) AS offset,
-                         1.0 - cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS score
+                         1.0 - cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS {SEARCH_SCORE_COLUMN_NAME}
                      FROM {table_name}
                      {where_cond}
                  )",
@@ -233,7 +233,7 @@ impl VectorGeneration {
                SELECT
                    {VSS_TEMP_GEN_ID_COLUMN},
                    unnest({embed_col_offset}) AS offset,
-                   1.0 - cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS score
+                   1.0 - cosine_distance(unnest({embed_col_embedding}), {embedding:?}) AS {SEARCH_SCORE_COLUMN_NAME}
                FROM {VSS_TEMP_TABLE_NAME}
            )",
                 embedding_column = self.embedding_column,
@@ -275,17 +275,22 @@ impl CandidateGeneration for VectorGeneration {
                 .primary_keys
                 .iter()
                 .cloned()
-                .chain(Some(self.embedding_column.to_string()))
                 .map(|s| Expr::Identifier(Ident::new(s)))
+                .chain(Some(Expr::Named {
+                    // `embedding_column as 'value'`
+                    expr: Box::new(Expr::Identifier(Ident::new(self.embedding_column.clone()))),
+                    name: Ident::new(SEARCH_VALUE_COLUMN_NAME),
+                }))
                 .chain(addition_projection.iter().map(|&e| e.clone()))
                 .unique()
                 .collect();
 
+            // SEARCH_VALUE_COLUMN_NAME
             format!(
                 "SELECT * FROM (
                         SELECT
                             {projection_str},
-                            1.0 - cosine_distance({embedding_column}_embedding, {embedding:?}) as score
+                            1.0 - cosine_distance({embedding_column}_embedding, {embedding:?}) as {SEARCH_SCORE_COLUMN_NAME}
                         FROM {tbl}
                         {where_str}
                     ) subq

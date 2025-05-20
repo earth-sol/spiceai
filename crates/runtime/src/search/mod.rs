@@ -24,8 +24,6 @@ use datafusion::sql::TableReference;
 use itertools::Itertools;
 use snafu::prelude::*;
 
-pub static SEARCH_SCORE_COLUMN_NAME: &str = "score";
-
 #[derive(Debug, Snafu)]
 pub enum Error {
     #[snafu(display("Data sources [{}] does not exist", data_source.iter().map(TableReference::to_quoted_string).join(", ")))]
@@ -49,6 +47,9 @@ pub enum Error {
 
     #[snafu(display("Error occurred retrieving candidate search results: {source}"))]
     CandidateGenerationError { source: search::Error },
+
+    #[snafu(display("Error occurred aggregating candidate search results: {source}"))]
+    CandidateAggregationError { source: search::Error },
 
     #[snafu(display("Error occurred processing Arrow records: {source}"))]
     RecordProcessingError { source: ArrowError },
