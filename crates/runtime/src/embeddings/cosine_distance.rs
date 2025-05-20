@@ -286,6 +286,7 @@ mod tests {
 
     use super::cosine_distance;
 
+    #[allow(clippy::float_cmp)]
     #[test]
     fn test_cosine_distance() {
         assert_eq!(
@@ -307,6 +308,6 @@ mod tests {
             &Float64Array::from(vec![1000.0, 2000.0, 30.0]),
             &Float64Array::from(vec![-42.0, 123.0, -3.0]),
         );
-        assert!(0.0 <= dist && dist <= 1.0);
+        assert!((0.0..=1.0).contains(&dist));
     }
 }
