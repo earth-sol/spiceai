@@ -60,7 +60,7 @@ tempfile.workspace = true
 token_provider = { path = "../token_provider" }
 
 [dev-dependencies]
-anyhow = "1.0.86"
+anyhow = "1.0.98"
 dotenvy.workspace = true
 insta.workspace = true
 jsonpath-rust = "0.7.3"
