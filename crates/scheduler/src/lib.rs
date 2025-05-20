@@ -109,10 +109,10 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
         let schedules = self.schedules();
 
         tokio::spawn(async move {
-            // Implement the logic to run the scheduler
             let mut pending_tasks: HashMap<Arc<Schedule<T>>, Instant> = HashMap::new();
 
             loop {
+                // TODO: make this sleep check a more reasonable time, maybe a configuration?
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 if cancellation_token.is_cancelled() {
                     break;
@@ -124,6 +124,7 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
                     if let Some(pending_run) = pending_tasks.get(schedule) {
                         if *pending_run != next {
                             // The next run time has changed, check if the current time is past the pending run time
+                            // the pending run time is not changed unless the schedule is executed (e.g. a schedule cannot reschedule backwards in time)
                             if now >= *pending_run || now >= next {
                                 // Execute the schedule
                                 if let Err(_e) = schedule.execute(&runtime).await {
