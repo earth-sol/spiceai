@@ -1,0 +1,26 @@
+[package]
+description = "Spice Scheduler"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+name = "scheduler"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+arrow.workspace = true
+async-stream.workspace = true
+async-trait.workspace = true
+datafusion.workspace = true
+futures.workspace = true
+moka.workspace = true
+opentelemetry.workspace = true
+snafu.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+runtime = { path = "../runtime" }
+
+[features]
+default = []

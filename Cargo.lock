@@ -11144,6 +11144,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "scheduler"
+version = "1.4.0-unstable"
+dependencies = [
+ "arrow",
+ "async-stream",
+ "async-trait",
+ "datafusion",
+ "futures",
+ "moka",
+ "opentelemetry 0.27.1",
+ "runtime",
+ "snafu",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "schemars"
 version = "0.8.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
