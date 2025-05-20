@@ -10,17 +10,11 @@ version.workspace = true
 
 [dependencies]
 arrow.workspace = true
-async-stream.workspace = true
 async-trait.workspace = true
-datafusion.workspace = true
-futures.workspace = true
-moka.workspace = true
-opentelemetry.workspace = true
 snafu.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["time"] }
 tokio-util.workspace = true
 tracing.workspace = true
-runtime = { path = "../runtime" }
 
 [features]
 default = []

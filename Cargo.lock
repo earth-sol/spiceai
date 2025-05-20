@@ -10726,6 +10726,7 @@ dependencies = [
  "rusqlite",
  "rustls 0.23.26",
  "rustls-pemfile 2.2.0",
+ "scheduler",
  "schemars",
  "scopeguard",
  "secrecy",
@@ -11148,13 +11149,7 @@ name = "scheduler"
 version = "1.4.0-unstable"
 dependencies = [
  "arrow",
- "async-stream",
  "async-trait",
- "datafusion",
- "futures",
- "moka",
- "opentelemetry 0.27.1",
- "runtime",
  "snafu",
  "tokio",
  "tokio-util",

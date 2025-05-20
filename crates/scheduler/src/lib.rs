@@ -22,17 +22,16 @@ use std::{
 };
 
 use component::ScheduleableComponent;
-use runtime::Runtime;
 use snafu::prelude::*;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Snafu)]
-pub(crate) enum Error {}
+pub enum Error {}
 
-pub(crate) type Result<T, E = Error> = std::result::Result<T, E>;
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-mod component;
+pub mod component;
 mod cron;
 
 #[allow(dead_code)]
@@ -40,7 +39,6 @@ pub(crate) trait ScheduleEvaluator: Hash + Eq + PartialEq + Send + Sync {
     fn evaluate(&self) -> Instant;
 }
 
-// #[derive(Eq, PartialEq, Hash)]
 #[allow(dead_code)]
 pub(crate) struct Schedule<T: ScheduleEvaluator> {
     evaluator: T,
@@ -67,10 +65,10 @@ impl<T: ScheduleEvaluator> Schedule<T> {
     ///
     /// - Only when the executor encounters an error while executing the component, not when the component itself fails.
     #[allow(dead_code)]
-    pub(crate) async fn execute(&self, runtime: &Arc<Runtime>) -> Result<()> {
+    pub(crate) async fn execute(&self) -> Result<()> {
         let mut failed_components = Vec::new();
         for component in &self.components {
-            if let Err(e) = component.execute(runtime).await {
+            if let Err(e) = component.execute().await {
                 failed_components.push(e);
             }
         }
@@ -130,9 +128,8 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
 
     #[must_use]
     #[allow(dead_code)]
-    pub(crate) fn run(&self, runtime: &Arc<Runtime>) -> JoinHandle<Result<()>> {
+    pub(crate) fn run(&self) -> JoinHandle<Result<()>> {
         let evaluation_period = self.evaluation_period;
-        let runtime = Arc::clone(runtime);
         let cancellation_token = Arc::clone(&self.cancellation_token);
         let schedules = self.schedules();
 
@@ -140,7 +137,6 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
             let mut pending_tasks: HashMap<Arc<Schedule<T>>, Instant> = HashMap::new();
 
             loop {
-                // TODO: make this sleep check a more reasonable time, maybe a configuration?
                 tokio::time::sleep(evaluation_period).await;
                 if cancellation_token.is_cancelled() {
                     break;
@@ -155,7 +151,7 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
                             // the pending run time is not changed unless the schedule is executed (e.g. a schedule cannot reschedule backwards in time)
                             if now >= *pending_run || now >= next {
                                 // Execute the schedule
-                                if let Err(_e) = schedule.execute(&runtime).await {
+                                if let Err(_e) = schedule.execute().await {
                                     todo!()
                                 }
                                 if now >= next {
@@ -197,6 +193,7 @@ mod test {
     static TEST_EXECUTION_COUNT: LazyLock<RwLock<HashMap<Arc<str>, usize>>> = LazyLock::new(|| {
         let mut map = HashMap::new();
         map.insert(Arc::from("test_scheduler"), 0);
+        map.insert(Arc::from("test_multi_schedule"), 0);
         RwLock::new(map)
     });
 
@@ -206,7 +203,7 @@ mod test {
 
     #[async_trait]
     impl ScheduleableComponent for TestComponent {
-        async fn execute(&self, _runtime: &Arc<Runtime>) -> Result<()> {
+        async fn execute(&self) -> Result<()> {
             let mut map_lock = TEST_EXECUTION_COUNT.write().await;
 
             let count = map_lock
@@ -220,8 +217,6 @@ mod test {
 
     #[tokio::test]
     async fn test_scheduler() {
-        let runtime = Arc::new(Runtime::builder().build().await);
-
         let schedule = Schedule {
             evaluator: TestEvaluator {},
             components: vec![Arc::new(TestComponent {
@@ -231,7 +226,7 @@ mod test {
 
         let scheduler = Scheduler::new("test_scheduler".into(), vec![Arc::new(schedule)])
             .with_evaluation_period(std::time::Duration::from_secs(1));
-        let scheduler_handle = scheduler.run(&runtime);
+        let scheduler_handle = scheduler.run();
 
         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
 
@@ -250,6 +245,44 @@ mod test {
         assert!(
             *count == 2 || *count == 3,
             "Test component should have executed 2 or 3 times, but got {count}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_multi_schedule() {
+        let schedule = Schedule {
+            evaluator: TestEvaluator {},
+            components: vec![
+                Arc::new(TestComponent {
+                    name: "test_multi_schedule".into(),
+                }),
+                Arc::new(TestComponent {
+                    name: "test_multi_schedule".into(),
+                }),
+            ],
+        };
+
+        let scheduler = Scheduler::new("test_multi_schedule".into(), vec![Arc::new(schedule)])
+            .with_evaluation_period(std::time::Duration::from_secs(1));
+        let scheduler_handle = scheduler.run();
+
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+
+        scheduler.cancellation_token().cancel();
+        scheduler_handle
+            .await
+            .expect("Should join handle")
+            .expect("To finish the handle without error");
+
+        let map_lock = TEST_EXECUTION_COUNT.read().await;
+        let count = map_lock
+            .get("test_multi_schedule")
+            .expect("To get test execution count");
+
+        // 4-6 times, because of the sleep times and delay inaccuracies
+        assert!(
+            *count >= 4 && *count <= 6,
+            "Test component should have executed 4-6 times, but got {count}"
         );
     }
 }

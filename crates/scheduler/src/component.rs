@@ -14,36 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::sync::Arc;
-
 use async_trait::async_trait;
-use runtime::{Runtime, component::dataset::Dataset};
 
 use crate::Result;
 
 #[async_trait]
-pub(crate) trait ScheduleableComponent: Send + Sync {
+pub trait ScheduleableComponent: Send + Sync {
     /// Executes the defined component.
     ///
     /// # Errors
     ///
     /// - Only when the executor encounters an error while executing the component, not when the component itself fails.
-    async fn execute(&self, runtime: &Arc<Runtime>) -> Result<()>;
-}
-
-#[async_trait]
-impl ScheduleableComponent for Arc<Dataset> {
-    async fn execute(&self, runtime: &Arc<Runtime>) -> Result<()> {
-        match runtime.datafusion().refresh_table(&self.name, None).await {
-            Ok(()) => {
-                // Successfully refreshed the dataset
-            }
-            Err(e) => {
-                // Handle the error
-                todo!("Handle when refresh fails: {e}");
-            }
-        }
-
-        Ok(())
-    }
+    async fn execute(&self) -> Result<()>;
 }
