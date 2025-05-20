@@ -17,7 +17,7 @@ limitations under the License.
 use crate::datafusion::DataFusion;
 use crate::datafusion::request_context_extension::DataFusionContextExtension;
 use crate::model::ModelContextLayer;
-use crate::{embeddings::vector_search, status::RuntimeStatus};
+use crate::{search::vector_search, status::RuntimeStatus};
 
 use crate::Runtime;
 #[cfg(feature = "openapi")]
