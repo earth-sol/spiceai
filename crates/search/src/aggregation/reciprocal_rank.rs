@@ -107,55 +107,100 @@ fn verify_schema_compatibility(streams: &[SendableRecordBatchStream]) -> Result<
     Ok(schema)
 }
 
-// TODO: Handle additional columns found in tables. We know they are all the same.
 fn reciprocal_rank_fusion_sql(
     tables: &[String],
     primary_key: &[String],
     offset: usize,
     limit: usize,
 ) -> String {
-    // Fusion sum expression
+    // 1) Add explicit rank one CTE per table, ranking _only_ by the PK columns
+    //
+    // ```sql
+    //    my_tbl AS (
+    //      SELECT doc_id, section, {SEARCH_VALUE_COLUMN_NAME},
+    //             ROW_NUMBER() OVER (ORDER BY doc_id, section) AS rank
+    //      FROM my_tbl
+    //    ),
+    // ```
+    let pk_list = primary_key.join(", ");
+    let cte_defs: String = tables
+        .iter()
+        .map(|tbl| {
+            format!(
+                "{tbl} AS (
+                    SELECT
+                        {pk_list},
+                        {SEARCH_VALUE_COLUMN_NAME},
+                        ROW_NUMBER() OVER (ORDER BY {pk_list}) AS rank
+                    FROM {tbl}
+                )"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+
+    // 2) Build the RRF sum, coalescing missing ranks to zero:
+    //    coalesce(1.0/(bm25.rank+offset),0) + coalesce(1.0/(vector.rank+offset),0) + …
     let fusion_sum: String = tables
         .iter()
-        .map(|t| format!("(1.0 / ({}.{} + {}))", t, SEARCH_SCORE_COLUMN_NAME, offset))
+        .map(|tbl| {
+            format!(
+                "coalesce(1.0/({tbl}.rank + {offset}), 0)",
+                tbl = tbl,
+                offset = offset
+            )
+        })
         .collect::<Vec<_>>()
         .join(" + ");
 
-    // SELECT composite primary key columns from first table
+    // 3) Coalesce the PK columns themselves across all tables:
+    //
+    //    coalesce(bm25.doc_id, vector.doc_id, …) AS doc_id,
+    //    coalesce(bm25.section, vector.section, …) AS section
     let select_keys: String = primary_key
         .iter()
-        .map(|col| format!("{}.{}", tables[0], col))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let value_key = format!("{}.{}", tables[0], SEARCH_VALUE_COLUMN_NAME);
-
-    // Build JOINs on all primary key columns
-    let joins: String = tables[1..]
-        .iter()
-        .map(|t| {
-            let cond = primary_key
+        .map(|col| {
+            let cols = tables
                 .iter()
-                .map(|col| format!("{}.{} = {}.{}", tables[0], col, t, col))
+                .map(|tbl| format!("{}.{}", tbl, col))
                 .collect::<Vec<_>>()
-                .join(" AND ");
-            format!("JOIN {} ON {}", t, cond)
+                .join(", ");
+            format!("coalesce({cols}) as {col}", cols = cols, col = col)
         })
         .collect::<Vec<_>>()
-        .join(" ");
+        .join(",\n       ");
+
+    // 4) Chain FULL OUTER JOINs on all PK columns
+    let joins: String = tables[1..]
+        .iter()
+        .map(|tbl| {
+            let cond = primary_key
+                .iter()
+                .map(|col| format!("{}.{} = {}.{}", tables[0], col, tbl, col))
+                .collect::<Vec<_>>()
+                .join(" AND ");
+            format!("FULL OUTER JOIN {} ON {}", tbl, cond)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
 
     format!(
-        "SELECT
-            {value_key},
-            TRUNC({fusion_sum}, 6) as {SEARCH_SCORE_COLUMN_NAME},
-            {select_keys} \
-        FROM {base_table} {joins} \
-        ORDER BY {SEARCH_SCORE_COLUMN_NAME} DESC
-        LIMIT {limit}",
+        "WITH\n{cte_defs}\n\
+         SELECT\n\
+           TRUNC({fusion_sum}, 6) AS {SEARCH_SCORE_COLUMN_NAME},\n\
+           {base}.{SEARCH_VALUE_COLUMN_NAME} as {SEARCH_VALUE_COLUMN_NAME},\n\
+           {select_keys}\n\
+         FROM {base}\n\
+         {joins}\n\
+         ORDER BY {SEARCH_SCORE_COLUMN_NAME} DESC\n\
+         LIMIT {limit};",
+        cte_defs = cte_defs,
         fusion_sum = fusion_sum,
+        SEARCH_SCORE_COLUMN_NAME = SEARCH_SCORE_COLUMN_NAME,
         select_keys = select_keys,
-        base_table = tables[0],
-        joins = joins
+        base = tables[0],
+        joins = joins,
+        limit = limit
     )
 }
 
