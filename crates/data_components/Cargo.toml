@@ -59,6 +59,7 @@ rusqlite = { workspace = true, optional = true }
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2 = { workspace = true, optional = true }
 snafu.workspace = true
 snowflake-api = { workspace = true, optional = true }
 spark-connect-rs = { git = "https://github.com/spiceai/spark-connect-rs.git", rev = "8f0473271de9ea611969dbdd88d76816976ce429", features = [
@@ -82,7 +83,7 @@ rdkafka = { version = "0.37.0", features = ["cmake-build"], optional = true }
 
 [features]
 clickhouse = ["dep:clickhouse-rs"]
-databricks = ["delta_lake", "spark_connect"]
+databricks = ["delta_lake", "spark_connect", "dep:sha2"]
 debezium = ["dep:rdkafka"]
 delta_lake = ["dep:delta_kernel"]
 duckdb = [

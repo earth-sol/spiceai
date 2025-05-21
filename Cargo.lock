@@ -3228,6 +3228,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "sha2",
  "snafu",
  "snowflake-api",
  "spark-connect-rs",
