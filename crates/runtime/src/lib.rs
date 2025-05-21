@@ -95,6 +95,7 @@ pub mod parameters;
 pub mod podswatcher;
 pub mod request;
 mod scheduling;
+pub mod search;
 pub mod secrets;
 pub mod spice_metrics;
 pub mod status;
