@@ -11,10 +11,12 @@ version.workspace = true
 [dependencies]
 arrow.workspace = true
 async-trait.workspace = true
+futures.workspace = true
 snafu.workspace = true
 tokio = { workspace = true, features = ["time"] }
 tokio-util.workspace = true
 tracing.workspace = true
+uuid.workspace = true
 
 [features]
 default = []

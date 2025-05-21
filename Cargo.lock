@@ -11151,10 +11151,12 @@ version = "1.4.0-unstable"
 dependencies = [
  "arrow",
  "async-trait",
+ "futures",
  "snafu",
  "tokio",
  "tokio-util",
  "tracing",
+ "uuid 1.16.0",
 ]
 
 [[package]]

@@ -15,13 +15,14 @@ limitations under the License.
 */
 
 use std::{
-    collections::HashMap,
-    hash::Hash,
+    any::Any,
+    collections::{BTreeMap, HashMap},
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use component::ScheduleableComponent;
+use evaluators::ScheduleEvaluator;
+use schedule::Schedule;
 use snafu::prelude::*;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -32,67 +33,67 @@ pub enum Error {}
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub mod component;
-mod cron;
+pub mod evaluators;
+pub mod schedule;
 
-#[allow(dead_code)]
-pub(crate) trait ScheduleEvaluator: Hash + Eq + PartialEq + Send + Sync {
-    fn evaluate(&self) -> Instant;
+#[derive(Eq, PartialEq)]
+pub enum TaskDelivery {
+    Immediate,
+    Queued,
 }
 
-#[allow(dead_code)]
-pub(crate) struct Schedule<T: ScheduleEvaluator> {
-    evaluator: T,
-    components: Vec<Arc<dyn ScheduleableComponent>>,
+pub struct TaskRequest {
+    at: Instant,
+    delivery: TaskDelivery,
+    created_at: Instant,
 }
 
-impl<T: ScheduleEvaluator> Hash for Schedule<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.evaluator.hash(state);
-    }
-}
-
-impl<T: ScheduleEvaluator> PartialEq for Schedule<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.evaluator == other.evaluator
-    }
-}
-impl<T: ScheduleEvaluator> Eq for Schedule<T> {}
-
-impl<T: ScheduleEvaluator> Schedule<T> {
-    /// Executes the components defined by this schedule.
-    ///
-    /// # Errors
-    ///
-    /// - Only when the executor encounters an error while executing the component, not when the component itself fails.
-    #[allow(dead_code)]
-    pub(crate) async fn execute(&self) -> Result<()> {
-        let mut failed_components = Vec::new();
-        for component in &self.components {
-            if let Err(e) = component.execute().await {
-                failed_components.push(e);
-            }
+impl TaskRequest {
+    #[must_use]
+    pub fn now() -> Self {
+        let now = Instant::now();
+        Self {
+            at: now,
+            delivery: TaskDelivery::Queued,
+            created_at: now,
         }
+    }
 
-        if !failed_components.is_empty() {
-            // Log or handle the errors
+    #[must_use]
+    pub fn from_secs(secs: u64) -> Self {
+        let now = Instant::now();
+        Self {
+            at: now + Duration::from_secs(secs),
+            delivery: TaskDelivery::Queued,
+            created_at: now,
         }
+    }
 
-        Ok(())
+    #[must_use]
+    pub fn immediate(mut self) -> Self {
+        self.delivery = TaskDelivery::Immediate;
+        self
     }
 }
 
+struct RunningTask {
+    task_request: Arc<TaskRequest>,
+    schedule: Arc<Schedule>,
+    handle: JoinHandle<Result<()>>,
+}
+
 #[allow(dead_code)]
-pub(crate) struct Scheduler<T: ScheduleEvaluator> {
+pub(crate) struct Scheduler {
     name: Arc<str>,
-    schedules: Vec<Arc<Schedule<T>>>,
+    schedules: Vec<Arc<Schedule>>,
     cancellation_token: Arc<CancellationToken>,
     evaluation_period: Duration,
 }
 
-impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
+impl Scheduler {
     #[must_use]
     #[allow(dead_code)]
-    pub(crate) fn new(name: Arc<str>, schedules: Vec<Arc<Schedule<T>>>) -> Self {
+    pub(crate) fn new(name: Arc<str>, schedules: Vec<Arc<Schedule>>) -> Self {
         Self {
             name,
             schedules,
@@ -122,7 +123,7 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
 
     #[must_use]
     #[allow(dead_code)]
-    pub(crate) fn schedules(&self) -> Vec<Arc<Schedule<T>>> {
+    pub(crate) fn schedules(&self) -> Vec<Arc<Schedule>> {
         self.schedules.iter().map(Arc::clone).collect()
     }
 
@@ -134,7 +135,10 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
         let schedules = self.schedules();
 
         tokio::spawn(async move {
-            let mut pending_tasks: HashMap<Arc<Schedule<T>>, Instant> = HashMap::new();
+            // store a rolling map of the pending tasks
+            let mut pending_tasks: HashMap<Schedule, BTreeMap<Instant, TaskRequest>> =
+                HashMap::new();
+            let mut running_tasks: HashMap<Schedule, RunningTask> = HashMap::new();
 
             loop {
                 tokio::time::sleep(evaluation_period).await;
@@ -144,27 +148,15 @@ impl<T: ScheduleEvaluator + 'static> Scheduler<T> {
 
                 let now = Instant::now();
                 for schedule in &schedules {
-                    let next = schedule.evaluator.evaluate();
-                    if let Some(pending_run) = pending_tasks.get(schedule) {
-                        if *pending_run != next {
-                            // The next run time has changed, check if the current time is past the pending run time
-                            // the pending run time is not changed unless the schedule is executed (e.g. a schedule cannot reschedule backwards in time)
-                            if now >= *pending_run || now >= next {
-                                // Execute the schedule
-                                if let Err(_e) = schedule.execute().await {
-                                    todo!()
-                                }
-                                if now >= next {
-                                    // If the current time is past the next run time, remove the task to force a reschedule
-                                    pending_tasks.remove(schedule);
-                                } else {
-                                    pending_tasks.insert(Arc::clone(schedule), next);
-                                }
+                    if let Some(currently_running) = running_tasks.get(schedule) {
+                        if currently_running.handle.is_finished() {
+                            running_tasks.remove(schedule);
+                        } else {
+                            // the task is still running. evaluate any manual interrupts
+                            for evaluator in schedule.evaluators() {
+                                todo!()
                             }
                         }
-                    } else {
-                        // Schedule the first run
-                        pending_tasks.insert(Arc::clone(schedule), next);
                     }
                 }
             }
@@ -180,15 +172,21 @@ mod test {
     use std::sync::LazyLock;
     use tokio::sync::RwLock;
 
+    use crate::component::ScheduleableComponent;
+
     use super::*;
 
-    #[derive(Eq, PartialEq, Hash)]
     struct TestEvaluator;
-    impl ScheduleEvaluator for TestEvaluator {
-        fn evaluate(&self) -> Instant {
-            Instant::now() + std::time::Duration::from_secs(1)
+
+    impl Iterator for TestEvaluator {
+        type Item = TaskRequest;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            Some(TaskRequest::from_secs(1))
         }
     }
+
+    impl ScheduleEvaluator for TestEvaluator {}
 
     static TEST_EXECUTION_COUNT: LazyLock<RwLock<HashMap<Arc<str>, usize>>> = LazyLock::new(|| {
         let mut map = HashMap::new();
@@ -217,12 +215,12 @@ mod test {
 
     #[tokio::test]
     async fn test_scheduler() {
-        let schedule = Schedule {
-            evaluator: TestEvaluator {},
-            components: vec![Arc::new(TestComponent {
+        let schedule = Schedule::new(
+            vec![Arc::new(TestEvaluator {})],
+            vec![Arc::new(TestComponent {
                 name: "test_scheduler".into(),
             })],
-        };
+        );
 
         let scheduler = Scheduler::new("test_scheduler".into(), vec![Arc::new(schedule)])
             .with_evaluation_period(std::time::Duration::from_secs(1));
@@ -250,9 +248,9 @@ mod test {
 
     #[tokio::test]
     async fn test_multi_schedule() {
-        let schedule = Schedule {
-            evaluator: TestEvaluator {},
-            components: vec![
+        let schedule = Schedule::new(
+            vec![Arc::new(TestEvaluator {})],
+            vec![
                 Arc::new(TestComponent {
                     name: "test_multi_schedule".into(),
                 }),
@@ -260,7 +258,7 @@ mod test {
                     name: "test_multi_schedule".into(),
                 }),
             ],
-        };
+        );
 
         let scheduler = Scheduler::new("test_multi_schedule".into(), vec![Arc::new(schedule)])
             .with_evaluation_period(std::time::Duration::from_secs(1));
