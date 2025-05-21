@@ -34,7 +34,6 @@ use snafu::ResultExt;
 /// score_a = 1 / (rank_i + offset) + 1 / (rank_j + offset) + ...
 /// ```
 /// Where `rank_i` is the rank of the i-th stream, and `offset` is a constant (e.g. 60).
-#[derive(Default)]
 pub struct ReciprocalRankFusion;
 
 #[async_trait]

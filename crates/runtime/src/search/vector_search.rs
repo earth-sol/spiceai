@@ -197,23 +197,23 @@ impl VectorSearch {
 
                     for (i, col) in embedding_columns.iter().enumerate() {
                         results.insert(i, self.individual_vector_search(
-                            &tbl,
-                            col.as_str(),
-                            query.as_str(),
-                            primary_keys,
-                            additional_columns.as_slice(),
-                            where_cond.as_ref(),
-                            keywords.clone(),
-                            *limit
-                        ).await?
-                        )
+                                &tbl,
+                                col.as_str(),
+                                query.as_str(),
+                                primary_keys,
+                                additional_columns.as_slice(),
+                                where_cond.as_ref(),
+                                keywords.clone(),
+                                *limit
+                            ).await?
+                        );
                     }
 
                     Ok((tbl.clone(), VectorSearchGenerationTableResult{data: results, primary_keys: primary_keys.to_vec()}))
                 }
             }).collect::<Vec<_>>()).await?.into_iter().collect();
 
-            self.aggregate_per_table(response, ReciprocalRankFusion::default(), additional_columns.as_slice(), *limit).await
+            self.aggregate_per_table(response, ReciprocalRankFusion, additional_columns.as_slice(), *limit).await
 
         }.instrument(span.clone()).await;
 

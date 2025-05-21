@@ -17,13 +17,12 @@ use std::sync::Arc;
 
 use crate::search::Error as VectorSearchError;
 use crate::{embedding_col, offset_col};
-use SearchGenerationError;
 use async_openai::types::EmbeddingInput;
 use datafusion::logical_expr::sqlparser::ast::Expr;
 use datafusion::sql::sqlparser::ast::Ident;
 use datafusion::{execution::SendableRecordBatchStream, sql::TableReference};
 use llms::embeddings::Embed;
-use search::generation::CandidateGeneration;
+use search::generation::{CandidateGeneration, Error as SearchGenerationError};
 use search::{SEARCH_SCORE_COLUMN_NAME, SEARCH_VALUE_COLUMN_NAME};
 use snafu::ResultExt;
 use tract_core::tract_data::itertools::Itertools;
