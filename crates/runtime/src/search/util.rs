@@ -172,6 +172,9 @@ pub async fn user_tables_with_embeddings(
     Ok(tables_with_embeddings)
 }
 
+/// Returns the column names of a [`TableReference`] that have associated embedding column(s)
+///
+/// This includes per-row embeddings and chunked embeddings.
 pub async fn embedding_columns_from_table(
     df: &Arc<DataFusion>,
     tbl: &TableReference,

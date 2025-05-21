@@ -200,7 +200,6 @@ pub struct VectorSearchGenerationTableResult {
     pub primary_keys: Vec<String>,
 }
 
-pub type VectorSearchGenerationResult = HashMap<TableReference, VectorSearchGenerationTableResult>;
 pub type VectorSearchResult = HashMap<TableReference, VectorSearchTableResult>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -21,15 +21,14 @@ use super::util::{get_embedding_table, user_tables_with_embeddings};
 use super::{CandidateAggregationSnafu, Error, Result};
 use crate::search::DataFusionSnafu;
 use crate::search::candidate::vector::VectorGeneration;
-use crate::search::types::{
-    VectorSearchGenerationResult, VectorSearchGenerationTableResult, VectorSearchTableResult,
-};
+use crate::search::types::{VectorSearchGenerationTableResult, VectorSearchTableResult};
 use crate::search::util::{embedding_columns_from_table, get_primary_keys_with_overrides};
 use crate::{datafusion::DataFusion, model::EmbeddingModelStore};
 use datafusion::execution::SendableRecordBatchStream;
 use datafusion::sql::TableReference;
 use datafusion::sql::sqlparser::ast::{Expr, Ident};
 use itertools::Itertools;
+use search::aggregation::CandidateAggregation;
 use search::collect_batches;
 use search::{aggregation::reciprocal_rank::ReciprocalRankFusion, generation::CandidateGeneration};
 use snafu::ResultExt;
@@ -188,7 +187,7 @@ impl VectorSearch {
                 .await?;
 
             // Search for each table is independent, but done in parallel.
-            let response: VectorSearchGenerationResult = futures::future::try_join_all(tables.into_iter().map(|tbl| {
+            let response: HashMap<TableReference, VectorSearchGenerationTableResult> = futures::future::try_join_all(tables.into_iter().map(|tbl| {
                 let keywords = keywords.clone();
                 let primary_keys = table_primary_keys.get(&tbl).map_or(&[] as &[String], |v| v.as_slice());
 
@@ -230,10 +229,11 @@ impl VectorSearch {
         }
     }
 
+    /// For each [`TableReference`] combine & order results from multiple [`CandidateGeneration::search`]s via a [`CandidateAggregation`] algorithm.
     async fn aggregate_per_table(
         &self,
-        generation_results: VectorSearchGenerationResult,
-        aggregation: impl search::aggregation::CandidateAggregation,
+        generation_results: HashMap<TableReference, VectorSearchGenerationTableResult>,
+        aggregation: impl CandidateAggregation,
         additional_columns: &[String],
         limit: usize,
     ) -> Result<VectorSearchResult> {

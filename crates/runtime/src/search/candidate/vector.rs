@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use crate::search::Error as VectorSearchError;
 use crate::{embedding_col, offset_col};
+use SearchGenerationError;
 use async_openai::types::EmbeddingInput;
 use datafusion::logical_expr::sqlparser::ast::Expr;
 use datafusion::sql::sqlparser::ast::Ident;
@@ -261,7 +262,7 @@ impl CandidateGeneration for VectorGeneration {
             .embed_query(query.as_str())
             .await
             .boxed()
-            .map_err(|e| search::generation::Error::InternalError { source: e })?;
+            .map_err(|e| SearchGenerationError::InternalError { source: e })?;
 
         let query = if self.is_chunked {
             self.chunked_sql(
@@ -285,7 +286,6 @@ impl CandidateGeneration for VectorGeneration {
                 .unique()
                 .collect();
 
-            // SEARCH_VALUE_COLUMN_NAME
             format!(
                 "SELECT * FROM (
                         SELECT
@@ -312,22 +312,19 @@ impl CandidateGeneration for VectorGeneration {
             .run()
             .await
             .boxed()
-            .map_err(|e| search::generation::Error::InternalError { source: e })?
+            .map_err(|e| SearchGenerationError::InternalError { source: e })?
             .data)
     }
 
     fn supports_filters_pushdown(
         &self,
         _filters: &[&Expr],
-    ) -> Result<Vec<bool>, search::generation::Error> {
+    ) -> Result<Vec<bool>, SearchGenerationError> {
         Ok(vec![])
     }
 
     /// Whether additional columns of the underlying source can also be retrieved during generation.
-    fn supports_columns(
-        &self,
-        _projection: &[&Expr],
-    ) -> Result<Vec<bool>, search::generation::Error> {
+    fn supports_columns(&self, _projection: &[&Expr]) -> Result<Vec<bool>, SearchGenerationError> {
         Ok(vec![])
     }
 }

@@ -28,7 +28,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 /// Standard interface to generate search candidates from a given table/dataset/source for subsequent aggregation in a hybrid search system.
 #[async_trait]
 pub trait CandidateGeneration: Sync + Send {
-    /// Generates candidates for a query term.
+    /// Generates candidates for a given query term, ordered by decreasing score.
     ///
     /// Any filter within `opt_filters` where [`CandidateGeneration::supports_filters_pushdown`] evaluates to [`true`] is expected to be applied. No assumptions are made on other filters.
     ///
@@ -37,6 +37,8 @@ pub trait CandidateGeneration: Sync + Send {
     ///   2. [`super::SEARCH_VALUE_COLUMN_NAME`] column of type [`arrow::array::StringArray`], [`arrow::array::LargeStringArray`] or [`arrow::array::StringViewArray`].
     ///
     ///  Any column in `addition_projection` that evaluates to true in [`CandidateGeneration::supports_columns`] must also be returned. No assumptions are made on other columns.
+    ///
+    /// Rows in the [`RecordBatch`] must be ordered by [`super::SEARCH_SCORE_COLUMN_NAME`] descendingly.
     async fn search(
         &self,
         query: String,

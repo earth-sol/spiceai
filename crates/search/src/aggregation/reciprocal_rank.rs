@@ -27,6 +27,13 @@ use datafusion::prelude::SessionContext;
 use datafusion::sql::TableReference;
 use snafu::ResultExt;
 
+/// Reciprocal Rank Fusion (RRF) is a method for combining multiple ranked sets of search results.
+/// The underlying score of the search results is not important, only the rank (per stream order).
+/// The rank, for a given entry (for some primary key `a`) is converted to a score using the formula:
+/// ```
+/// score_a = 1 / (rank_i + offset) + 1 / (rank_j + offset) + ...
+/// ```
+/// Where `rank_i` is the rank of the i-th stream, and `offset` is a constant (e.g. 60).
 #[derive(Default)]
 pub struct ReciprocalRankFusion;
 
@@ -51,7 +58,8 @@ impl CandidateAggregation for ReciprocalRankFusion {
         // Inefficient, but collect each stream, convert to [`MemTable`].
         for (i, s) in candidate_sets.into_iter().enumerate() {
             let data = collect_batches(s).await.context(DatafusionSnafu)?;
-            let table = MemTable::try_new(schema.clone(), vec![data]).context(DatafusionSnafu)?;
+            let table =
+                MemTable::try_new(Arc::clone(&schema), vec![data]).context(DatafusionSnafu)?;
             let table_name = format!("search_candidates_{i}");
             table_names.insert(i, table_name.clone());
 
@@ -60,8 +68,7 @@ impl CandidateAggregation for ReciprocalRankFusion {
                 .context(DatafusionSnafu)?;
         }
 
-        let additional_columns =
-            additional_columns_of_schema(schema.clone(), primary_key.as_slice());
+        let additional_columns = additional_columns_of_schema(&schema, primary_key.as_slice());
         let sql = reciprocal_rank_fusion_sql(
             table_names.as_slice(),
             primary_key.as_slice(),
@@ -76,7 +83,9 @@ impl CandidateAggregation for ReciprocalRankFusion {
     }
 }
 
-fn additional_columns_of_schema(schema: SchemaRef, primary_key: &[String]) -> Vec<String> {
+/// Returns a list of additional columns in the schema that are not part of the primary key or the expected
+/// search columns (i.e. score or underlying value).
+fn additional_columns_of_schema(schema: &SchemaRef, primary_key: &[String]) -> Vec<String> {
     schema
         .fields()
         .iter()
@@ -87,11 +96,12 @@ fn additional_columns_of_schema(schema: SchemaRef, primary_key: &[String]) -> Ve
             {
                 return None;
             }
-            return Some(name.clone());
+            Some(name.clone())
         })
         .collect()
 }
 
+/// Verifies that all streams have the same schema and contain the required columns: [`SEARCH_VALUE_COLUMN_NAME`], [`SEARCH_SCORE_COLUMN_NAME`].
 fn verify_schema_compatibility(streams: &[SendableRecordBatchStream]) -> Result<SchemaRef> {
     let Some(schema) = streams.first().map(|strm| strm.schema()) else {
         return Ok(Schema::empty().into());
@@ -130,6 +140,7 @@ fn verify_schema_compatibility(streams: &[SendableRecordBatchStream]) -> Result<
     Ok(schema)
 }
 
+/// Generates the SQL for the RRF aggregation.
 fn reciprocal_rank_fusion_sql(
     tables: &[String],
     primary_key: &[String],
@@ -162,21 +173,22 @@ fn reciprocal_rank_fusion_sql(
         .collect::<Vec<_>>()
         .join(",\n");
 
-    // 2) Build the RRF sum, coalescing missing ranks to zero:
-    //
-    //    coalesce(1.0/(bm25.rank+offset),0) + coalesce(1.0/(vector.rank+offset),0) + …
+    // 2) Build the RRF sum. This is the rank for each row in each table. If a row (as defined by the PK) is missing, it contributes a score of 0.
     let fusion_sum: String = tables
         .iter()
         .map(|tbl| format!("coalesce(1.0/({tbl}.rank + {offset}), 0)"))
         .collect::<Vec<_>>()
         .join(" + ");
 
+    // 3) Coalesce the PK columns and additional columns across all tables.
+    //    Additional columns will be consistent due to join on primary keys
+    //    (i.e. if two tables have a given column, the values for a row will be equal).
     let select_keys: String = coalesce_columns(
         [primary_key, additional_columns].concat().as_slice(),
         tables,
     );
 
-    // 4) Chain FULL OUTER JOINs on all PK columns
+    // 4) FULL OUTER JOINs across tables on all PK columns.
     let joins: String = tables[1..]
         .iter()
         .map(|tbl| {
@@ -185,7 +197,7 @@ fn reciprocal_rank_fusion_sql(
                 .map(|col| format!("{}.{} = {}.{}", tables[0], col, tbl, col))
                 .collect::<Vec<_>>()
                 .join(" AND ");
-            format!("FULL OUTER JOIN {} ON {}", tbl, cond)
+            format!("FULL OUTER JOIN {tbl} ON {cond}")
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -201,13 +213,7 @@ fn reciprocal_rank_fusion_sql(
          {joins}
          ORDER BY {SEARCH_SCORE_COLUMN_NAME} DESC
          LIMIT {limit};",
-        cte_defs = cte_defs,
-        fusion_sum = fusion_sum,
-        SEARCH_SCORE_COLUMN_NAME = SEARCH_SCORE_COLUMN_NAME,
-        select_keys = select_keys,
-        base = tables[0],
-        joins = joins,
-        limit = limit
+        base = tables[0]
     )
 }
 
@@ -217,7 +223,6 @@ fn reciprocal_rank_fusion_sql(
 ///    coalesce(bm25.doc_id, vector.doc_id, …) AS doc_id,
 ///    coalesce(bm25.section, vector.section, …) AS section
 ///  ```
-/// Additional columns should be consistent due to join on primary keys.
 fn coalesce_columns(cols: &[String], tables: &[String]) -> String {
     cols.iter()
         .map(|col| {
@@ -225,7 +230,7 @@ fn coalesce_columns(cols: &[String], tables: &[String]) -> String {
                 "coalesce({cols}) as {col}",
                 cols = tables
                     .iter()
-                    .map(|tbl| format!("{}.{}", tbl, col))
+                    .map(|tbl| format!("{tbl}.{col}"))
                     .collect::<Vec<_>>()
                     .join(", ")
             )
