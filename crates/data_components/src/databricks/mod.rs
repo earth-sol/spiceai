@@ -16,12 +16,14 @@ limitations under the License.
 
 pub mod delta;
 pub mod spark_connect;
+pub mod spark_connect_u2m;
 pub mod sql_warehouse;
 
 use std::sync::LazyLock;
 
 pub use delta::DatabricksDelta;
 pub use spark_connect::DatabricksSparkConnect;
+pub use spark_connect_u2m::DatabricksSparkConnectU2M;
 pub use sql_warehouse::DatabricksSqlWarehouse;
 
 const SPICE_USER_AGENT_PREFIX: &str = "SpiceAI_";
