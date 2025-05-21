@@ -15,19 +15,23 @@ limitations under the License.
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::doc_markdown)]
 
-use snafu::Snafu;
+use arrow::array::RecordBatch;
+use datafusion::{error::DataFusionError, execution::SendableRecordBatchStream};
 
+use futures::StreamExt;
 pub mod aggregation;
 pub mod generation;
 
 pub static SEARCH_SCORE_COLUMN_NAME: &str = "score";
 pub static SEARCH_VALUE_COLUMN_NAME: &str = "value";
 
-#[derive(Debug, Snafu)]
-pub enum Error {
-    #[snafu(display("Error occured during search: {source}"))]
-    InternalError {
-        source: Box<dyn std::error::Error + Send + Sync>,
-    },
+pub async fn collect_batches(
+    mut stream: SendableRecordBatchStream,
+) -> std::result::Result<Vec<RecordBatch>, DataFusionError> {
+    let mut batches = Vec::new();
+    while let Some(batch) = stream.next().await {
+        batches.push(batch?);
+    }
+
+    Ok(batches)
 }
-pub type Result<T, E = Error> = std::result::Result<T, E>;

@@ -46,10 +46,10 @@ pub enum Error {
     },
 
     #[snafu(display("Error occurred retrieving candidate search results: {source}"))]
-    CandidateGenerationError { source: search::Error },
+    CandidateGenerationError { source: search::generation::Error },
 
     #[snafu(display("Error occurred aggregating candidate search results: {source}"))]
-    CandidateAggregationError { source: search::Error },
+    CandidateAggregationError { source: search::aggregation::Error },
 
     #[snafu(display("Error occurred processing Arrow records: {source}"))]
     RecordProcessingError { source: ArrowError },

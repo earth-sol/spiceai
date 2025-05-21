@@ -11,27 +11,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use super::CandidateAggregation;
-use super::Result;
-use crate::Error;
+use std::sync::Arc;
+
+use crate::{SEARCH_SCORE_COLUMN_NAME, SEARCH_VALUE_COLUMN_NAME, collect_batches};
+
+use super::{CandidateAggregation, DatafusionSnafu, InconsistentColumnsSnafu};
+use super::{Error, Result};
+
+use arrow::datatypes::Schema;
+use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
+use datafusion::datasource::MemTable;
 use datafusion::execution::SendableRecordBatchStream;
 use datafusion::prelude::SessionContext;
+use datafusion::sql::TableReference;
+use snafu::ResultExt;
 
 #[derive(Default)]
 pub struct ReciprocalRankFusion;
-
-// SELECT
-//   TRUNC((1.0 / (bm25.rank + 60)) + (1.0 / (vector.rank + 60)), 6) as final_rank,
-//   bm25.rank as bm25_rank,
-//   vector.rank as vector_rank,
-//   bm25.title
-// FROM
-//   bm25,
-//   vector
-// WHERE
-//   bm25.title = vector.title
-// ORDER BY final_rank DESC
 
 #[async_trait]
 impl CandidateAggregation for ReciprocalRankFusion {
@@ -41,20 +38,172 @@ impl CandidateAggregation for ReciprocalRankFusion {
         primary_key: Vec<String>,
         limit: usize,
     ) -> Result<SendableRecordBatchStream> {
-        if candidate_sets.len() == 1 {
-            return candidate_sets.pop().ok_or(Error::InternalError {
-                source: Box::from(format!(
-                    "No search candidates provided to reciprocal rank fusion aggregation."
-                )),
+        // Handle 0, or 1 candidates.
+        if candidate_sets.len() <= 1 {
+            return candidate_sets.pop().ok_or(Error::NoCandidatesGenerated);
+        }
+
+        let schema = verify_schema_compatibility(candidate_sets.as_slice())?;
+
+        let ctx = SessionContext::new();
+        let mut table_names: Vec<String> = Vec::with_capacity(candidate_sets.len());
+
+        // Inefficient, but collect each stream, convert to [`MemTable`].
+        for (i, s) in candidate_sets.into_iter().enumerate() {
+            let data = collect_batches(s).await.context(DatafusionSnafu)?;
+            let table = MemTable::try_new(schema.clone(), vec![data]).context(DatafusionSnafu)?;
+            let table_name = format!("search_candidates_{i}");
+            table_names.insert(i, table_name.clone());
+
+            let _ = ctx
+                .register_table(TableReference::bare(table_name), Arc::new(table))
+                .context(DatafusionSnafu)?;
+        }
+
+        let sql =
+            reciprocal_rank_fusion_sql(table_names.as_slice(), primary_key.as_slice(), 60, limit);
+        tracing::debug!("Runnning SQL in standalone context: ```sql{sql}```");
+        let df = ctx.sql(sql.as_str()).await.context(DatafusionSnafu)?;
+
+        df.execute_stream().await.context(DatafusionSnafu)
+    }
+}
+
+fn verify_schema_compatibility(streams: &[SendableRecordBatchStream]) -> Result<SchemaRef> {
+    let Some(schema) = streams.first().map(|strm| strm.schema()) else {
+        return Ok(Schema::empty().into());
+    };
+
+    for s in streams {
+        if s.schema()
+            .column_with_name(SEARCH_VALUE_COLUMN_NAME)
+            .is_none()
+        {
+            return Err(Error::CandidateMissingRequiredColumn {
+                col: SEARCH_VALUE_COLUMN_NAME.to_string(),
             });
         }
 
-        // let ctx = SessionContext::new();
-        // let table = MemTable::try_new(batch.schema(), vec![vec![batch]])?;
-        // ctx.register_batch(
+        if s.schema()
+            .column_with_name(SEARCH_SCORE_COLUMN_NAME)
+            .is_none()
+        {
+            return Err(Error::CandidateMissingRequiredColumn {
+                col: SEARCH_SCORE_COLUMN_NAME.to_string(),
+            });
+        }
 
-        Err(Error::InternalError {
-            source: Box::from(format!("Only RRF is for a single candidate")),
+        if !schema.fields().contains(s.schema().fields())
+            || !s.schema().fields().contains(schema.fields())
+        {
+            return InconsistentColumnsSnafu {
+                s1: schema,
+                s2: s.schema(),
+            }
+            .fail();
+        }
+    }
+
+    Ok(schema)
+}
+
+// TODO: Handle additional columns found in tables. We know they are all the same.
+fn reciprocal_rank_fusion_sql(
+    tables: &[String],
+    primary_key: &[String],
+    offset: usize,
+    limit: usize,
+) -> String {
+    // Fusion sum expression
+    let fusion_sum: String = tables
+        .iter()
+        .map(|t| format!("(1.0 / ({}.{} + {}))", t, SEARCH_SCORE_COLUMN_NAME, offset))
+        .collect::<Vec<_>>()
+        .join(" + ");
+
+    // SELECT composite primary key columns from first table
+    let select_keys: String = primary_key
+        .iter()
+        .map(|col| format!("{}.{}", tables[0], col))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let value_key = format!("{}.{}", tables[0], SEARCH_VALUE_COLUMN_NAME);
+
+    // Build JOINs on all primary key columns
+    let joins: String = tables[1..]
+        .iter()
+        .map(|t| {
+            let cond = primary_key
+                .iter()
+                .map(|col| format!("{}.{} = {}.{}", tables[0], col, t, col))
+                .collect::<Vec<_>>()
+                .join(" AND ");
+            format!("JOIN {} ON {}", t, cond)
         })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    format!(
+        "SELECT
+            {value_key},
+            TRUNC({fusion_sum}, 6) as {SEARCH_SCORE_COLUMN_NAME},
+            {select_keys} \
+        FROM {base_table} {joins} \
+        ORDER BY {SEARCH_SCORE_COLUMN_NAME} DESC
+        LIMIT {limit}",
+        fusion_sum = fusion_sum,
+        select_keys = select_keys,
+        base_table = tables[0],
+        joins = joins
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_single_table_single_key() {
+        let tables = vec!["bm25".to_string()];
+        let key_cols = ["doc_id".to_string()];
+        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), 42, 3);
+        let expected = "SELECT TRUNC((1.0 / (bm25.score + 42)), 6) as final_rank, bm25.score as bm25_rank, bm25.doc_id \
+        FROM bm25  \
+        ORDER BY final_rank DESC";
+        assert_eq!(sql, expected);
+    }
+
+    #[test]
+    fn test_two_tables_single_key() {
+        let tables = vec!["bm25".to_string(), "vector".to_string()];
+        let key_cols = ["doc_id".to_string()];
+        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), 5, 3);
+        let expected = "SELECT TRUNC((1.0 / (bm25.score + 5)) + (1.0 / (vector.score + 5)), 6) as final_rank, bm25.score as bm25_rank, vector.score as vector_rank, bm25.doc_id \
+        FROM bm25 JOIN vector ON bm25.doc_id = vector.doc_id \
+        ORDER BY final_rank DESC";
+        assert_eq!(sql, expected);
+    }
+
+    #[test]
+    fn test_three_tables_composite_key() {
+        let tables = vec!["t1".to_string(), "t2".to_string(), "t3".to_string()];
+        let key_cols = ["doc_id".to_string(), "section".to_string()];
+        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), 100, 4);
+        let expected = "SELECT TRUNC((1.0 / (t1.score + 100)) + (1.0 / (t2.score + 100)) + (1.0 / (t3.score + 100)), 6) as final_rank, t1.score as t1_rank, t2.score as t2_rank, t3.score as t3_rank, t1.doc_id, t1.section \
+        FROM t1 JOIN t2 ON t1.doc_id = t2.doc_id AND t1.section = t2.section JOIN t3 ON t1.doc_id = t3.doc_id AND t1.section = t3.section \
+        ORDER BY final_rank DESC";
+        assert_eq!(sql, expected);
+    }
+
+    #[test]
+    fn test_multiple_keys_and_tables() {
+        let tables = vec!["alpha".to_string(), "beta".to_string()];
+        let key_cols = ["k1".to_string(), "k2".to_string(), "k3".to_string()];
+        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), 2, 4);
+        let expected = "SELECT TRUNC((1.0 / (alpha.score + 2)) + (1.0 / (beta.score + 2)), 6) as final_rank, alpha.score as alpha_rank, beta.score as beta_rank, alpha.k1, alpha.k2, alpha.k3 \
+        FROM alpha JOIN beta ON alpha.k1 = beta.k1 AND alpha.k2 = beta.k2 AND alpha.k3 = beta.k3 \
+        ORDER BY final_rank DESC";
+        assert_eq!(sql, expected);
     }
 }

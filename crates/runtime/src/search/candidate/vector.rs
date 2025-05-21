@@ -256,12 +256,12 @@ impl CandidateGeneration for VectorGeneration {
         opt_filters: &[&Expr],
         addition_projection: &[&Expr],
         limit: usize,
-    ) -> Result<SendableRecordBatchStream, search::Error> {
+    ) -> search::generation::Result<SendableRecordBatchStream> {
         let embedding = self
             .embed_query(query.as_str())
             .await
             .boxed()
-            .map_err(|e| search::Error::InternalError { source: e })?;
+            .map_err(|e| search::generation::Error::InternalError { source: e })?;
 
         let query = if self.is_chunked {
             self.chunked_sql(
@@ -312,16 +312,22 @@ impl CandidateGeneration for VectorGeneration {
             .run()
             .await
             .boxed()
-            .map_err(|e| search::Error::InternalError { source: e })?
+            .map_err(|e| search::generation::Error::InternalError { source: e })?
             .data)
     }
 
-    fn supports_filters_pushdown(&self, _filters: &[&Expr]) -> Result<Vec<bool>, search::Error> {
+    fn supports_filters_pushdown(
+        &self,
+        _filters: &[&Expr],
+    ) -> Result<Vec<bool>, search::generation::Error> {
         Ok(vec![])
     }
 
     /// Whether additional columns of the underlying source can also be retrieved during generation.
-    fn supports_columns(&self, _projection: &[&Expr]) -> Result<Vec<bool>, search::Error> {
+    fn supports_columns(
+        &self,
+        _projection: &[&Expr],
+    ) -> Result<Vec<bool>, search::generation::Error> {
         Ok(vec![])
     }
 }

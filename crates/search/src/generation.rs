@@ -11,10 +11,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use super::Result;
 use async_trait::async_trait;
 use datafusion::execution::SendableRecordBatchStream;
 use datafusion::logical_expr::sqlparser::ast::Expr;
+use snafu::Snafu;
+
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("Error occured during search: {source}"))]
+    InternalError {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+}
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Standard interface to generate search candidates from a given table/dataset/source for subsequent aggregation in a hybrid search system.
 #[async_trait]

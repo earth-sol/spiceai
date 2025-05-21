@@ -15,11 +15,34 @@ limitations under the License.
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::doc_markdown)]
 
-use super::Result;
+use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use datafusion::execution::SendableRecordBatchStream;
+use snafu::Snafu;
 
 pub mod reciprocal_rank;
+
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("Generated candidate data missing required column '{col}'."))]
+    CandidateMissingRequiredColumn { col: String },
+
+    #[snafu(display("No candidates generated"))]
+    NoCandidatesGenerated,
+
+    #[snafu(display(
+        "Generated candidates have inconsistent columns. From {:?}. And {:?}.",
+        s1.fields().iter().map(|f| format!("{}: {}", f.name(), f.data_type().to_string())).collect::<Vec<_>>(),
+        s2.fields().iter().map(|f| format!("{}: {}", f.name(), f.data_type().to_string())).collect::<Vec<_>>(),
+    ))]
+    InconsistentColumns { s1: SchemaRef, s2: SchemaRef },
+
+    #[snafu(display("A database error occurred whilst aggregating search candidates: {source}"))]
+    DatafusionError {
+        source: datafusion::error::DataFusionError,
+    },
+}
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Standard interface for algorithms that decide how to aggregate the results from [`super::generation::CandidateGeneration::search`] into a single-ordered set.
 ///
