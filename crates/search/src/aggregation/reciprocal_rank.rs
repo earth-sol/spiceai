@@ -60,13 +60,36 @@ impl CandidateAggregation for ReciprocalRankFusion {
                 .context(DatafusionSnafu)?;
         }
 
-        let sql =
-            reciprocal_rank_fusion_sql(table_names.as_slice(), primary_key.as_slice(), 60, limit);
+        let additional_columns =
+            additional_columns_of_schema(schema.clone(), primary_key.as_slice());
+        let sql = reciprocal_rank_fusion_sql(
+            table_names.as_slice(),
+            primary_key.as_slice(),
+            additional_columns.as_slice(),
+            60,
+            limit,
+        );
         tracing::debug!("Runnning SQL in standalone context: ```sql{sql}```");
         let df = ctx.sql(sql.as_str()).await.context(DatafusionSnafu)?;
 
         df.execute_stream().await.context(DatafusionSnafu)
     }
+}
+
+fn additional_columns_of_schema(schema: SchemaRef, primary_key: &[String]) -> Vec<String> {
+    schema
+        .fields()
+        .iter()
+        .filter_map(|f| {
+            let name = f.name();
+            if [SEARCH_SCORE_COLUMN_NAME, SEARCH_VALUE_COLUMN_NAME].contains(&name.as_str())
+                || primary_key.contains(f.name())
+            {
+                return None;
+            }
+            return Some(name.clone());
+        })
+        .collect()
 }
 
 fn verify_schema_compatibility(streams: &[SendableRecordBatchStream]) -> Result<SchemaRef> {
@@ -110,6 +133,7 @@ fn verify_schema_compatibility(streams: &[SendableRecordBatchStream]) -> Result<
 fn reciprocal_rank_fusion_sql(
     tables: &[String],
     primary_key: &[String],
+    additional_columns: &[String],
     offset: usize,
     limit: usize,
 ) -> String {
@@ -117,7 +141,7 @@ fn reciprocal_rank_fusion_sql(
     //
     // ```sql
     //    my_tbl AS (
-    //      SELECT doc_id, section, {SEARCH_VALUE_COLUMN_NAME},
+    //      SELECT *,
     //             ROW_NUMBER() OVER (ORDER BY doc_id, section) AS rank
     //      FROM my_tbl
     //    ),
@@ -129,8 +153,7 @@ fn reciprocal_rank_fusion_sql(
             format!(
                 "{tbl} AS (
                     SELECT
-                        {pk_list},
-                        {SEARCH_VALUE_COLUMN_NAME},
+                        *,
                         ROW_NUMBER() OVER (ORDER BY {pk_list}) AS rank
                     FROM {tbl}
                 )"
@@ -140,35 +163,18 @@ fn reciprocal_rank_fusion_sql(
         .join(",\n");
 
     // 2) Build the RRF sum, coalescing missing ranks to zero:
+    //
     //    coalesce(1.0/(bm25.rank+offset),0) + coalesce(1.0/(vector.rank+offset),0) + …
     let fusion_sum: String = tables
         .iter()
-        .map(|tbl| {
-            format!(
-                "coalesce(1.0/({tbl}.rank + {offset}), 0)",
-                tbl = tbl,
-                offset = offset
-            )
-        })
+        .map(|tbl| format!("coalesce(1.0/({tbl}.rank + {offset}), 0)"))
         .collect::<Vec<_>>()
         .join(" + ");
 
-    // 3) Coalesce the PK columns themselves across all tables:
-    //
-    //    coalesce(bm25.doc_id, vector.doc_id, …) AS doc_id,
-    //    coalesce(bm25.section, vector.section, …) AS section
-    let select_keys: String = primary_key
-        .iter()
-        .map(|col| {
-            let cols = tables
-                .iter()
-                .map(|tbl| format!("{}.{}", tbl, col))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("coalesce({cols}) as {col}", cols = cols, col = col)
-        })
-        .collect::<Vec<_>>()
-        .join(",\n       ");
+    let select_keys: String = coalesce_columns(
+        [primary_key, additional_columns].concat().as_slice(),
+        tables,
+    );
 
     // 4) Chain FULL OUTER JOINs on all PK columns
     let joins: String = tables[1..]
@@ -185,14 +191,15 @@ fn reciprocal_rank_fusion_sql(
         .join("\n");
 
     format!(
-        "WITH\n{cte_defs}\n\
-         SELECT\n\
-           TRUNC({fusion_sum}, 6) AS {SEARCH_SCORE_COLUMN_NAME},\n\
-           {base}.{SEARCH_VALUE_COLUMN_NAME} as {SEARCH_VALUE_COLUMN_NAME},\n\
-           {select_keys}\n\
-         FROM {base}\n\
-         {joins}\n\
-         ORDER BY {SEARCH_SCORE_COLUMN_NAME} DESC\n\
+        "WITH
+            {cte_defs}
+         SELECT
+           TRUNC({fusion_sum}, 6) AS {SEARCH_SCORE_COLUMN_NAME},
+           {base}.{SEARCH_VALUE_COLUMN_NAME} as {SEARCH_VALUE_COLUMN_NAME},
+           {select_keys}
+         FROM {base}
+         {joins}
+         ORDER BY {SEARCH_SCORE_COLUMN_NAME} DESC
          LIMIT {limit};",
         cte_defs = cte_defs,
         fusion_sum = fusion_sum,
@@ -204,6 +211,29 @@ fn reciprocal_rank_fusion_sql(
     )
 }
 
+/// Coalesce the PK columns and additional columns across all tables:
+///
+/// ```sql
+///    coalesce(bm25.doc_id, vector.doc_id, …) AS doc_id,
+///    coalesce(bm25.section, vector.section, …) AS section
+///  ```
+/// Additional columns should be consistent due to join on primary keys.
+fn coalesce_columns(cols: &[String], tables: &[String]) -> String {
+    cols.iter()
+        .map(|col| {
+            format!(
+                "coalesce({cols}) as {col}",
+                cols = tables
+                    .iter()
+                    .map(|tbl| format!("{}.{}", tbl, col))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n       ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,7 +242,7 @@ mod tests {
     fn test_single_table_single_key() {
         let tables = vec!["bm25".to_string()];
         let key_cols = ["doc_id".to_string()];
-        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), 42, 3);
+        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), &[], 42, 3);
         let expected = "SELECT TRUNC((1.0 / (bm25.score + 42)), 6) as final_rank, bm25.score as bm25_rank, bm25.doc_id \
         FROM bm25  \
         ORDER BY final_rank DESC";
@@ -223,7 +253,7 @@ mod tests {
     fn test_two_tables_single_key() {
         let tables = vec!["bm25".to_string(), "vector".to_string()];
         let key_cols = ["doc_id".to_string()];
-        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), 5, 3);
+        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), &[], 5, 3);
         let expected = "SELECT TRUNC((1.0 / (bm25.score + 5)) + (1.0 / (vector.score + 5)), 6) as final_rank, bm25.score as bm25_rank, vector.score as vector_rank, bm25.doc_id \
         FROM bm25 JOIN vector ON bm25.doc_id = vector.doc_id \
         ORDER BY final_rank DESC";
@@ -234,7 +264,7 @@ mod tests {
     fn test_three_tables_composite_key() {
         let tables = vec!["t1".to_string(), "t2".to_string(), "t3".to_string()];
         let key_cols = ["doc_id".to_string(), "section".to_string()];
-        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), 100, 4);
+        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), &[], 100, 4);
         let expected = "SELECT TRUNC((1.0 / (t1.score + 100)) + (1.0 / (t2.score + 100)) + (1.0 / (t3.score + 100)), 6) as final_rank, t1.score as t1_rank, t2.score as t2_rank, t3.score as t3_rank, t1.doc_id, t1.section \
         FROM t1 JOIN t2 ON t1.doc_id = t2.doc_id AND t1.section = t2.section JOIN t3 ON t1.doc_id = t3.doc_id AND t1.section = t3.section \
         ORDER BY final_rank DESC";
@@ -245,7 +275,7 @@ mod tests {
     fn test_multiple_keys_and_tables() {
         let tables = vec!["alpha".to_string(), "beta".to_string()];
         let key_cols = ["k1".to_string(), "k2".to_string(), "k3".to_string()];
-        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), 2, 4);
+        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), &[], 2, 4);
         let expected = "SELECT TRUNC((1.0 / (alpha.score + 2)) + (1.0 / (beta.score + 2)), 6) as final_rank, alpha.score as alpha_rank, beta.score as beta_rank, alpha.k1, alpha.k2, alpha.k3 \
         FROM alpha JOIN beta ON alpha.k1 = beta.k1 AND alpha.k2 = beta.k2 AND alpha.k3 = beta.k3 \
         ORDER BY final_rank DESC";
