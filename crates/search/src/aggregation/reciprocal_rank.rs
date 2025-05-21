@@ -56,9 +56,9 @@ impl CandidateAggregation for ReciprocalRankFusion {
 
         // Inefficient, but collect each stream, convert to [`MemTable`].
         for (i, s) in candidate_sets.into_iter().enumerate() {
+            let schema = s.schema();
             let data = collect_batches(s).await.context(DatafusionSnafu)?;
-            let table =
-                MemTable::try_new(Arc::clone(&schema), vec![data]).context(DatafusionSnafu)?;
+            let table = MemTable::try_new(schema, vec![data]).context(DatafusionSnafu)?;
             let table_name = format!("search_candidates_{i}");
             table_names.insert(i, table_name.clone());
 
@@ -75,7 +75,7 @@ impl CandidateAggregation for ReciprocalRankFusion {
             60,
             limit,
         );
-        tracing::debug!("Runnning SQL in standalone context: ```sql{sql}```");
+        tracing::debug!("Runnning SQL in standalone context: ```sql\n{sql}\n```");
         let df = ctx.sql(sql.as_str()).await.context(DatafusionSnafu)?;
 
         df.execute_stream().await.context(DatafusionSnafu)
@@ -125,9 +125,15 @@ fn verify_schema_compatibility(streams: &[SendableRecordBatchStream]) -> Result<
             });
         }
 
-        if !schema.fields().contains(s.schema().fields())
-            || !s.schema().fields().contains(schema.fields())
-        {
+        // Check that the schema is the same across all streams (i.e. all same as the first).
+        // Ensure each column is in first schema, and equal number of columns.
+        let correct_columns = s.schema().fields().iter().any(|f| {
+            let Some((_, f2)) = schema.column_with_name(f.name()) else {
+                return false;
+            };
+            f2.data_type() == f.data_type() && f2.is_nullable() == f.is_nullable()
+        });
+        if schema.fields().len() != s.schema().fields().len() || !correct_columns {
             return InconsistentColumnsSnafu {
                 s1: schema,
                 s2: s.schema(),
@@ -161,11 +167,11 @@ fn reciprocal_rank_fusion_sql(
         .iter()
         .map(|tbl| {
             format!(
-                "{tbl} AS (
-                    SELECT
-                        *,
-                        ROW_NUMBER() OVER (ORDER BY {pk_list}) AS rank
-                    FROM {tbl}
+                "{tbl} AS (\n    \
+                    SELECT\n    \
+                        *,\n    \
+                        ROW_NUMBER() OVER (ORDER BY {pk_list}) AS rank\n    \
+                    FROM {tbl}\n\
                 )"
             )
         })
@@ -195,22 +201,21 @@ fn reciprocal_rank_fusion_sql(
                 .iter()
                 .map(|col| format!("{}.{} = {}.{}", tables[0], col, tbl, col))
                 .collect::<Vec<_>>()
-                .join(" AND ");
-            format!("FULL OUTER JOIN {tbl} ON {cond}")
+                .join(" AND\n    ");
+            format!("FULL OUTER JOIN {tbl} ON \n    {cond}")
         })
         .collect::<Vec<_>>()
         .join("\n");
 
     format!(
-        "WITH
-            {cte_defs}
-         SELECT
-           TRUNC({fusion_sum}, 6) AS {SEARCH_SCORE_COLUMN_NAME},
-           {base}.{SEARCH_VALUE_COLUMN_NAME} as {SEARCH_VALUE_COLUMN_NAME},
-           {select_keys}
-         FROM {base}
-         {joins}
-         ORDER BY {SEARCH_SCORE_COLUMN_NAME} DESC
+        "WITH {cte_defs}\n\
+        SELECT\n    \
+           TRUNC({fusion_sum}, 6) AS {SEARCH_SCORE_COLUMN_NAME},\n    \
+           {base}.{SEARCH_VALUE_COLUMN_NAME} as {SEARCH_VALUE_COLUMN_NAME},\n    \
+           {select_keys}\n\
+         FROM {base}\n\
+         {joins}\n\
+         ORDER BY {SEARCH_SCORE_COLUMN_NAME} DESC\n\
          LIMIT {limit};",
         base = tables[0]
     )
@@ -235,7 +240,7 @@ fn coalesce_columns(cols: &[String], tables: &[String]) -> String {
             )
         })
         .collect::<Vec<_>>()
-        .join(",\n       ")
+        .join(",\n    ")
 }
 
 #[cfg(test)]
@@ -244,45 +249,56 @@ mod tests {
 
     #[test]
     fn test_single_table_single_key() {
-        let tables = vec!["bm25".to_string()];
-        let key_cols = ["doc_id".to_string()];
-        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), &[], 42, 3);
-        let expected = "SELECT TRUNC((1.0 / (bm25.score + 42)), 6) as final_rank, bm25.score as bm25_rank, bm25.doc_id \
-        FROM bm25  \
-        ORDER BY final_rank DESC";
-        assert_eq!(sql, expected);
+        insta::assert_snapshot!(reciprocal_rank_fusion_sql(
+            vec!["bm25".to_string()].as_slice(),
+            ["doc_id".to_string()].as_slice(),
+            &[],
+            42,
+            3,
+        ));
     }
 
     #[test]
     fn test_two_tables_single_key() {
-        let tables = vec!["bm25".to_string(), "vector".to_string()];
-        let key_cols = ["doc_id".to_string()];
-        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), &[], 5, 3);
-        let expected = "SELECT TRUNC((1.0 / (bm25.score + 5)) + (1.0 / (vector.score + 5)), 6) as final_rank, bm25.score as bm25_rank, vector.score as vector_rank, bm25.doc_id \
-        FROM bm25 JOIN vector ON bm25.doc_id = vector.doc_id \
-        ORDER BY final_rank DESC";
-        assert_eq!(sql, expected);
+        insta::assert_snapshot!(reciprocal_rank_fusion_sql(
+            vec!["bm25".to_string(), "vector".to_string()].as_slice(),
+            ["doc_id".to_string()].as_slice(),
+            &[],
+            5,
+            3
+        ));
     }
 
     #[test]
     fn test_three_tables_composite_key() {
-        let tables = vec!["t1".to_string(), "t2".to_string(), "t3".to_string()];
-        let key_cols = ["doc_id".to_string(), "section".to_string()];
-        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), &[], 100, 4);
-        let expected = "SELECT TRUNC((1.0 / (t1.score + 100)) + (1.0 / (t2.score + 100)) + (1.0 / (t3.score + 100)), 6) as final_rank, t1.score as t1_rank, t2.score as t2_rank, t3.score as t3_rank, t1.doc_id, t1.section \
-        FROM t1 JOIN t2 ON t1.doc_id = t2.doc_id AND t1.section = t2.section JOIN t3 ON t1.doc_id = t3.doc_id AND t1.section = t3.section \
-        ORDER BY final_rank DESC";
-        assert_eq!(sql, expected);
+        insta::assert_snapshot!(reciprocal_rank_fusion_sql(
+            ["t1".to_string(), "t2".to_string(), "t3".to_string()].as_slice(),
+            ["doc_id".to_string(), "section".to_string()].as_slice(),
+            &[],
+            100,
+            4
+        ));
     }
 
     #[test]
     fn test_multiple_keys_and_tables() {
-        let tables = vec!["alpha".to_string(), "beta".to_string()];
-        let key_cols = ["k1".to_string(), "k2".to_string(), "k3".to_string()];
-        let sql = reciprocal_rank_fusion_sql(tables.as_slice(), key_cols.as_slice(), &[], 2, 4);
-        let expected = "SELECT TRUNC((1.0 / (alpha.score + 2)) + (1.0 / (beta.score + 2)), 6) as final_rank, alpha.score as alpha_rank, beta.score as beta_rank, alpha.k1, alpha.k2, alpha.k3 \
-        FROM alpha JOIN beta ON alpha.k1 = beta.k1 AND alpha.k2 = beta.k2 AND alpha.k3 = beta.k3 \
-        ORDER BY final_rank DESC";
-        assert_eq!(sql, expected);
+        insta::assert_snapshot!(reciprocal_rank_fusion_sql(
+            ["alpha".to_string(), "beta".to_string()].as_slice(),
+            ["k1".to_string(), "k2".to_string(), "k3".to_string()].as_slice(),
+            &[],
+            2,
+            4
+        ));
+    }
+
+    #[test]
+    fn test_two_tables_additional_columns() {
+        insta::assert_snapshot!(reciprocal_rank_fusion_sql(
+            vec!["bm25".to_string(), "vector".to_string()].as_slice(),
+            ["doc_id".to_string()].as_slice(),
+            &["foo".to_string(), "bar".to_string()],
+            5,
+            3
+        ));
     }
 }

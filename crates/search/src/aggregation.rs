@@ -32,8 +32,8 @@ pub enum Error {
 
     #[snafu(display(
         "Generated candidates have inconsistent columns. From {:?}. And {:?}.",
-        s1.fields().iter().map(|f| format!("{}: {}", f.name(), f.data_type())).collect::<Vec<_>>(),
-        s2.fields().iter().map(|f| format!("{}: {}", f.name(), f.data_type())).collect::<Vec<_>>(),
+        s1.fields().iter().map(|f| format!("{}: {}", f.name(), f.data_type())).collect::<Vec<_>>().join(", "),
+        s2.fields().iter().map(|f| format!("{}: {}", f.name(), f.data_type())).collect::<Vec<_>>().join(", "),
     ))]
     InconsistentColumns { s1: SchemaRef, s2: SchemaRef },
 

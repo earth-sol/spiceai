@@ -11256,6 +11256,7 @@ dependencies = [
  "async-trait",
  "datafusion",
  "futures",
+ "insta",
  "serde_json",
  "snafu",
  "tracing",

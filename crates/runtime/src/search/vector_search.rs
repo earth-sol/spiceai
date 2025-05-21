@@ -90,7 +90,8 @@ impl VectorSearch {
             });
         };
 
-        let Some(model_name) = embedding_table.get_embedding_models_used().first().cloned() else {
+        let Some(model_name) = embedding_table.get_embedding_models_used_in(embedding_column)
+        else {
             return Err(Error::CannotVectorSearchDataset {
                 data_source: tbl.clone(),
             });
