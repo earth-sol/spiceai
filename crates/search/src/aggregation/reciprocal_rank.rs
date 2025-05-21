@@ -49,15 +49,19 @@ impl CandidateAggregation for ReciprocalRankFusion {
             return candidate_sets.pop().ok_or(Error::NoCandidatesGenerated);
         }
 
+        if primary_key.is_empty() {
+            return Err(Error::NoPrimaryKey);
+        }
+
         let schema = verify_schema_compatibility(candidate_sets.as_slice())?;
 
         let ctx = SessionContext::new();
         let mut table_names: Vec<String> = Vec::with_capacity(candidate_sets.len());
 
         // Inefficient, but collect each stream, convert to [`MemTable`].
-        for (i, s) in candidate_sets.into_iter().enumerate() {
-            let schema = s.schema();
-            let data = collect_batches(s).await.context(DatafusionSnafu)?;
+        for (i, stream) in candidate_sets.into_iter().enumerate() {
+            let schema = stream.schema();
+            let data = collect_batches(stream).await.context(DatafusionSnafu)?;
             let table = MemTable::try_new(schema, vec![data]).context(DatafusionSnafu)?;
             let table_name = format!("search_candidates_{i}");
             table_names.insert(i, table_name.clone());

@@ -195,6 +195,7 @@ impl VectorSearchTableResult {
     }
 }
 
+/// The results of [`CandidateGeneration::search`]'s on a single table.
 pub struct VectorSearchGenerationTableResult {
     pub data: Vec<SendableRecordBatchStream>,
     pub primary_keys: Vec<String>,

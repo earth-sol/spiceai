@@ -249,7 +249,7 @@ impl EmbeddingTable {
     }
 
     #[must_use]
-    pub fn get_embedding_models_used_in(&self, column: &str) -> Option<String> {
+    pub fn get_embedding_model_used_by(&self, column: &str) -> Option<String> {
         self.embedded_columns
             .get(column)
             .map(|cfg| cfg.model_name.clone())

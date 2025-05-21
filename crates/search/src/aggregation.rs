@@ -31,6 +31,11 @@ pub enum Error {
     NoCandidatesGenerated,
 
     #[snafu(display(
+        "Cannot aggregate candidates from multiple sources (e.g. embedded columns of a dataset) when the dataset has no primary key."
+    ))]
+    NoPrimaryKey,
+
+    #[snafu(display(
         "Generated candidates have inconsistent columns. From {:?}. And {:?}.",
         s1.fields().iter().map(|f| format!("{}: {}", f.name(), f.data_type())).collect::<Vec<_>>().join(", "),
         s2.fields().iter().map(|f| format!("{}: {}", f.name(), f.data_type())).collect::<Vec<_>>().join(", "),
