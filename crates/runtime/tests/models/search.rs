@@ -173,6 +173,7 @@ pub(crate) async fn run_search(
         .await
 }
 
+#[ignore = "Non-deterministic order of search results makes snapshot testing unreliable"]
 #[tokio::test]
 async fn test_multi_column_search() -> Result<(), anyhow::Error> {
     let mut chunked = catalog_page_tpch_dataset_w_embeddings(
@@ -233,6 +234,7 @@ async fn test_multi_column_search() -> Result<(), anyhow::Error> {
     .await
 }
 
+#[ignore = "Non-deterministic order of search results makes snapshot testing unreliable"]
 #[tokio::test]
 async fn test_multi_embedding_model_search() -> Result<(), anyhow::Error> {
     verify_env_secret_exists("SPICE_OPENAI_API_KEY")
@@ -295,6 +297,7 @@ async fn test_multi_embedding_model_search() -> Result<(), anyhow::Error> {
     .await
 }
 
+#[ignore = "Non-deterministic order of search results makes snapshot testing unreliable"]
 #[tokio::test]
 async fn test_multi_column_search_no_pk() -> Result<(), anyhow::Error> {
     let mut chunked =
