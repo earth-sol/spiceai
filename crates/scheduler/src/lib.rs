@@ -134,6 +134,8 @@ impl Scheduler {
                                 schedule.id()
                             );
                             running_tasks.remove(&schedule.id());
+                        } else {
+                            continue; // skip evaluation this schedule if the task is still running
                         }
                     }
 
