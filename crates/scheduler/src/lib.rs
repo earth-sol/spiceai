@@ -27,7 +27,15 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Snafu)]
-pub enum Error {}
+pub enum Error {
+    #[snafu(display(
+        "Failed to parse the provided cron expression: {cron}\n{source}\nEnsure the cron expression is valid, and try again."
+    ))]
+    UnableToParseCron {
+        source: cron::error::Error,
+        cron: String,
+    },
+}
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
