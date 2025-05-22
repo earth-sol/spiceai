@@ -32,13 +32,9 @@ use crate::{
     models::{
         create_api_bindings_config,
         embedding::{EmbeddingTestCase, run_embedding_tests},
-        get_taxi_trips_dataset, normalize_chat_completion_response,
-        send_chat_completions_request,
+        get_taxi_trips_dataset, normalize_chat_completion_response, send_chat_completions_request,
     },
-    utils::{
-        runtime_ready_check_with_timeout, test_request_context,
-        verify_env_secret_exists,
-    },
+    utils::{runtime_ready_check_with_timeout, test_request_context, verify_env_secret_exists},
 };
 
 use tokio::sync::Mutex;
