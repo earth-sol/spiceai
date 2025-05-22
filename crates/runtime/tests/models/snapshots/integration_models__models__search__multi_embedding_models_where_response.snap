@@ -1,0 +1,31 @@
+---
+source: crates/runtime/tests/models/search.rs
+expression: normalize_search_response(response)
+snapshot_kind: text
+---
+{
+  "duration_ms": "duration_ms_val",
+  "matches": [
+    {
+      "dataset": "multi_embedding_models",
+      "primary_key": {
+        "cp_catalog_page_sk": 2
+      },
+      "value": "DEPARTMENT"
+    },
+    {
+      "dataset": "multi_embedding_models",
+      "primary_key": {
+        "cp_catalog_page_sk": 6
+      },
+      "value": "DEPARTMENT"
+    },
+    {
+      "dataset": "multi_embedding_models",
+      "primary_key": {
+        "cp_catalog_page_sk": 8
+      },
+      "value": "DEPARTMENT"
+    }
+  ]
+}

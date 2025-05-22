@@ -204,7 +204,8 @@ impl VectorSearch {
                                 additional_columns.as_slice(),
                                 where_cond.as_ref(),
                                 keywords.clone(),
-                                *limit
+                                1000
+                                // *limit
                             ).await?
                         );
                     }
