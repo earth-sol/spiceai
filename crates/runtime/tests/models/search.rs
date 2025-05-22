@@ -15,26 +15,15 @@ limitations under the License.
 */
 
 use app::{App, AppBuilder};
-use arrow::{array::StringArray, compute::concat_batches, util::pretty::pretty_format_batches};
-use async_openai::types::EmbeddingInput;
-use futures::TryStreamExt;
 use http::HeaderValue;
 use http::header::{ACCEPT, CONTENT_TYPE};
-use rand::Rng;
-use reqwest::{Client, header::HeaderMap};
+use reqwest::header::HeaderMap;
+use runtime::Runtime;
 use runtime::auth::EndpointAuth;
-use runtime::{Runtime, config::Config, get_params_with_secrets};
-use secrecy::SecretString;
 use serde_json::{Value, json};
-use snafu::ResultExt;
-use spicepod::acceleration::Acceleration;
+use spicepod::component::dataset::Dataset;
 use spicepod::component::embeddings::{ColumnEmbeddingConfig, EmbeddingChunkConfig};
-use spicepod::{component::dataset::Dataset, param::Params};
 use std::sync::Arc;
-use std::{
-    collections::HashMap,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-};
 
 use crate::models::hf::get_huggingface_embeddings;
 use crate::models::openai::get_openai_embeddings;
@@ -113,7 +102,7 @@ pub(crate) fn item_tpch_dataset_w_embeddings(
         chunking,
     }];
 
-    return ds_tpcds_item;
+    ds_tpcds_item
 }
 
 pub(crate) fn catalog_page_tpch_dataset_w_embeddings(
@@ -135,7 +124,7 @@ pub(crate) fn catalog_page_tpch_dataset_w_embeddings(
         primary_keys,
         chunking,
     }];
-    return ds_tpcds_cp;
+    ds_tpcds_cp
 }
 
 pub(crate) async fn run_search(

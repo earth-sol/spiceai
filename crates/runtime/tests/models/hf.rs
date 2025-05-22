@@ -32,11 +32,11 @@ use crate::{
     models::{
         create_api_bindings_config,
         embedding::{EmbeddingTestCase, run_embedding_tests},
-        get_taxi_trips_dataset, get_tpcds_dataset, normalize_chat_completion_response,
+        get_taxi_trips_dataset, normalize_chat_completion_response,
         send_chat_completions_request,
     },
     utils::{
-        runtime_ready_check, runtime_ready_check_with_timeout, test_request_context,
+        runtime_ready_check_with_timeout, test_request_context,
         verify_env_secret_exists,
     },
 };
@@ -173,7 +173,7 @@ mod search {
 
     use crate::models::search::{
         SearchTestCase, catalog_page_tpch_dataset_w_embeddings, item_tpch_dataset_w_embeddings,
-        run_search, run_search_test,
+        run_search,
     };
 
     use super::*;

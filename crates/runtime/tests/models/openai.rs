@@ -141,7 +141,7 @@ mod search {
         get_small_clickbench_dataset,
         search::{
             SearchTestCase, catalog_page_tpch_dataset_w_embeddings, item_tpch_dataset_w_embeddings,
-            run_search, run_search_test,
+            run_search,
         },
     };
 
