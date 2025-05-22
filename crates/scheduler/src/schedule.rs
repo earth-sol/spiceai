@@ -21,14 +21,14 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::{
-    RunningTask, component::ScheduleableComponent, evaluators::ScheduleEvaluator,
+    RunningTask, component::ScheduledTask, evaluators::ScheduleEvaluator,
     precondition::Precondition,
 };
 
 pub struct Schedule {
     id: Arc<str>,
     evaluators: Vec<Arc<RwLock<dyn ScheduleEvaluator>>>,
-    components: Vec<Arc<dyn ScheduleableComponent>>,
+    components: Vec<Arc<dyn ScheduledTask>>,
     preconditions: Vec<Arc<dyn Precondition>>,
 }
 
@@ -74,7 +74,7 @@ impl Schedule {
     }
 
     #[must_use]
-    pub fn add_component(mut self, component: Arc<dyn ScheduleableComponent>) -> Self {
+    pub fn add_component(mut self, component: Arc<dyn ScheduledTask>) -> Self {
         self.components.push(component);
         self
     }

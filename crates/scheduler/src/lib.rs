@@ -385,7 +385,7 @@ mod test {
     use tracing_subscriber::EnvFilter;
 
     use crate::{
-        component::ScheduleableComponent,
+        component::ScheduledTask,
         evaluators::{ManualInterrupt, ScheduleEvaluator},
     };
 
@@ -442,7 +442,7 @@ mod test {
     }
 
     #[async_trait]
-    impl ScheduleableComponent for TestComponent {
+    impl ScheduledTask for TestComponent {
         async fn execute(&self) -> Result<()> {
             let mut map_lock = TEST_EXECUTION_COUNT.write().await;
 
@@ -461,7 +461,7 @@ mod test {
     }
 
     #[async_trait]
-    impl ScheduleableComponent for LongComponent {
+    impl ScheduledTask for LongComponent {
         async fn execute(&self) -> Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(self.wait)).await;
 
@@ -481,7 +481,7 @@ mod test {
     }
 
     #[async_trait]
-    impl ScheduleableComponent for TimedComponent {
+    impl ScheduledTask for TimedComponent {
         async fn execute(&self) -> Result<()> {
             let now = Instant::now();
             let mut map_lock = TIMING_MAP.write().await;

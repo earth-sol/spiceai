@@ -15,13 +15,13 @@ limitations under the License.
 */
 
 use scheduler::Result;
-use scheduler::component::ScheduleableComponent;
+use scheduler::component::ScheduledTask;
 use tonic::async_trait;
 
 use crate::component::dataset::Dataset;
 
 #[async_trait]
-impl ScheduleableComponent for Dataset {
+impl ScheduledTask for Dataset {
     async fn execute(&self) -> Result<()> {
         match self
             .runtime()

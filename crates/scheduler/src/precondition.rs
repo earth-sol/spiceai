@@ -35,7 +35,7 @@ mod test {
     use tracing_subscriber::EnvFilter;
 
     use crate::{
-        Result, Scheduler, component::ScheduleableComponent, evaluators::ScheduleEvaluator,
+        Result, Scheduler, component::ScheduledTask, evaluators::ScheduleEvaluator,
         schedule::Schedule, tasks::TaskRequest,
     };
 
@@ -78,7 +78,7 @@ mod test {
     }
 
     #[async_trait]
-    impl ScheduleableComponent for TestComponent {
+    impl ScheduledTask for TestComponent {
         async fn execute(&self) -> Result<()> {
             let mut map_lock = TEST_EXECUTION_COUNT.write().await;
 

@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use crate::Result;
 
 #[async_trait]
-pub trait ScheduleableComponent: Send + Sync {
+pub trait ScheduledTask: Send + Sync {
     /// Executes the defined component.
     ///
     /// # Errors
