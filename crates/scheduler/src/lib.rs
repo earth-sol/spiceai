@@ -312,7 +312,7 @@ async fn handle_new_task(
             // the task is scheduled due now, and nothing else is running
             // execute it immediately
             tracing::debug!("Executing queued task now");
-            let Some(new_task) = schedule.execute() else {
+            let Some(new_task) = schedule.execute().await else {
                 return false;
             };
 
@@ -336,7 +336,7 @@ async fn handle_new_task(
             // cancel the running task and execute the new one
             tracing::debug!("Executing immediate task now");
             let Some(running_task) = running_tasks.remove(&schedule.id()) else {
-                let Some(new_task) = schedule.execute() else {
+                let Some(new_task) = schedule.execute().await else {
                     return false;
                 };
 
@@ -361,7 +361,7 @@ async fn handle_new_task(
                 }
             }
 
-            let Some(new_task) = schedule.execute() else {
+            let Some(new_task) = schedule.execute().await else {
                 return false;
             };
 

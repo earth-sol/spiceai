@@ -87,9 +87,9 @@ impl Schedule {
     /// Executes the components defined by this schedule.
     ///
     /// If any precondition is not met, the schedule will not execute.
-    pub(crate) fn execute(self: &Arc<Self>) -> Option<RunningTask> {
+    pub(crate) async fn execute(self: &Arc<Self>) -> Option<RunningTask> {
         for condition in &self.preconditions {
-            if !condition.check() {
+            if !condition.check().await {
                 tracing::debug!(
                     "Scheduler is skipping {}, because precondition {} is not met",
                     self.id,

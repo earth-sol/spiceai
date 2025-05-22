@@ -14,9 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use async_trait::async_trait;
+
+#[async_trait]
 pub trait Precondition: Send + Sync {
     /// Check if the precondition is met
-    fn check(&self) -> bool;
+    async fn check(&self) -> bool;
 
     /// Get the name of the precondition
     fn name(&self) -> &str;
@@ -96,8 +99,9 @@ mod test {
         should_pass: bool,
     }
 
+    #[async_trait]
     impl Precondition for TestPrecondition {
-        fn check(&self) -> bool {
+        async fn check(&self) -> bool {
             self.should_pass
         }
 
