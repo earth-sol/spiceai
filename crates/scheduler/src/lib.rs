@@ -33,6 +33,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub mod component;
 pub mod evaluators;
+pub mod precondition;
 pub mod schedule;
 pub(crate) mod tasks;
 
@@ -110,35 +111,33 @@ impl Scheduler {
                     break;
                 }
 
-                let now = Instant::now();
+                tracing::debug!("Scheduler is waiting for next evaluation period");
+                evaluation_period_wait(
+                    &cancellation_token,
+                    &schedules,
+                    &mut running_tasks,
+                    &mut pending_tasks,
+                    evaluation_period,
+                    acceptable_window,
+                )
+                .await;
+
                 for schedule in &schedules {
                     let pending = pending_tasks.entry(schedule.id()).or_default();
                     // ensure pending tasks are sorted by their execution time, soonest first
                     pending.sort_by(|a, b| a.at.cmp(&b.at));
 
-                    if handle_interrupting_running_task(
-                        &mut running_tasks,
-                        pending,
-                        schedule,
-                        now,
-                        acceptable_window,
-                    )
-                    .await
-                    {
-                        continue; // skip evaluating the rest of the schedule, because a task is running
+                    if let Some(running_task) = running_tasks.get(&schedule.id()) {
+                        if running_task.handle.is_finished() {
+                            // Add retry strategies for failed tasks?
+                            tracing::debug!(
+                                "Scheduled task completed for schedule: {}",
+                                schedule.id()
+                            );
+                            running_tasks.remove(&schedule.id());
+                        }
                     }
 
-                    handle_evaluation_wait(
-                        &cancellation_token,
-                        schedule,
-                        &mut running_tasks,
-                        pending,
-                        evaluation_period,
-                        acceptable_window,
-                    )
-                    .await;
-
-                    // reset the now timer after waiting
                     let now = Instant::now();
 
                     // determine if any pending tasks are due
@@ -200,96 +199,15 @@ impl Scheduler {
     }
 }
 
-async fn handle_interrupting_running_task(
-    running_tasks: &mut HashMap<Arc<str>, RunningTask>,
-    pending: &mut Vec<Arc<TaskRequest>>,
-    schedule: &Arc<Schedule>,
-    now: Instant,
-    acceptable_window: Duration,
-) -> bool {
-    if let Some(currently_running) = running_tasks.get(&schedule.id()) {
-        if currently_running.handle.is_finished() {
-            // TODO: implement a retry strategy to handle failed tasks
-            tracing::debug!("Scheduled task completed for schedule: {}", schedule.id());
-            // remove the task from the running tasks
-            running_tasks.remove(&schedule.id());
-            false
-        } else {
-            // remove any pending tasks which have been waiting for too long
-            pending.retain(|task| task.created_at + Duration::from_secs(60 * 15) > now); // more than 15 minutes = drop
-
-            // the task is still running. find any immediate tasks which are due, to determine if the running task must be cancelled
-            // find any immediate tasks which were queued, and are now due. e.g. queued with a TaskDelivery::Immediate, but set for a time in the future which is now
-            let immediate = pending.iter().find(|task| {
-                task.is_immediate() && task.at.duration_since(now) < acceptable_window
-            });
-
-            let immediate = if let Some(task) = immediate {
-                Some(Arc::clone(task))
-            } else {
-                // if there are no immediate tasks queued, find any queued tasks which are due
-                let mut return_interrupt = None;
-                for evaluator in schedule.evaluators() {
-                    let mut evaluator = evaluator.write().await;
-                    if !evaluator.can_deliver_immediate_task() {
-                        continue;
-                    }
-
-                    let task = evaluator.next();
-                    match task {
-                        None => {}
-                        Some(task) => {
-                            // if the task is immediate for now, we can cancel the running task
-                            if task.is_immediate()
-                                && task.at.duration_since(now) < acceptable_window
-                            {
-                                tracing::debug!("Scheduler is returning immediate task");
-                                return_interrupt = Some(task);
-                                continue;
-                            }
-
-                            // otherwise, we can just add it to the pending tasks
-                            pending.push(task);
-                        }
-                    }
-                }
-
-                return_interrupt
-            };
-
-            if let Some(task) = immediate {
-                if handle_new_task(
-                    now,
-                    pending,
-                    running_tasks,
-                    Arc::clone(&task),
-                    schedule,
-                    acceptable_window,
-                )
-                .await
-                {
-                    // the task was executed
-                    tracing::debug!("An immediate scheduled task was executed");
-                    pending.retain(|t| t != &task);
-                }
-            }
-
-            true // when there is a running task, any further evaluation of the schedule is skipped
-        }
-    } else {
-        false // no active task, so we can continue evaluating the schedule
-    }
-}
-
 /// While waiting for the next evaluation period, check for new immediate tasks.
 /// This allows interrupting an evaluation period when a new immediate task arrives.
 ///
 /// E.g. we wouldn't want to wait for an evaluation period of 5 minutes if a new immediate task arrives in 5 seconds.
-async fn handle_evaluation_wait(
+async fn evaluation_period_wait(
     cancellation_token: &CancellationToken,
-    schedule: &Arc<Schedule>,
+    schedules: &Vec<Arc<Schedule>>,
     running_tasks: &mut HashMap<Arc<str>, RunningTask>,
-    pending: &mut Vec<Arc<TaskRequest>>,
+    pending_tasks: &mut HashMap<Arc<str>, Vec<Arc<TaskRequest>>>,
     evaluation_period: Duration,
     acceptable_window: Duration,
 ) {
@@ -308,55 +226,63 @@ async fn handle_evaluation_wait(
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // check if a new immediate task has arrived while we were sleeping
-        let new_task = if let Some(task) = pending
-            .iter()
-            .find(|task| task.is_immediate() && task.at.duration_since(now) < acceptable_window)
-        {
-            Some(Arc::clone(task))
-        } else {
-            let mut return_interrupt = None;
-            for evaluator in schedule.evaluators() {
-                let mut evaluator = evaluator.write().await;
-                if !evaluator.can_deliver_immediate_task() {
-                    continue;
-                }
+        for schedule in schedules {
+            let pending = pending_tasks.entry(schedule.id()).or_default();
 
-                let task = evaluator.next();
-                match task {
-                    None => {}
-                    Some(task) => {
-                        // if the task is immediate for now, we can cancel the running task
-                        if task.is_immediate() && task.at.duration_since(now) < acceptable_window {
-                            return_interrupt = Some(task);
-                            continue;
+            pending.sort_by(|a, b| a.at.cmp(&b.at));
+
+            let new_task = if let Some(task) = pending
+                .iter()
+                .find(|task| task.is_immediate() && task.at.duration_since(now) < acceptable_window)
+            {
+                Some(Arc::clone(task))
+            } else {
+                let mut return_interrupt = None;
+                for evaluator in schedule.evaluators() {
+                    let mut evaluator = evaluator.write().await;
+                    if !evaluator.can_deliver_immediate_task() {
+                        continue;
+                    }
+
+                    let task = evaluator.next();
+                    match task {
+                        None => {}
+                        Some(task) => {
+                            // if the task is immediate for now, we can cancel the running task
+                            if task.is_immediate()
+                                && task.at.duration_since(now) < acceptable_window
+                            {
+                                return_interrupt = Some(task);
+                                continue;
+                            }
+
+                            // otherwise, we can just add it to the pending tasks
+                            pending.push(task);
                         }
-
-                        // otherwise, we can just add it to the pending tasks
-                        pending.push(task);
                     }
                 }
+
+                return_interrupt
+            };
+
+            if let Some(task) = new_task {
+                if handle_new_task(
+                    now,
+                    pending,
+                    running_tasks,
+                    Arc::clone(&task),
+                    schedule,
+                    acceptable_window,
+                )
+                .await
+                {
+                    // the task was executed
+                    pending.retain(|t| t != &task);
+                }
             }
 
-            return_interrupt
-        };
-
-        if let Some(task) = new_task {
-            if handle_new_task(
-                now,
-                pending,
-                running_tasks,
-                Arc::clone(&task),
-                schedule,
-                acceptable_window,
-            )
-            .await
-            {
-                // the task was executed
-                pending.retain(|t| t != &task);
-            }
+            pending.sort_by(|a, b| a.at.cmp(&b.at));
         }
-
-        pending.sort_by(|a, b| a.at.cmp(&b.at));
     }
 }
 
@@ -385,7 +311,10 @@ async fn handle_new_task(
             // the task is scheduled due now, and nothing else is running
             // execute it immediately
             tracing::debug!("Executing queued task now");
-            let new_task = schedule.execute();
+            let Some(new_task) = schedule.execute() else {
+                return false;
+            };
+
             running_tasks.insert(schedule.id(), new_task);
             true
         }
@@ -406,7 +335,10 @@ async fn handle_new_task(
             // cancel the running task and execute the new one
             tracing::debug!("Executing immediate task now");
             let Some(running_task) = running_tasks.remove(&schedule.id()) else {
-                let new_task = schedule.execute();
+                let Some(new_task) = schedule.execute() else {
+                    return false;
+                };
+
                 running_tasks.insert(schedule.id(), new_task);
                 return true;
             };
@@ -428,7 +360,10 @@ async fn handle_new_task(
                 }
             }
 
-            let new_task = schedule.execute();
+            let Some(new_task) = schedule.execute() else {
+                return false;
+            };
+
             running_tasks.insert(schedule.id(), new_task);
 
             if task_request.delivery == TaskDelivery::ImmediateAndClear {
@@ -460,7 +395,7 @@ mod test {
         let filter = match (default_level, std::env::var("SPICED_LOG").ok()) {
             (_, Some(log)) => EnvFilter::new(log),
             (Some(level), None) => EnvFilter::new(level),
-            _ => EnvFilter::new("llms=TRACE,DEBUG"),
+            _ => EnvFilter::new("DEBUG"),
         };
 
         let subscriber = tracing_subscriber::FmtSubscriber::builder()
@@ -486,6 +421,7 @@ mod test {
         let mut map = HashMap::new();
         map.insert(Arc::from("test_scheduler"), 0);
         map.insert(Arc::from("test_multi_schedule"), 0);
+        map.insert(Arc::from("test_multi_component_schedule"), 0);
         map.insert(Arc::from("test_multi_evaluator_multi_component"), 0);
         map.insert(Arc::from("test_manual_interrupts"), 0);
         map.insert(Arc::from("test_manual_queued_with_interrupt"), 0);
@@ -561,13 +497,12 @@ mod test {
 
     #[tokio::test]
     async fn test_scheduler() {
-        init_tracing(Some("debug"));
-        let schedule = Schedule::new(
-            vec![Arc::new(RwLock::new(TestEvaluator {}))],
-            vec![Arc::new(TestComponent {
+        init_tracing(None);
+        let schedule = Schedule::new()
+            .add_evaluator(Arc::new(RwLock::new(TestEvaluator {})))
+            .add_component(Arc::new(TestComponent {
                 name: "test_scheduler".into(),
-            })],
-        );
+            }));
 
         let scheduler = Scheduler::new("test_scheduler".into(), vec![Arc::new(schedule)])
             .with_evaluation_period(std::time::Duration::from_secs(1));
@@ -595,13 +530,12 @@ mod test {
 
     #[tokio::test]
     async fn test_scheduler_timing() {
-        init_tracing(Some("debug"));
-        let schedule = Schedule::new(
-            vec![Arc::new(RwLock::new(TestEvaluator {}))],
-            vec![Arc::new(TimedComponent {
+        init_tracing(None);
+        let schedule = Schedule::new()
+            .add_evaluator(Arc::new(RwLock::new(TestEvaluator {})))
+            .add_component(Arc::new(TimedComponent {
                 name: "test_scheduler_timing".into(),
-            })],
-        );
+            }));
 
         let scheduler = Scheduler::new("test_scheduler_timing".into(), vec![Arc::new(schedule)])
             .with_evaluation_period(std::time::Duration::from_secs(1));
@@ -644,22 +578,63 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_multi_schedule() {
-        init_tracing(Some("debug"));
-        let schedule = Schedule::new(
-            vec![Arc::new(RwLock::new(TestEvaluator {}))],
-            vec![
-                Arc::new(TestComponent {
-                    name: "test_multi_schedule".into(),
-                }),
-                Arc::new(TestComponent {
-                    name: "test_multi_schedule".into(),
-                }),
-            ],
-        );
+    async fn test_multi_component_schedule() {
+        init_tracing(None);
+        let schedule = Schedule::new()
+            .add_evaluator(Arc::new(RwLock::new(TestEvaluator {})))
+            .add_component(Arc::new(TestComponent {
+                name: "test_multi_component_schedule".into(),
+            }))
+            .add_component(Arc::new(TestComponent {
+                name: "test_multi_component_schedule".into(),
+            }));
 
-        let scheduler = Scheduler::new("test_multi_schedule".into(), vec![Arc::new(schedule)])
-            .with_evaluation_period(std::time::Duration::from_secs(1));
+        let scheduler = Scheduler::new(
+            "test_multi_component_schedule".into(),
+            vec![Arc::new(schedule)],
+        )
+        .with_evaluation_period(std::time::Duration::from_secs(1));
+        let scheduler_handle = scheduler.run();
+
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+
+        scheduler.cancellation_token().cancel();
+        scheduler_handle
+            .await
+            .expect("Should join handle")
+            .expect("To finish the handle without error");
+
+        let map_lock = TEST_EXECUTION_COUNT.read().await;
+        let count = map_lock
+            .get("test_multi_component_schedule")
+            .expect("To get test execution count");
+
+        // expect 4-6 times due to delay inaccuracies with sleep, duration, timing, etc
+        assert!(
+            *count >= 4 && *count <= 6,
+            "Test component should have executed 4-6 times, but got {count}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_multi_schedule() {
+        init_tracing(None);
+        let schedule_one = Schedule::new()
+            .add_evaluator(Arc::new(RwLock::new(TestEvaluator {})))
+            .add_component(Arc::new(TestComponent {
+                name: "test_multi_schedule".into(),
+            }));
+        let schedule_two = Schedule::new()
+            .add_evaluator(Arc::new(RwLock::new(TestEvaluator {})))
+            .add_component(Arc::new(TestComponent {
+                name: "test_multi_schedule".into(),
+            }));
+
+        let scheduler = Scheduler::new(
+            "test_multi_schedule".into(),
+            vec![Arc::new(schedule_one), Arc::new(schedule_two)],
+        )
+        .with_evaluation_period(std::time::Duration::from_secs(1));
         let scheduler_handle = scheduler.run();
 
         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
@@ -684,22 +659,20 @@ mod test {
 
     #[tokio::test]
     async fn test_multi_evaluator_multi_component() {
-        init_tracing(Some("debug"));
+        init_tracing(None);
         let (tx, rx) = tokio::sync::mpsc::channel::<Option<Arc<TaskRequest>>>(1);
 
         let manual_interrupt = Arc::new(RwLock::new(ManualInterrupt::new(rx)));
 
-        let schedule = Schedule::new(
-            vec![Arc::new(RwLock::new(TestEvaluator {})), manual_interrupt],
-            vec![
-                Arc::new(TestComponent {
-                    name: "test_multi_evaluator_multi_component".into(),
-                }),
-                Arc::new(TestComponent {
-                    name: "test_multi_evaluator_multi_component".into(),
-                }),
-            ],
-        );
+        let schedule = Schedule::new()
+            .add_evaluator(Arc::new(RwLock::new(TestEvaluator {})))
+            .add_evaluator(manual_interrupt)
+            .add_component(Arc::new(TestComponent {
+                name: "test_multi_evaluator_multi_component".into(),
+            }))
+            .add_component(Arc::new(TestComponent {
+                name: "test_multi_evaluator_multi_component".into(),
+            }));
 
         let scheduler = Scheduler::new(
             "test_multi_evaluator_multi_component".into(),
@@ -736,17 +709,16 @@ mod test {
 
     #[tokio::test]
     async fn test_manual_interrupts() {
-        init_tracing(Some("debug"));
+        init_tracing(None);
         let (tx, rx) = tokio::sync::mpsc::channel::<Option<Arc<TaskRequest>>>(1);
 
         let manual_interrupt = Arc::new(RwLock::new(ManualInterrupt::new(rx)));
 
-        let schedule = Schedule::new(
-            vec![manual_interrupt],
-            vec![Arc::new(TestComponent {
+        let schedule = Schedule::new()
+            .add_evaluator(manual_interrupt)
+            .add_component(Arc::new(TestComponent {
                 name: "test_manual_interrupts".into(),
-            })],
-        );
+            }));
 
         let scheduler = Scheduler::new("test_manual_interrupts".into(), vec![Arc::new(schedule)])
             .with_evaluation_period(std::time::Duration::from_secs(1));
@@ -779,17 +751,16 @@ mod test {
 
     #[tokio::test]
     async fn test_manual_queued_with_interrupt() {
-        init_tracing(Some("debug"));
+        init_tracing(None);
         let (tx, rx) = tokio::sync::mpsc::channel::<Option<Arc<TaskRequest>>>(1);
 
         let manual_interrupt = Arc::new(RwLock::new(ManualInterrupt::new(rx)));
 
-        let schedule = Schedule::new(
-            vec![manual_interrupt],
-            vec![Arc::new(TestComponent {
+        let schedule = Schedule::new()
+            .add_evaluator(manual_interrupt)
+            .add_component(Arc::new(TestComponent {
                 name: "test_manual_queued_with_interrupt".into(),
-            })],
-        );
+            }));
 
         let scheduler = Scheduler::new(
             "test_manual_queued_with_interrupt".into(),
@@ -835,19 +806,19 @@ mod test {
 
     #[tokio::test]
     async fn test_manual_queue_clears_after_immediate() {
-        init_tracing(Some("debug"));
+        init_tracing(None);
         let (tx, rx) = tokio::sync::mpsc::channel::<Option<Arc<TaskRequest>>>(1);
         let manual_interrupt = Arc::new(RwLock::new(ManualInterrupt::new(rx)));
         let (tx_clearer, rx_clearer) = tokio::sync::mpsc::channel::<Option<Arc<TaskRequest>>>(1);
         let manual_clearer = Arc::new(RwLock::new(ManualInterrupt::new(rx_clearer)));
 
-        let schedule = Schedule::new(
-            vec![manual_interrupt, manual_clearer],
-            vec![Arc::new(LongComponent {
+        let schedule = Schedule::new()
+            .add_evaluator(manual_interrupt)
+            .add_evaluator(manual_clearer)
+            .add_component(Arc::new(LongComponent {
                 name: "test_manual_queue_clears_after_immediate".into(),
                 wait: 5,
-            })],
-        );
+            }));
 
         let scheduler = Scheduler::new(
             "test_manual_queue_clears_after_immediate".into(),

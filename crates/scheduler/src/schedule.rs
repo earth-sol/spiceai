@@ -20,12 +20,16 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::{RunningTask, component::ScheduleableComponent, evaluators::ScheduleEvaluator};
+use crate::{
+    RunningTask, component::ScheduleableComponent, evaluators::ScheduleEvaluator,
+    precondition::Precondition,
+};
 
 pub struct Schedule {
     id: Arc<str>,
     evaluators: Vec<Arc<RwLock<dyn ScheduleEvaluator>>>,
     components: Vec<Arc<dyn ScheduleableComponent>>,
+    preconditions: Vec<Arc<dyn Precondition>>,
 }
 
 impl Hash for Schedule {
@@ -41,6 +45,17 @@ impl PartialEq for Schedule {
 }
 impl Eq for Schedule {}
 
+impl Default for Schedule {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4().to_string().into(),
+            evaluators: Vec::new(),
+            components: Vec::new(),
+            preconditions: Vec::new(),
+        }
+    }
+}
+
 impl Schedule {
     #[must_use]
     pub fn id(&self) -> Arc<str> {
@@ -48,19 +63,43 @@ impl Schedule {
     }
 
     #[must_use]
-    pub fn new(
-        evaluators: Vec<Arc<RwLock<dyn ScheduleEvaluator>>>,
-        components: Vec<Arc<dyn ScheduleableComponent>>,
-    ) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string().into(),
-            evaluators,
-            components,
-        }
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
+    pub fn add_evaluator(mut self, evaluator: Arc<RwLock<dyn ScheduleEvaluator>>) -> Self {
+        self.evaluators.push(evaluator);
+        self
+    }
+
+    #[must_use]
+    pub fn add_component(mut self, component: Arc<dyn ScheduleableComponent>) -> Self {
+        self.components.push(component);
+        self
+    }
+
+    #[must_use]
+    pub fn add_precondition(mut self, precondition: Arc<dyn Precondition>) -> Self {
+        self.preconditions.push(precondition);
+        self
     }
 
     /// Executes the components defined by this schedule.
-    pub(crate) fn execute(self: &Arc<Self>) -> RunningTask {
+    ///
+    /// If any precondition is not met, the schedule will not execute.
+    pub(crate) fn execute(self: &Arc<Self>) -> Option<RunningTask> {
+        for condition in &self.preconditions {
+            if !condition.check() {
+                tracing::debug!(
+                    "Scheduler is skipping {}, because precondition {} is not met",
+                    self.id,
+                    condition.name()
+                );
+                return None;
+            }
+        }
+
         let components = self.components.clone();
         let handle = tokio::spawn(async move {
             let mut failed_components = Vec::new();
@@ -77,7 +116,7 @@ impl Schedule {
             Ok(())
         });
 
-        RunningTask::new(handle)
+        Some(RunningTask::new(handle))
     }
 
     #[must_use]
