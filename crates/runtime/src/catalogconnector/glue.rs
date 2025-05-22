@@ -55,7 +55,6 @@ pub struct GlueCatalog {
 }
 
 type DatabaseName = String;
-type TableName = String;
 
 pub struct GlueCatalogProvider {
     inner: Arc<Inner>,
@@ -70,7 +69,12 @@ impl fmt::Debug for GlueCatalogProvider {
 
 struct Inner {
     _glue: Client,
-    databases: HashMap<DatabaseName, Vec<TableName>>,
+    databases: HashMap<DatabaseName, Vec<TableMetadata>>,
+}
+
+struct TableMetadata {
+    name: String,
+    ty: TableType,
 }
 
 pub struct GlueSchemaProvider {
@@ -96,7 +100,7 @@ impl SchemaProvider for GlueSchemaProvider {
         self.inner
             .databases
             .get(&self.schema)
-            .cloned()
+            .map(|tables| tables.iter().map(|t| t.name.clone()).collect())
             .unwrap_or_default()
     }
 
@@ -137,9 +141,14 @@ impl GlueCatalogProvider {
                 .table_list()
                 .iter()
                 .filter_map(|t| {
-                    if is_supported(t) && is_included(catalog.include.as_ref(), &db.name, t.name())
+                    let ty = TableType::from(t);
+                    if ty.is_supported()
+                        && is_included(catalog.include.as_ref(), &db.name, t.name())
                     {
-                        Some(t.name().to_string())
+                        Some(TableMetadata {
+                            name: t.name.clone(),
+                            ty,
+                        })
                     } else {
                         None
                     }
@@ -160,35 +169,41 @@ impl GlueCatalogProvider {
     }
 }
 
-fn is_supported(table: &Table) -> bool {
-    let is_iceberg = table
-        .parameters
-        .as_ref()
-        .and_then(|params| params.get("table_type"))
-        .is_some_and(|value| value.to_lowercase() == "iceberg");
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum TableType {
+    HiveParquet,
+    Iceberg,
+    Unsupported,
+}
 
-    let is_parquet = if is_iceberg {
-        false
-    } else {
-        table
+impl TableType {
+    fn from(table: &Table) -> TableType {
+        if table
+            .parameters
+            .as_ref()
+            .and_then(|params| params.get("table_type"))
+            .is_some_and(|value| value.to_lowercase() == "iceberg")
+        {
+            return Self::Iceberg;
+        }
+
+        if table
             .storage_descriptor
             .as_ref()
             .and_then(|sd| sd.input_format.as_ref())
             .is_some_and(|input_format| {
                 input_format == "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
             })
-    };
+        {
+            return Self::HiveParquet;
+        }
 
-    let is_supported = is_iceberg || is_parquet;
-
-    if !is_supported {
-        tracing::debug!(
-            "table {} is not supported. Iceberg and Hive tables are currently supported",
-            table.name()
-        );
+        Self::Unsupported
     }
 
-    is_supported
+    fn is_supported(&self) -> bool {
+        *self != Self::Unsupported
+    }
 }
 
 fn is_included(include: Option<&GlobSet>, schema: &str, table: &str) -> bool {
