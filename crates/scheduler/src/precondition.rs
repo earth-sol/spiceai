@@ -35,8 +35,8 @@ mod test {
     use tracing_subscriber::EnvFilter;
 
     use crate::{
-        Result, Scheduler, component::ScheduledTask, evaluators::ScheduleEvaluator,
-        schedule::Schedule, tasks::TaskRequest,
+        Result, Scheduler, evaluators::ScheduleEvaluator, schedule::Schedule, tasks::ScheduledTask,
+        tasks::TaskRequest,
     };
 
     fn init_tracing(default_level: Option<&str>) -> tracing::subscriber::DefaultGuard {

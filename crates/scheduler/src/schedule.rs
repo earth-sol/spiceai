@@ -21,8 +21,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::{
-    RunningTask, component::ScheduledTask, evaluators::ScheduleEvaluator,
-    precondition::Precondition,
+    RunningTask, evaluators::ScheduleEvaluator, precondition::Precondition, tasks::ScheduledTask,
 };
 
 pub struct Schedule {

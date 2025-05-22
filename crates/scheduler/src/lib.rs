@@ -31,11 +31,10 @@ pub enum Error {}
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub mod component;
 pub mod evaluators;
 pub mod precondition;
 pub mod schedule;
-pub(crate) mod tasks;
+pub mod tasks;
 
 pub(crate) struct Scheduler {
     name: Arc<str>,
@@ -385,8 +384,8 @@ mod test {
     use tracing_subscriber::EnvFilter;
 
     use crate::{
-        component::ScheduledTask,
         evaluators::{ManualInterrupt, ScheduleEvaluator},
+        tasks::ScheduledTask,
     };
 
     use super::*;

@@ -16,9 +16,16 @@ limitations under the License.
 
 use std::time::{Duration, Instant};
 
+use async_trait::async_trait;
 use tokio::task::JoinHandle;
 
 use crate::Result;
+
+#[async_trait]
+pub trait ScheduledTask: Send + Sync {
+    /// Executes the defined component.
+    async fn execute(&self) -> Result<()>;
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TaskDelivery {
