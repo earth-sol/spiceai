@@ -81,8 +81,8 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[cfg(feature = "databricks")]
 pub mod databricks;
-pub mod glue;
 pub mod deferred;
+pub mod glue;
 pub mod iceberg;
 pub mod spice_cloud;
 #[cfg(feature = "delta_lake")]
