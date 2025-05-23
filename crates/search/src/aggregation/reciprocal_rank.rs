@@ -47,8 +47,9 @@ impl CandidateAggregation for ReciprocalRankFusion {
         primary_key: Vec<String>,
         limit: usize,
     ) -> Result<AggregationResult> {
+        let num_inputs = data.len();
         // Handle 0, or 1 candidates.
-        if data.len() <= 1 {
+        if num_inputs <= 1 {
             return data
                 .pop()
                 .map(|d| from_single_input(d, primary_key))
@@ -63,7 +64,7 @@ impl CandidateAggregation for ReciprocalRankFusion {
         let () = verify_schema_compatibility(schemas.as_slice())?;
 
         let ctx = SessionContext::new();
-        let mut table_names: Vec<String> = Vec::with_capacity(data.len());
+        let mut table_names: Vec<String> = Vec::with_capacity(num_inputs);
 
         // Find all additional columns in the schema that are not part of the primary key or the expected
         // search columns.

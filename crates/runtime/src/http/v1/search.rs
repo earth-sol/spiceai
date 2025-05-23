@@ -137,7 +137,7 @@ pub(crate) async fn post(
     };
 
     match vs.search(&search_request).await {
-        Ok(resp) => match to_matches_sorted(&resp, search_request.limit) {
+        Ok(resp) => match to_matches_sorted(resp, search_request.limit).await {
             Ok(m) => (
                 StatusCode::OK,
                 Json(SearchResponse {

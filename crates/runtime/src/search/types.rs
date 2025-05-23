@@ -21,21 +21,22 @@ use arrow::error::ArrowError;
 use arrow_schema::{Schema, SchemaRef};
 use arrow_tools::format::to_markdown_documents;
 use datafusion::common::utils::quote_identifier;
-use datafusion::execution::SendableRecordBatchStream;
 use datafusion::sql::TableReference;
 use futures::StreamExt;
 use itertools::Itertools;
 use search::aggregation::AggregationResult;
-use search::{SEARCH_SCORE_COLUMN_NAME, SEARCH_VALUE_COLUMN_NAME};
+use search::collect_batches;
+use search::{
+    SEARCH_SCORE_COLUMN_NAME, SEARCH_VALUE_COLUMN_NAME, aggregation::Error as SearchError,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use snafu::ResultExt;
 
 use crate::convert_string_arrow_to_iterator;
-use crate::datafusion::Table;
 use crate::datafusion::query::write_to_json_string;
 
-use super::{Error, FormattingSnafu, RecordProcessingSnafu, Result};
+use super::{CandidateAggregationSnafu, Error, FormattingSnafu, RecordProcessingSnafu, Result};
 
 pub type ModelKey = String;
 
@@ -166,37 +167,6 @@ impl VectorSearchTableResult {
             .first()
             .map_or(Schema::empty().into(), RecordBatch::schema)
     }
-
-    pub fn to_matches(&self, table: &TableReference) -> Result<Vec<Match>> {
-        // Early exit on no data.
-        if self.data.first().is_none_or(|d| d.num_rows() == 0) {
-            return Ok(vec![]);
-        }
-        let primary_keys_json = self.primary_keys_json()?;
-        let additional_columns_json = self.addition_columns_json()?;
-        let values = self.embedding_columns_list()?;
-        let scores = self.score_values()?;
-
-        values
-            .iter()
-            .enumerate()
-            .map(|(i, value)| {
-                let Some(score) = scores.get(i) else {
-                    return Err(Error::EmbeddingError {
-                        source: format!("No distance returned for {i}th result").into(),
-                    });
-                };
-
-                Ok(Match {
-                    value: value.clone(),
-                    score: *score,
-                    dataset: table.to_string(),
-                    primary_key: primary_keys_json.get(i).cloned().unwrap_or_default(),
-                    metadata: additional_columns_json.get(i).cloned().unwrap_or_default(),
-                })
-            })
-            .collect::<Result<Vec<Match>>>()
-    }
 }
 
 pub type VectorSearchResult = HashMap<TableReference, AggregationResult>;
@@ -204,8 +174,14 @@ pub type VectorSearchResult = HashMap<TableReference, AggregationResult>;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Match {
-    /// The value of the match (e.g., document snippet, identifier, etc.)
-    value: String,
+    /// The matches for this result
+    matches: HashMap<String, MatchType>,
+
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    data: HashMap<String, Value>,
+
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    primary_key: HashMap<String, Value>,
 
     /// The similarity of the match to the query
     score: f64,
@@ -213,21 +189,30 @@ pub struct Match {
     /// The name of the dataset where the match was found
     dataset: String,
 
-    /// Primary key(s) identifying the matched item in the dataset
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub primary_key: HashMap<String, serde_json::Value>,
-
-    /// Additional metadata for the match, requested explicitly by the user.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl Match {
-    #[must_use]
-    pub fn value(&self) -> &str {
-        &self.value
-    }
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(untagged)]
+pub enum MatchType {
+    Single(Value),
+    Multiple(Vec<Value>),
+}
 
+impl From<Vec<Value>> for MatchType {
+    fn from(mut value: Vec<Value>) -> Self {
+        if value.len() == 1 {
+            if let Some(v) = value.pop() {
+                return MatchType::Single(v);
+            }
+        }
+        MatchType::Multiple(value)
+    }
+}
+
+impl Match {
     #[must_use]
     pub fn score(&self) -> f64 {
         self.score
@@ -249,17 +234,29 @@ impl Match {
     }
 }
 
-pub fn to_matches_sorted(result: &VectorSearchResult, limit: usize) -> Result<Vec<Match>> {
-    let output = result
-        .iter()
-        .map(|(a, b)| b.to_matches(a))
-        .collect::<Result<Vec<_>>>()?;
+pub async fn to_pretty(agg: AggregationResult) -> Result<impl Display, ArrowError> {
+    let columns: Vec<_> = agg.matches.values().flatten().collect();
+    let rb = collect_batches(agg.data).await?;
+    if let Some(frst) = columns.first() {
+        to_markdown_documents(rb.as_slice(), frst.as_str())
+    } else {
+        Err(ArrowError::SchemaError(format!(
+            "TODO: Currently we only support 1 column for this tool. We have {columns:?}"
+        )))
+    }
+}
 
-    let mut matches: Vec<_> = output.into_iter().flatten().collect();
+pub async fn to_matches_sorted(result: VectorSearchResult, limit: usize) -> Result<Vec<Match>> {
+    let mut matches: Vec<Match> = Vec::new();
+    for (a, b) in result {
+        let mut o = to_matches(&a, b).await.context(CandidateAggregationSnafu)?;
+        matches.append(&mut o);
+    }
+
     // Sort by score in descending order
     matches.sort_by(|a, b| {
         b.score
-            .partial_cmp(&a.score)
+            .partial_cmp(&a.score())
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
@@ -282,47 +279,72 @@ fn get_projection(schema: &SchemaRef, column_names: &[String]) -> Vec<usize> {
         .collect_vec()
 }
 
-async fn to_matches(tbl: &TableReference, result: &AggregationResult) -> Result<Vec<Match>> {
-    let mut matches = vec![];
+pub async fn to_matches(
+    tbl: &TableReference,
+    mut result: AggregationResult,
+) -> std::result::Result<Vec<Match>, SearchError> {
+    let mut output = vec![];
     while let Some(Ok(rb)) = result.data.next().await {
         let data = result.data_json(&rb)?;
         let primary_key = result.primary_key_json(&rb)?;
 
-        /// Collect the highlights for each column. Value of map is a vector rows, each of which contains the highlights for that row.
+        // Collect the highlights for each column. Value of map is a vector rows, each of which contains the highlights for that row.
         let matches = result
             .matches
             .iter()
             .map(|(underlying, derived_cols)| {
                 let z = result
-                    .columns_as_json(&rb, &derived_cols)?
+                    .columns_as_json(&rb, derived_cols)?
                     .into_iter()
                     .map(|x| x.into_values().collect_vec())
                     .collect::<Vec<_>>();
-                (underlying.clone(), z)
+                Ok((underlying.clone(), z))
             })
-            .collect::<Result<HashMap<String, Vec<Vec<Value>>>>>()?;
+            .collect::<std::result::Result<HashMap<String, Vec<Vec<Value>>>, SearchError>>()?;
+
+        let matches = transpose_and_convert(matches);
 
         let scores = result.score_values(&rb)?;
-        data.into_iter()
+        let mut matches = data
+            .into_iter()
             .zip(primary_key)
+            .zip(matches)
             .zip(scores)
-            .enumerate()
-            .map(|(i, ((data, pk), score))| {
-                let mut match_data = HashMap::new();
-                for (underlying, derived_cols) in &matches {
-                    let mut highlights = vec![];
-                    if let Some(c) = derived_cols.get(i) {
-                        match_data.insert(underlying.clone(), c.clone());
-                    }
-                }
-
-                matches.push(Match {
-                    value: data,
-                    score,
-                    dataset: tbl.to_string(),
-                    primary_key: pk,
-                    metadata: match_data,
-                });
-            })?;
+            .map(|(((data, primary_key), matches), score)| Match {
+                score,
+                data,
+                dataset: tbl.to_string(),
+                primary_key,
+                matches,
+                metadata: HashMap::new(),
+            })
+            .collect::<Vec<_>>();
+        output.append(&mut matches);
     }
+
+    Ok(output)
+}
+
+/// Convert a map of column name -> column values, to a per-row representation.
+fn transpose_and_convert(
+    column_format: HashMap<String, Vec<Vec<Value>>>,
+) -> Vec<HashMap<String, MatchType>> {
+    let max_rows = column_format
+        .values()
+        .map(std::vec::Vec::len)
+        .max()
+        .unwrap_or(0);
+
+    let key_count = column_format.len();
+    let mut rows: Vec<_> = (0..max_rows)
+        .map(|_| HashMap::with_capacity(key_count))
+        .collect();
+
+    for (key, vv) in column_format {
+        for (i, row_values) in vv.into_iter().enumerate() {
+            rows[i].insert(key.clone(), row_values.into());
+        }
+    }
+
+    rows
 }

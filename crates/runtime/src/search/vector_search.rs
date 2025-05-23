@@ -19,17 +19,14 @@ use std::{collections::HashMap, sync::Arc};
 use super::request::SearchRequest;
 use super::util::{get_embedding_table, user_tables_with_embeddings};
 use super::{CandidateAggregationSnafu, Error, Result};
-use crate::search::DataFusionSnafu;
 use crate::search::candidate::vector::VectorGeneration;
-use crate::search::types::VectorSearchTableResult;
 use crate::search::util::{embedding_columns_from_table, get_primary_keys_with_overrides};
 use crate::{datafusion::DataFusion, model::EmbeddingModelStore};
-use datafusion::execution::SendableRecordBatchStream;
 use datafusion::sql::TableReference;
 use datafusion::sql::sqlparser::ast::{Expr, Ident};
 use itertools::Itertools;
 use search::aggregation::CandidateAggregation;
-use search::{VectorSearchGenerationResult, VectorSearchGenerationTableResult, collect_batches};
+use search::{VectorSearchGenerationResult, VectorSearchGenerationTableResult};
 use search::{aggregation::reciprocal_rank::ReciprocalRankFusion, generation::CandidateGeneration};
 use snafu::ResultExt;
 use tokio::sync::RwLock;
@@ -219,7 +216,7 @@ impl VectorSearch {
                 }
             }).collect::<Vec<_>>()).await?.into_iter().collect();
 
-            self.aggregate_per_table(response, ReciprocalRankFusion, additional_columns.as_slice(), *limit).await
+            self.aggregate_per_table(response, ReciprocalRankFusion, *limit).await
 
         }.instrument(span.clone()).await;
 
@@ -240,7 +237,6 @@ impl VectorSearch {
         &self,
         generation_results: HashMap<TableReference, VectorSearchGenerationTableResult>,
         aggregation: impl CandidateAggregation,
-        additional_columns: &[String],
         limit: usize,
     ) -> Result<VectorSearchResult> {
         let mut result: VectorSearchResult = HashMap::with_capacity(generation_results.len());
@@ -257,12 +253,6 @@ impl VectorSearch {
                 .aggregate(data, primary_keys.clone(), limit)
                 .await
                 .context(CandidateAggregationSnafu)?;
-
-            let data = collect_batches(aggregated.data)
-                .await
-                .boxed()
-                .context(DataFusionSnafu)?;
-
             result.insert(tbl, aggregated);
         }
 
