@@ -1,4 +1,4 @@
 apiVersion: v2
-name: spiceai
-description: Spice.ai OSS
-version: 1.4.0-unstable
+name: spiceai-enterprise # Must match the final part in the ECR repository name, i.e. 709825985650.dkr.ecr.us-east-1.amazonaws.com/spice-ai/spiceai-enterprise
+description: Spice.ai Enterprise
+version: 1.3.0-helm # This needs to be suffixed with -helm and it will appear in the registry as 709825985650.dkr.ecr.us-east-1.amazonaws.com/spice-ai/spiceai-enterprise:1.3.0-helm
