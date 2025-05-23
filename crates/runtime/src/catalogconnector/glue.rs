@@ -28,13 +28,20 @@ use aws_sdk_glue::{
     operation::{get_databases::GetDatabasesError, get_tables::GetTablesError},
     types::Table,
 };
-use aws_sdk_sts::config::Credentials;
+use aws_sdk_sts::config::{Credentials, ProvideCredentials};
 use data_components::RefreshableCatalogProvider;
 use datafusion::{
     catalog::{CatalogProvider, SchemaProvider, TableProvider},
     common::Result as DFResult,
 };
 use globset::GlobSet;
+use iceberg::{
+    NamespaceIdent, TableIdent,
+    io::{FileIOBuilder, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY},
+    spec::TableMetadata,
+    table::Table as IcebergTable,
+};
+use iceberg_datafusion::IcebergTableProvider;
 use snafu::prelude::*;
 use std::fmt;
 use std::{any::Any, collections::HashMap, sync::Arc};
@@ -69,12 +76,8 @@ impl fmt::Debug for GlueCatalogProvider {
 
 struct Inner {
     _glue: Client,
-    databases: HashMap<DatabaseName, Vec<TableMetadata>>,
-}
-
-struct TableMetadata {
-    name: String,
-    ty: TableType,
+    databases: HashMap<DatabaseName, Vec<Table>>,
+    config: SdkConfig,
 }
 
 pub struct GlueSchemaProvider {
@@ -109,9 +112,71 @@ impl SchemaProvider for GlueSchemaProvider {
     }
 
     async fn table(&self, name: &str) -> DFResult<Option<Arc<dyn TableProvider>>> {
-        // TODO
-        eprintln!("todo: load table {name}");
-        Ok(None)
+        match self
+            .inner
+            .databases
+            .get(&self.schema)
+            .and_then(|tables| tables.iter().find(|t| t.name() == name))
+        {
+            Some(table) => match TableType::from(table) {
+                TableType::HiveParquet => {
+                    // TODO:
+                    eprintln!("load Hive Parquet table");
+                    Ok(None)
+                }
+                TableType::Iceberg => {
+                    let mut props = Vec::new();
+                    if let Some(provider) = self.inner.config.credentials_provider() {
+                        let creds = provider.provide_credentials().await.unwrap();
+                        props.push((S3_ACCESS_KEY_ID, creds.access_key_id().to_string()));
+                        props.push((S3_SECRET_ACCESS_KEY, creds.secret_access_key().to_string()));
+                    }
+
+                    dbg!(self.inner.config.endpoint_url());
+
+                    let file_io = FileIOBuilder::new("s3").with_props(props).build().unwrap();
+
+                    let metadata_location = get_metadata_location(&table.parameters).unwrap();
+
+                    let input_file = file_io.new_input(&metadata_location).unwrap();
+                    let metadata_content = input_file.read().await.unwrap();
+                    let metadata =
+                        serde_json::from_slice::<TableMetadata>(&metadata_content).unwrap();
+
+                    let identifier =
+                        TableIdent::new(NamespaceIdent::new(self.schema.clone()), name.to_string());
+
+                    let table = IcebergTable::builder()
+                        .file_io(file_io)
+                        .metadata(metadata)
+                        .identifier(identifier)
+                        .build()
+                        .unwrap(); // TODO handle error
+                    let table_provider = IcebergTableProvider::try_new_from_table(table)
+                        .await
+                        .unwrap(); // TODO handle error
+                    Ok(Some(Arc::new(table_provider)))
+                }
+                TableType::Unsupported => Ok(None),
+            },
+            None => {
+                // Should not be able to get here
+                tracing::error!("Glue schema name not in databases");
+                Ok(None)
+            }
+        }
+    }
+}
+
+// copy from iceberg-catalog-glue internals
+fn get_metadata_location(parameters: &Option<HashMap<String, String>>) -> Result<String> {
+    const METADATA_LOCATION: &str = "metadata_location";
+    match parameters {
+        Some(properties) => match properties.get(METADATA_LOCATION) {
+            Some(location) => Ok(location.to_string()),
+            None => panic!("No '{METADATA_LOCATION}' set on table"),
+        },
+        None => panic!("No 'parameters' set on table. Location of metadata is undefined"),
     }
 }
 
@@ -138,20 +203,11 @@ impl GlueCatalogProvider {
                 .context(GetTablesSnafu)?;
 
             let table_names = get_tables_output
-                .table_list()
-                .iter()
-                .filter_map(|t| {
-                    let ty = TableType::from(t);
-                    if ty.is_supported()
-                        && is_included(catalog.include.as_ref(), &db.name, t.name())
-                    {
-                        Some(TableMetadata {
-                            name: t.name.clone(),
-                            ty,
-                        })
-                    } else {
-                        None
-                    }
+                .table_list
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|t| {
+                    is_supported(t) && is_included(catalog.include.as_ref(), &db.name, t.name())
                 })
                 .collect::<Vec<_>>();
 
@@ -163,10 +219,35 @@ impl GlueCatalogProvider {
         let inner = Arc::new(Inner {
             _glue: glue,
             databases,
+            config,
         });
 
         Ok(Self { inner })
     }
+}
+
+fn is_supported(table: &Table) -> bool {
+    if table
+        .parameters
+        .as_ref()
+        .and_then(|params| params.get("table_type"))
+        .is_some_and(|value| value.to_lowercase() == "iceberg")
+    {
+        return true; // Iceberg is supported
+    }
+
+    if table
+        .storage_descriptor
+        .as_ref()
+        .and_then(|sd| sd.input_format.as_ref())
+        .is_some_and(|input_format| {
+            input_format == "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
+        })
+    {
+        return true; // Hive-style parquet is supported
+    }
+
+    false
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -199,10 +280,6 @@ impl TableType {
         }
 
         Self::Unsupported
-    }
-
-    fn is_supported(&self) -> bool {
-        *self != Self::Unsupported
     }
 }
 
@@ -290,6 +367,7 @@ impl CatalogProvider for GlueCatalogProvider {
 #[async_trait]
 impl RefreshableCatalogProvider for GlueCatalogProvider {
     async fn refresh(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // TODO
         Ok(())
     }
 }
