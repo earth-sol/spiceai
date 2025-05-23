@@ -14,10 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use std::sync::Arc;
+
+use evaluators::NewTaskRequest;
 use snafu::prelude::*;
 
 #[derive(Debug, Snafu)]
-pub enum Error {}
+pub enum Error {
+    #[snafu(display("A cancellation token is required"))]
+    CancellationTokenRequired,
+    #[snafu(display("A notification channel is required"))]
+    NotificationChannelRequired,
+    #[snafu(display("A submission channel is required"))]
+    SubmissionChannelRequired,
+    #[snafu(display("A channel send error occurred: {source}"))]
+    ChannelSendError {
+        source: tokio::sync::mpsc::error::SendError<Arc<NewTaskRequest>>,
+    },
+}
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
