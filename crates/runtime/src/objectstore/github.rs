@@ -140,9 +140,14 @@ impl ObjectStore for GitHubRawObjectStore {
             }
         });
 
+        let token = self.token.clone();
+        let org = self.org.clone();
+        let repo = self.repo.clone();
+        let rev = self.rev.clone();
+
         Box::pin(async_stream::stream! {
-            let gh_rest_api = GithubRestClient::new(self.token.as_deref());
-            let git_tree = match gh_rest_api.fetch_git_tree(&self.org, &self.repo, &self.rev).await {
+            let gh_rest_api = GithubRestClient::new(token.as_deref());
+            let git_tree = match gh_rest_api.fetch_git_tree(&org, &repo, &rev).await {
                 Ok(tree) => tree,
                 Err(e) => {
                     yield Err(object_store::Error::Generic {
@@ -165,7 +170,7 @@ impl ObjectStore for GitHubRawObjectStore {
                 let metadata = ObjectMeta {
                     location: path.clone(),
                     last_modified: chrono::Utc.timestamp_nanos(0),
-                    size: usize::try_from(file.size.unwrap_or(0)).unwrap_or_default(),
+                    size: u64::try_from(file.size.unwrap_or(0)).unwrap_or_default(),
                     e_tag: None,
                     version: None,
                 };

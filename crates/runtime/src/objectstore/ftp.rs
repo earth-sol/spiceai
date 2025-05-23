@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 use std::ops::Range;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_stream::stream;
@@ -94,7 +95,10 @@ impl FTPObjectStore {
         Ok(client)
     }
 
-    fn walk_path(&self, location: Option<Path>) -> BoxStream<'_, object_store::Result<ObjectMeta>> {
+    fn walk_path(
+        self: Arc<Self>,
+        location: Option<Path>,
+    ) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
         let stream = stream! {
             let mut client = self.get_async_client().await?;
             let path = location.map(|v| v.to_string());
@@ -131,6 +135,17 @@ impl FTPObjectStore {
         };
 
         Box::pin(stream)
+    }
+
+    // Helper to allow static lifetime for walk_path
+    fn clone_for_static(&self) -> FTPObjectStore {
+        FTPObjectStore {
+            user: self.user.clone(),
+            password: self.password.clone(),
+            host: self.host.clone(),
+            port: self.port.clone(),
+            timeout: self.timeout,
+        }
     }
 }
 
@@ -241,8 +256,8 @@ impl ObjectStore for FTPObjectStore {
             payload: GetResultPayload::Stream(pipe_stream(
                 client,
                 location_string,
-                start,
-                data_to_read,
+                start as usize,
+                data_to_read as usize,
             )),
             range: Range { start, end },
             attributes: Attributes::default(),
@@ -261,7 +276,9 @@ impl ObjectStore for FTPObjectStore {
     }
 
     fn list(&self, location: Option<&Path>) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
-        self.walk_path(location.map(ToOwned::to_owned))
+        // TODO: This is a workaround to allow the stream to be static
+        let arc_self = Arc::new(self.clone_for_static());
+        arc_self.walk_path(location.map(ToOwned::to_owned))
     }
 
     fn list_with_offset(

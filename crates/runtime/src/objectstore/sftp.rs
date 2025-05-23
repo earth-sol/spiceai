@@ -65,6 +65,17 @@ impl SFTPObjectStore {
         }
     }
 
+     // TODO: Helper to allow static lifetime for walk_path
+    fn clone_for_static(&self) -> SFTPObjectStore {
+        SFTPObjectStore {
+            user: self.user.clone(),
+            password: self.password.clone(),
+            host: self.host.clone(),
+            port: self.port.clone(),
+            timeout: self.timeout,
+        }
+    }
+
     fn get_client(&self) -> object_store::Result<Session> {
         let stream = match self.timeout {
             Some(timeout) => TcpStream::connect_timeout(
@@ -134,7 +145,7 @@ impl ObjectStore for SFTPObjectStore {
 
         let object_meta = ObjectMeta {
             location: location.clone(),
-            size: usize::try_from(file.stat().map_err(handle_error)?.size.ok_or_else(|| {
+            size: u64::try_from(file.stat().map_err(handle_error)?.size.ok_or_else(|| {
                 object_store::Error::Generic {
                     store: "SFTP",
                     source: "No size found for file".into(),
@@ -182,7 +193,7 @@ impl ObjectStore for SFTPObjectStore {
                 }
                 let mut n = file
                     .read(&mut buf)
-                    .map_err(handle_error)?;
+                    .map_err(handle_error)? as u64;
 
                 total += n;
                 if n == 0 {
@@ -192,7 +203,7 @@ impl ObjectStore for SFTPObjectStore {
                     n -= total - data_to_read;
                 }
 
-                yield Ok(Bytes::copy_from_slice(&buf[..n]))
+                yield Ok(Bytes::copy_from_slice(&buf[..n as usize]))
             }
         };
 
@@ -220,8 +231,11 @@ impl ObjectStore for SFTPObjectStore {
             .map(ToOwned::to_owned)
             .map_or("/".to_string(), |x| x.to_string());
 
+        // TODO: This is a workaround to allow the stream to be static
+        let that = self.clone_for_static();
+
         let stream = stream! {
-            let client = self.get_client()?;
+            let client = that.get_client()?;
 
             let mut queue = vec![location];
 
