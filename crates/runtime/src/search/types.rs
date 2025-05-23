@@ -23,12 +23,16 @@ use arrow_tools::format::to_markdown_documents;
 use datafusion::common::utils::quote_identifier;
 use datafusion::execution::SendableRecordBatchStream;
 use datafusion::sql::TableReference;
+use futures::StreamExt;
 use itertools::Itertools;
+use search::aggregation::AggregationResult;
 use search::{SEARCH_SCORE_COLUMN_NAME, SEARCH_VALUE_COLUMN_NAME};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use snafu::ResultExt;
 
 use crate::convert_string_arrow_to_iterator;
+use crate::datafusion::Table;
 use crate::datafusion::query::write_to_json_string;
 
 use super::{Error, FormattingSnafu, RecordProcessingSnafu, Result};
@@ -195,13 +199,7 @@ impl VectorSearchTableResult {
     }
 }
 
-/// The results of [`CandidateGeneration::search`]'s on a single table.
-pub struct VectorSearchGenerationTableResult {
-    pub data: Vec<SendableRecordBatchStream>,
-    pub primary_keys: Vec<String>,
-}
-
-pub type VectorSearchResult = HashMap<TableReference, VectorSearchTableResult>;
+pub type VectorSearchResult = HashMap<TableReference, AggregationResult>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -282,4 +280,49 @@ fn get_projection(schema: &SchemaRef, column_names: &[String]) -> Vec<usize> {
                 .or(schema.index_of(name.as_str()).ok())
         })
         .collect_vec()
+}
+
+async fn to_matches(tbl: &TableReference, result: &AggregationResult) -> Result<Vec<Match>> {
+    let mut matches = vec![];
+    while let Some(Ok(rb)) = result.data.next().await {
+        let data = result.data_json(&rb)?;
+        let primary_key = result.primary_key_json(&rb)?;
+
+        /// Collect the highlights for each column. Value of map is a vector rows, each of which contains the highlights for that row.
+        let matches = result
+            .matches
+            .iter()
+            .map(|(underlying, derived_cols)| {
+                let z = result
+                    .columns_as_json(&rb, &derived_cols)?
+                    .into_iter()
+                    .map(|x| x.into_values().collect_vec())
+                    .collect::<Vec<_>>();
+                (underlying.clone(), z)
+            })
+            .collect::<Result<HashMap<String, Vec<Vec<Value>>>>>()?;
+
+        let scores = result.score_values(&rb)?;
+        data.into_iter()
+            .zip(primary_key)
+            .zip(scores)
+            .enumerate()
+            .map(|(i, ((data, pk), score))| {
+                let mut match_data = HashMap::new();
+                for (underlying, derived_cols) in &matches {
+                    let mut highlights = vec![];
+                    if let Some(c) = derived_cols.get(i) {
+                        match_data.insert(underlying.clone(), c.clone());
+                    }
+                }
+
+                matches.push(Match {
+                    value: data,
+                    score,
+                    dataset: tbl.to_string(),
+                    primary_key: pk,
+                    metadata: match_data,
+                });
+            })?;
+    }
 }

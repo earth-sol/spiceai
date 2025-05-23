@@ -21,7 +21,7 @@ use super::util::{get_embedding_table, user_tables_with_embeddings};
 use super::{CandidateAggregationSnafu, Error, Result};
 use crate::search::DataFusionSnafu;
 use crate::search::candidate::vector::VectorGeneration;
-use crate::search::types::{VectorSearchGenerationTableResult, VectorSearchTableResult};
+use crate::search::types::VectorSearchTableResult;
 use crate::search::util::{embedding_columns_from_table, get_primary_keys_with_overrides};
 use crate::{datafusion::DataFusion, model::EmbeddingModelStore};
 use datafusion::execution::SendableRecordBatchStream;
@@ -29,7 +29,7 @@ use datafusion::sql::TableReference;
 use datafusion::sql::sqlparser::ast::{Expr, Ident};
 use itertools::Itertools;
 use search::aggregation::CandidateAggregation;
-use search::collect_batches;
+use search::{VectorSearchGenerationResult, VectorSearchGenerationTableResult, collect_batches};
 use search::{aggregation::reciprocal_rank::ReciprocalRankFusion, generation::CandidateGeneration};
 use snafu::ResultExt;
 use tokio::sync::RwLock;
@@ -73,7 +73,7 @@ impl VectorSearch {
         where_cond: Option<&Expr>,
         keywords: Vec<String>,
         limit: usize,
-    ) -> Result<SendableRecordBatchStream> {
+    ) -> Result<VectorSearchGenerationResult> {
         tracing::debug!("Running vector search for table {:#?}", tbl);
 
         let table_provider = self
@@ -138,7 +138,7 @@ impl VectorSearch {
             embedding_table.is_chunked(embedding_column),
         );
 
-        generator
+        let data = generator
             .search(
                 query.to_string(),
                 filter_refs.as_slice(),
@@ -146,7 +146,12 @@ impl VectorSearch {
                 limit,
             )
             .await
-            .map_err(|e| Error::CandidateGenerationError { source: e })
+            .map_err(|e| Error::CandidateGenerationError { source: e })?;
+
+        Ok(VectorSearchGenerationResult {
+            data,
+            derived_column: embedding_column.to_string(),
+        })
 
         // TODO: Filter results after the fact for filters that aren't supported by [`CandidateGeneration::supports_filter_pushdown`]. https://github.com/spiceai/spiceai/issues/5849
 
@@ -193,7 +198,7 @@ impl VectorSearch {
 
                 async move {
                     let embedding_columns = embedding_columns_from_table(&self.df, &tbl).await?;
-                    let mut results: Vec<SendableRecordBatchStream> = Vec::with_capacity(embedding_columns.len());
+                    let mut results: Vec<VectorSearchGenerationResult> = Vec::with_capacity(embedding_columns.len());
 
                     for (i, col) in embedding_columns.iter().enumerate() {
                         results.insert(i, self.individual_vector_search(
@@ -220,7 +225,7 @@ impl VectorSearch {
 
         match vector_search_result {
             Ok(result) => {
-                tracing::info!(target: "task_history", captured_output = ?result);
+                // tracing::info!(target: "task_history", captured_output = ?result);
                 Ok(result)
             }
             Err(e) => {
@@ -253,19 +258,12 @@ impl VectorSearch {
                 .await
                 .context(CandidateAggregationSnafu)?;
 
-            let data = collect_batches(aggregated)
+            let data = collect_batches(aggregated.data)
                 .await
                 .boxed()
                 .context(DataFusionSnafu)?;
 
-            result.insert(
-                tbl,
-                VectorSearchTableResult {
-                    data,
-                    primary_keys: primary_keys.clone(),
-                    additional_columns: additional_columns.to_vec(),
-                },
-            );
+            result.insert(tbl, aggregated);
         }
 
         Ok(result)
