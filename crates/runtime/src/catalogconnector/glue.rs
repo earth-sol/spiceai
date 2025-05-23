@@ -79,8 +79,8 @@ pub enum Error {
     #[snafu(display("Failed to create Iceberg table provider: {source}"))]
     CreateIcebergTableProvider { source: iceberg::Error },
 
-    #[snafu(display("No 'metadata_location' set on table"))]
-    MissingMetadataLocation,
+    #[snafu(display("No 'metadata_location' set on table '{table}'"))]
+    MissingMetadataLocation { table: String },
 
     #[snafu(display("No 'parameters' set on table"))]
     MissingParameters,
@@ -88,6 +88,7 @@ pub enum Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+/// A catalog connector for AWS Glue, providing access to database and table metadata.
 #[derive(Clone)]
 pub struct GlueCatalog {
     params: Parameters,
@@ -95,6 +96,7 @@ pub struct GlueCatalog {
 
 type DatabaseName = String;
 
+/// A catalog provider for AWS Glue, managing database schemas and tables.
 pub struct GlueCatalogProvider {
     inner: Arc<Inner>,
 }
@@ -107,11 +109,11 @@ impl fmt::Debug for GlueCatalogProvider {
 }
 
 struct Inner {
-    _glue: Client,
     databases: HashMap<DatabaseName, Vec<Table>>,
     config: SdkConfig,
 }
 
+/// A schema provider for a specific Glue database, providing table metadata.
 pub struct GlueSchemaProvider {
     schema: String,
     inner: Arc<Inner>,
@@ -152,8 +154,7 @@ impl SchemaProvider for GlueSchemaProvider {
         {
             match TableType::from(table) {
                 TableType::HiveParquet => {
-                    // TODO:
-                    eprintln!("Hive Parquet files not supported yet");
+                    tracing::warn!("Hive Parquet files not supported yet");
                     Ok(None)
                 }
                 TableType::Iceberg => {
@@ -177,7 +178,7 @@ impl SchemaProvider for GlueSchemaProvider {
                                 }))
                             })?;
 
-                    let metadata_location = get_metadata_location(table.parameters.as_ref())
+                    let metadata_location = get_metadata_location(table.parameters.as_ref(), name)
                         .map_err(|e| DataFusionError::External(Box::new(e)))?;
 
                     let input_file = file_io.new_input(&metadata_location).map_err(|e| {
@@ -235,12 +236,17 @@ impl SchemaProvider for GlueSchemaProvider {
 }
 
 // copy from iceberg-catalog-glue internals
-fn get_metadata_location(parameters: Option<&HashMap<String, String>>) -> Result<String> {
+fn get_metadata_location(
+    parameters: Option<&HashMap<String, String>>,
+    table: &str,
+) -> Result<String> {
     const METADATA_LOCATION: &str = "metadata_location";
     match parameters {
         Some(properties) => match properties.get(METADATA_LOCATION) {
             Some(location) => Ok(location.to_string()),
-            None => Err(Error::MissingMetadataLocation),
+            None => Err(Error::MissingMetadataLocation {
+                table: table.to_string(),
+            }),
         },
         None => Err(Error::MissingParameters),
     }
@@ -285,11 +291,7 @@ impl GlueCatalogProvider {
             }
         }
 
-        let inner = Arc::new(Inner {
-            _glue: glue,
-            databases,
-            config,
-        });
+        let inner = Arc::new(Inner { databases, config });
 
         Ok(Self { inner })
     }
@@ -455,7 +457,11 @@ async fn load_config(params: &Parameters) -> SdkConfig {
         .get("glue_aws_region")
         .expose()
         .ok()
-        .unwrap_or("us-east-1")
+        .unwrap_or_else(|| {
+            let region = "us-east-1";
+            tracing::warn!("no AWS region specified, defaulting to {region}");
+            region
+        })
         .to_string();
 
     let access_key_id = params
@@ -499,5 +505,18 @@ async fn load_config(params: &Parameters) -> SdkConfig {
                 .load()
                 .await
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[tokio::test]
+    async fn test_get_metadata_location_missing() {
+        let params: Option<&HashMap<String, String>> = None;
+        let result = get_metadata_location(params, "test_table");
+        assert!(matches!(result, Err(Error::MissingParameters)));
     }
 }
