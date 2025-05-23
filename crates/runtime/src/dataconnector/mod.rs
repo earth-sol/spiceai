@@ -17,6 +17,7 @@ limitations under the License.
 use crate::Runtime;
 use crate::accelerated_table::AcceleratedTable;
 use crate::catalogconnector::CATALOG_CONNECTOR_FACTORY_REGISTRY;
+use crate::component::ComponentInitialization;
 use crate::component::catalog::Catalog;
 use crate::component::dataset::Dataset;
 use crate::component::dataset::acceleration::RefreshMode;
@@ -44,6 +45,7 @@ use datafusion::execution::SendableRecordBatchStream;
 use datafusion::execution::context::SessionContext;
 use datafusion::logical_expr::LogicalPlan;
 use datafusion::logical_expr::{Expr, LogicalPlanBuilder};
+use datafusion::prelude::ident;
 use datafusion::sql::TableReference;
 use datafusion::sql::unparser::Unparser;
 use datafusion_table_providers::UnsupportedTypeAction;
@@ -500,9 +502,9 @@ pub trait DataConnector: Debug + Send + Sync + 'static {
         None
     }
 
-    /// Returns whether the data connector load should be deferred.
-    fn deferred_load(&self) -> bool {
-        false
+    /// Returns whether the data connector should be initialized on startup or on trigger.
+    fn initialization(&self) -> ComponentInitialization {
+        ComponentInitialization::OnStartup
     }
 }
 
@@ -523,8 +525,16 @@ pub async fn get_data(
     let mut df = match sql {
         None => {
             let table_source = Arc::new(DefaultTableSource::new(Arc::clone(&table_provider)));
+
+            // Get the columns so we can add projection to the plan. This
+            // converts the plan to federated where the correct dialect is
+            // applied
+            let schema = table_provider.schema();
+            let columns: Vec<Expr> = schema.fields().iter().map(|f| ident(f.name())).collect();
+
             let logical_plan = LogicalPlanBuilder::scan(table_name.clone(), table_source, None)
                 .map_err(find_datafusion_root)?
+                .project(columns)?
                 .build()
                 .map_err(find_datafusion_root)?;
 

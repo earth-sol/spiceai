@@ -45,7 +45,7 @@ exclude = [".github/"]
 homepage = "https://spice.ai"
 license = "Apache-2.0"
 repository = "https://github.com/spiceai/spiceai"
-rust-version = "1.85"
+rust-version = "1.86"
 version = "1.4.0-unstable"
 
 [workspace.dependencies]
@@ -104,6 +104,7 @@ imap = { git = "https://github.com/jonhoo/rust-imap", rev = "6fe22ed11a1ccffe179
 indexmap = "2"
 insta = { version = "1.42.0", features = ["filters"] }
 itertools = "0.14"
+logos = "0.15.0"
 mailparse = "0.15.0"
 moka = { version = "0.12", features = ["future"] }
 mysql_async = { version = "0.35.1", features = ["native-tls-tls", "chrono"] }
