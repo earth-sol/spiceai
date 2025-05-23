@@ -132,8 +132,6 @@ impl SchemaProvider for GlueSchemaProvider {
                         props.push((S3_SECRET_ACCESS_KEY, creds.secret_access_key().to_string()));
                     }
 
-                    dbg!(self.inner.config.endpoint_url());
-
                     let file_io = FileIOBuilder::new("s3").with_props(props).build().unwrap();
 
                     let metadata_location = get_metadata_location(&table.parameters).unwrap();
@@ -193,8 +191,11 @@ impl GlueCatalogProvider {
 
         let mut databases = HashMap::new();
         for db in get_databases_output.database_list {
-            // TODO: would be nice to skip this network call if we can tell that
-            // the Glue database is not in the include
+            if !schema_might_match(&db.name, &catalog.orig_include) {
+                tracing::debug!("skipping database {}", &db.name);
+                continue;
+            }
+
             let get_tables_output = glue
                 .get_tables()
                 .database_name(&db.name)
@@ -224,6 +225,15 @@ impl GlueCatalogProvider {
 
         Ok(Self { inner })
     }
+}
+
+fn schema_might_match(schema: &str, patterns: &[String]) -> bool {
+    patterns.iter().any(|pattern| {
+        pattern == schema
+            || pattern.starts_with(&format!("{schema}."))
+            || pattern.starts_with("*.")
+            || pattern == "*.*"
+    })
 }
 
 fn is_supported(table: &Table) -> bool {
@@ -285,10 +295,9 @@ impl TableType {
 
 fn is_included(include: Option<&GlobSet>, schema: &str, table: &str) -> bool {
     let schema_with_table = format!("{schema}.{table}");
-    tracing::debug!("Checking if table {} should be included", schema_with_table);
     if let Some(include) = include {
         if !include.is_match(&schema_with_table) {
-            tracing::debug!("Table {} is not included", schema_with_table);
+            tracing::debug!("skipping table {schema_with_table}");
             return false;
         }
     }
