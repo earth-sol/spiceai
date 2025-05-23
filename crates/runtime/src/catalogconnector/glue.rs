@@ -33,6 +33,7 @@ use data_components::RefreshableCatalogProvider;
 use datafusion::{
     catalog::{CatalogProvider, SchemaProvider, TableProvider},
     common::Result as DFResult,
+    error::DataFusionError,
 };
 use globset::GlobSet;
 use iceberg::{
@@ -48,10 +49,41 @@ use std::{any::Any, collections::HashMap, sync::Arc};
 
 #[derive(Debug, Snafu)]
 pub enum Error {
-    #[snafu(display("Failed to get Glue databases: {}", source))]
+    #[snafu(display("Failed to get Glue databases: {source}"))]
     GetDatabases { source: SdkError<GetDatabasesError> },
-    #[snafu(display("Failed to get Glue tables: {}", source))]
+
+    #[snafu(display("Failed to get Glue tables: {source}"))]
     GetTables { source: SdkError<GetTablesError> },
+
+    #[snafu(display("Failed to build FileIO: {source}"))]
+    BuildFileIO { source: iceberg::Error },
+
+    #[snafu(display("Failed to create file input for metadata location '{location}': {source}",))]
+    CreateFileInput {
+        source: iceberg::Error,
+        location: String,
+    },
+
+    #[snafu(display("Failed to read metadata from '{location}': {source}"))]
+    ReadMetadata {
+        source: iceberg::Error,
+        location: String,
+    },
+
+    #[snafu(display("Failed to deserialize metadata: {source}"))]
+    DeserializeMetadata { source: serde_json::Error },
+
+    #[snafu(display("Failed to build Iceberg table: {source}"))]
+    BuildIcebergTable { source: iceberg::Error },
+
+    #[snafu(display("Failed to create Iceberg table provider: {source}"))]
+    CreateIcebergTableProvider { source: iceberg::Error },
+
+    #[snafu(display("No 'metadata_location' set on table"))]
+    MissingMetadataLocation,
+
+    #[snafu(display("No 'parameters' set on table"))]
+    MissingParameters,
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -112,34 +144,62 @@ impl SchemaProvider for GlueSchemaProvider {
     }
 
     async fn table(&self, name: &str) -> DFResult<Option<Arc<dyn TableProvider>>> {
-        match self
+        if let Some(table) = self
             .inner
             .databases
             .get(&self.schema)
             .and_then(|tables| tables.iter().find(|t| t.name() == name))
         {
-            Some(table) => match TableType::from(table) {
+            match TableType::from(table) {
                 TableType::HiveParquet => {
                     // TODO:
-                    eprintln!("load Hive Parquet table");
+                    eprintln!("Hive Parquet files not supported yet");
                     Ok(None)
                 }
                 TableType::Iceberg => {
                     let mut props = Vec::new();
                     if let Some(provider) = self.inner.config.credentials_provider() {
-                        let creds = provider.provide_credentials().await.unwrap();
+                        let creds = provider
+                            .provide_credentials()
+                            .await
+                            .map_err(|e| DataFusionError::External(Box::new(e)))?;
                         props.push((S3_ACCESS_KEY_ID, creds.access_key_id().to_string()));
                         props.push((S3_SECRET_ACCESS_KEY, creds.secret_access_key().to_string()));
                     }
 
-                    let file_io = FileIOBuilder::new("s3").with_props(props).build().unwrap();
+                    let file_io =
+                        FileIOBuilder::new("s3")
+                            .with_props(props)
+                            .build()
+                            .map_err(|e| {
+                                DataFusionError::External(Box::new(Error::BuildFileIO {
+                                    source: e,
+                                }))
+                            })?;
 
-                    let metadata_location = get_metadata_location(&table.parameters).unwrap();
+                    let metadata_location = get_metadata_location(table.parameters.as_ref())
+                        .map_err(|e| DataFusionError::External(Box::new(e)))?;
 
-                    let input_file = file_io.new_input(&metadata_location).unwrap();
-                    let metadata_content = input_file.read().await.unwrap();
-                    let metadata =
-                        serde_json::from_slice::<TableMetadata>(&metadata_content).unwrap();
+                    let input_file = file_io.new_input(&metadata_location).map_err(|e| {
+                        DataFusionError::External(Box::new(Error::CreateFileInput {
+                            source: e,
+                            location: metadata_location.clone(),
+                        }))
+                    })?;
+
+                    let metadata_content = input_file.read().await.map_err(|e| {
+                        DataFusionError::External(Box::new(Error::ReadMetadata {
+                            source: e,
+                            location: metadata_location.clone(),
+                        }))
+                    })?;
+
+                    let metadata = serde_json::from_slice::<TableMetadata>(&metadata_content)
+                        .map_err(|e| {
+                            DataFusionError::External(Box::new(Error::DeserializeMetadata {
+                                source: e,
+                            }))
+                        })?;
 
                     let identifier =
                         TableIdent::new(NamespaceIdent::new(self.schema.clone()), name.to_string());
@@ -149,32 +209,40 @@ impl SchemaProvider for GlueSchemaProvider {
                         .metadata(metadata)
                         .identifier(identifier)
                         .build()
-                        .unwrap(); // TODO handle error
+                        .map_err(|e| {
+                            DataFusionError::External(Box::new(Error::BuildIcebergTable {
+                                source: e,
+                            }))
+                        })?;
+
                     let table_provider = IcebergTableProvider::try_new_from_table(table)
                         .await
-                        .unwrap(); // TODO handle error
+                        .map_err(|e| {
+                            DataFusionError::External(Box::new(Error::CreateIcebergTableProvider {
+                                source: e,
+                            }))
+                        })?;
+
                     Ok(Some(Arc::new(table_provider)))
                 }
                 TableType::Unsupported => Ok(None),
-            },
-            None => {
-                // Should not be able to get here
-                tracing::error!("Glue schema name not in databases");
-                Ok(None)
             }
+        } else {
+            tracing::error!("Glue schema name not in databases");
+            Ok(None)
         }
     }
 }
 
 // copy from iceberg-catalog-glue internals
-fn get_metadata_location(parameters: &Option<HashMap<String, String>>) -> Result<String> {
+fn get_metadata_location(parameters: Option<&HashMap<String, String>>) -> Result<String> {
     const METADATA_LOCATION: &str = "metadata_location";
     match parameters {
         Some(properties) => match properties.get(METADATA_LOCATION) {
             Some(location) => Ok(location.to_string()),
-            None => panic!("No '{METADATA_LOCATION}' set on table"),
+            None => Err(Error::MissingMetadataLocation),
         },
-        None => panic!("No 'parameters' set on table. Location of metadata is undefined"),
+        None => Err(Error::MissingParameters),
     }
 }
 
