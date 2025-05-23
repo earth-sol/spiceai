@@ -17,8 +17,8 @@ limitations under the License.
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef, TimeUnit};
 use async_trait::async_trait;
 use chrono::TimeZone;
-use datafusion::catalog::memory::DataSourceExec;
 use datafusion::catalog::Session;
+use datafusion::catalog::memory::DataSourceExec;
 use datafusion::common::DFSchema;
 use datafusion::config::TableParquetOptions;
 use datafusion::datasource::listing::PartitionedFile;
@@ -26,7 +26,7 @@ use datafusion::datasource::physical_plan::parquet::{
     DefaultParquetFileReaderFactory, ParquetAccessPlan, RowGroupAccess,
 };
 use datafusion::datasource::physical_plan::{
-    FileGroup, FileScanConfigBuilder, ParquetFileReaderFactory, ParquetSource
+    FileGroup, FileScanConfigBuilder, ParquetFileReaderFactory, ParquetSource,
 };
 use datafusion::datasource::{TableProvider, TableType};
 use datafusion::error::DataFusionError;
@@ -224,7 +224,7 @@ impl DeltaTable {
         .with_table_partition_cols(partition_cols.to_vec())
         .with_file_group(FileGroup::new(partitioned_files.to_vec()));
 
-        DataSourceExec::from_data_source(file_scan_config_builder.build())      
+        DataSourceExec::from_data_source(file_scan_config_builder.build())
     }
 }
 

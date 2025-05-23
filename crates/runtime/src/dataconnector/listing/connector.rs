@@ -988,7 +988,10 @@ mod tests {
 
     #[async_trait]
     impl ObjectStore for TestObjectStore {
-        fn list(&self, _prefix: Option<&Path>) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
+        fn list(
+            &self,
+            _prefix: Option<&Path>,
+        ) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
             stream::iter(self.meta.clone().into_iter().map(Ok)).boxed()
         }
 
