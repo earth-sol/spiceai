@@ -215,7 +215,7 @@ impl ObjectStore for SFTPObjectStore {
         unimplemented!()
     }
 
-    fn list(&self, location: Option<&Path>) -> BoxStream<'_, object_store::Result<ObjectMeta>> {
+    fn list(&self, location: Option<&Path>) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
         let location = location
             .map(ToOwned::to_owned)
             .map_or("/".to_string(), |x| x.to_string());
@@ -242,7 +242,7 @@ impl ObjectStore for SFTPObjectStore {
                             store: "SFTP",
                             source: "Failed to convert path".into(),
                         })?),
-                        size: usize::try_from(entry.1.size.ok_or_else(|| object_store::Error::Generic {
+                        size: u64::try_from(entry.1.size.ok_or_else(|| object_store::Error::Generic {
                             store: "SFTP",
                             source: "No size found for file".into(),
                         })?).map_err(handle_error)?,
@@ -269,7 +269,7 @@ impl ObjectStore for SFTPObjectStore {
         &self,
         _: Option<&Path>,
         _: &Path,
-    ) -> BoxStream<'_, object_store::Result<ObjectMeta>> {
+    ) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
         unimplemented!()
     }
 

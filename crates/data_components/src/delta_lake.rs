@@ -25,7 +25,7 @@ use datafusion::datasource::physical_plan::parquet::{
     DefaultParquetFileReaderFactory, ParquetAccessPlan, RowGroupAccess,
 };
 use datafusion::datasource::physical_plan::{
-    FileScanConfig, ParquetFileReaderFactory, ParquetSource,
+    FileGroup, FileScanConfig, ParquetFileReaderFactory, ParquetSource
 };
 use datafusion::datasource::{TableProvider, TableType};
 use datafusion::error::DataFusionError;
@@ -220,7 +220,7 @@ impl DeltaTable {
         .with_limit(limit)
         .with_projection(new_projections)
         .with_table_partition_cols(partition_cols.to_vec())
-        .with_file_group(partitioned_files.to_vec());
+        .with_file_group(FileGroup::new(partitioned_files.to_vec()));
 
         file_scan_config.build()
     }
@@ -621,7 +621,7 @@ fn handle_scan_file(
     let partitioned_file_object_meta = ObjectMeta {
         location: partitioned_file_path,
         last_modified: chrono::Utc.timestamp_nanos(0),
-        size: size as usize,
+        size: size as u64,
         e_tag: None,
         version: None,
     };
@@ -703,7 +703,7 @@ async fn get_parquet_access_plan(
         &ExecutionPlanMetricsSet::new(),
     )?;
 
-    let parquet_metadata = parquet_file_reader.get_metadata().await.map_err(|e| {
+    let parquet_metadata = parquet_file_reader.get_metadata(None).await.map_err(|e| {
         datafusion::error::DataFusionError::Execution(format!(
             "Error getting parquet metadata: {e}"
         ))
@@ -861,7 +861,19 @@ fn to_delta_kernel_binary_op(op: Operator) -> Option<DeltaBinaryOperator> {
         | Operator::StringConcat
         | Operator::AtArrow
         | Operator::ArrowAt
-        | Operator::Modulo => None,
+        | Operator::Arrow
+        | Operator::LongArrow
+        | Operator::HashArrow
+        | Operator::Modulo
+        | Operator::HashLongArrow
+        | Operator::AtAt
+        | Operator::IntegerDivide
+        | Operator::HashMinus
+        | Operator::AtQuestion
+        | Operator::Question
+        | Operator::QuestionAnd
+        | Operator::QuestionPipe
+         => None,
     }
 }
 

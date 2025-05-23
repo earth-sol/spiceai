@@ -127,7 +127,7 @@ impl ObjectStore for GitHubRawObjectStore {
     fn list(
         &self,
         prefix: Option<&Path>,
-    ) -> BoxStream<'_, Result<ObjectMeta, object_store::Error>> {
+    ) -> BoxStream<'static, Result<ObjectMeta, object_store::Error>> {
         // Github raw content endpoint does not support listing files in a directory, so we need to use the GitHub API
         // to get the list of files and then create the ObjectMeta objects from the response.
 

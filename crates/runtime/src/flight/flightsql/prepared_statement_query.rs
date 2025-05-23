@@ -18,10 +18,7 @@ use std::{borrow::Cow, ops::ControlFlow};
 
 use arrow::compute::concat_batches;
 use arrow_flight::{
-    FlightData, FlightDescriptor, FlightEndpoint, FlightInfo, PutResult, Ticket,
-    decode::{DecodedPayload, FlightDataDecoder},
-    flight_service_server::FlightService,
-    sql::{self, CommandPreparedStatementQuery, DoPutPreparedStatementResult, ProstMessageExt},
+    decode::{DecodedPayload, FlightDataDecoder}, error::FlightError, flight_service_server::FlightService, sql::{self, CommandPreparedStatementQuery, DoPutPreparedStatementResult, ProstMessageExt}, FlightData, FlightDescriptor, FlightEndpoint, FlightInfo, PutResult, Ticket
 };
 use arrow_ipc::{reader::StreamReader, writer::StreamWriter};
 use arrow_schema::SchemaRef;
@@ -154,7 +151,7 @@ pub(crate) async fn do_put_query(
     streaming_flight: Peekable<Streaming<FlightData>>,
 ) -> Result<Response<<Service as FlightService>::DoPutStream>, Status> {
     let streaming_flight = streaming_flight
-        .map(|flight_data| flight_data.map_err(arrow_flight::error::FlightError::Tonic));
+        .map(|flight_data| flight_data.map_err(|status| FlightError::Tonic(Box::new(status))));
 
     let mut decoder = FlightDataDecoder::new(streaming_flight);
     let schema = decode_schema(&mut decoder).await?;
@@ -291,11 +288,10 @@ impl VisitorMut for ConvertJdbcPlaceholdersVisitor {
     type Break = ();
 
     fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<Self::Break> {
-        if let Expr::Value(value) = expr {
-            if let Value::Placeholder(placeholder) = value {
-                *value = Value::Placeholder(
-                    placeholder.replace('?', &format!("${}", self.next_placeholder)),
-                );
+        if let Expr::Value(value_with_span) = expr {
+            if let Value::Placeholder(ref mut placeholder) = value_with_span.value {
+                let new_placeholder = placeholder.replace('?', &format!("${}", self.next_placeholder));
+                value_with_span.value = Value::Placeholder(new_placeholder);
                 self.next_placeholder += 1;
             }
         }

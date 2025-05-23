@@ -36,7 +36,6 @@ use datafusion::{
     optimizer::{
         AnalyzerRule,
         analyzer::{
-            expand_wildcard_rule::ExpandWildcardRule, inline_table_scan::InlineTableScan,
             resolve_grouping_function::ResolveGroupingFunction, type_coercion::TypeCoercion,
         },
     },
@@ -266,8 +265,9 @@ impl DataFusionBuilder {
 #[must_use]
 pub fn get_analyzer_rules() -> Vec<Arc<dyn AnalyzerRule + Send + Sync>> {
     vec![
-        Arc::new(InlineTableScan::new()),
-        Arc::new(ExpandWildcardRule::new()),
+        // TODO
+        // Arc::new(InlineTableScan::new()),
+        // Arc::new(ExpandWildcardRule::new()),
         Arc::new(FederationAnalyzerRule::new()),
         // The rest of these rules are run after the federation analyzer since they only affect internal DataFusion execution.
         Arc::new(ResolveGroupingFunction::new()),

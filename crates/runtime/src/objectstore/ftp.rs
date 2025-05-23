@@ -115,7 +115,7 @@ impl FTPObjectStore {
                             location: Path::from(item.clone()),
                             size: client.size(&item).await.map_err(|e| {
                                 object_store::Error::NotFound { path: item.clone(), source: e.into() }
-                            })?,
+                            })? as u64,
                             last_modified: client.mdtm(&item).await.map_err(|e| {
                                 object_store::Error::NotFound { path: item.clone(), source: e.into() }
                             })?.and_utc(),
@@ -213,7 +213,7 @@ impl ObjectStore for FTPObjectStore {
                     path: location_string.clone(),
                     source: e.into(),
                 }
-            })?,
+            })? as u64,
             last_modified: client
                 .mdtm(&location_string)
                 .await
@@ -260,7 +260,7 @@ impl ObjectStore for FTPObjectStore {
         unimplemented!()
     }
 
-    fn list(&self, location: Option<&Path>) -> BoxStream<'_, object_store::Result<ObjectMeta>> {
+    fn list(&self, location: Option<&Path>) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
         self.walk_path(location.map(ToOwned::to_owned))
     }
 
@@ -268,7 +268,7 @@ impl ObjectStore for FTPObjectStore {
         &self,
         _: Option<&Path>,
         _: &Path,
-    ) -> BoxStream<'_, object_store::Result<ObjectMeta>> {
+    ) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
         unimplemented!()
     }
 

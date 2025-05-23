@@ -16,11 +16,10 @@ limitations under the License.
 
 use arrow::datatypes::DataType;
 use datafusion::{
-    common::{Result as DataFusionResult, plan_err},
+    common::{plan_err, Result as DataFusionResult},
     functions_aggregate::min_max::{MaxAccumulator, MinAccumulator},
     logical_expr::{
-        Accumulator, ColumnarValue, ScalarUDFImpl, Signature, Volatility,
-        type_coercion::functions::data_types,
+        type_coercion::functions::data_types, Accumulator, ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility
     },
     scalar::ScalarValue,
 };
@@ -108,7 +107,7 @@ impl ScalarUDFImpl for Greatest {
         }
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> DataFusionResult<ColumnarValue> {
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DataFusionResult<ColumnarValue> {
         accumulator_min_max(self, args, |data_type: &DataType| {
             MaxAccumulator::try_new(data_type).map(|x| Box::new(x) as Box<dyn Accumulator>)
         })
@@ -170,7 +169,7 @@ impl ScalarUDFImpl for Least {
         }
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> DataFusionResult<ColumnarValue> {
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DataFusionResult<ColumnarValue> {
         accumulator_min_max(self, args, |data_type: &DataType| {
             MinAccumulator::try_new(data_type).map(|x| Box::new(x) as Box<dyn Accumulator>)
         })
@@ -179,23 +178,23 @@ impl ScalarUDFImpl for Least {
 
 fn accumulator_min_max(
     udf: &dyn ScalarUDFImpl,
-    args: &[ColumnarValue],
+    args: ScalarFunctionArgs,
     create_accumulator: fn(
         &DataType,
     ) -> Result<Box<dyn Accumulator>, datafusion::error::DataFusionError>,
 ) -> Result<ColumnarValue, datafusion::error::DataFusionError> {
-    let return_type = udf
-        .return_type(
-            &args
-                .iter()
-                .map(ColumnarValue::data_type)
-                .collect::<Vec<_>>(),
-        )
-        .map_err(find_datafusion_root)?;
+    // let return_type = udf
+    //     .return_type(
+    //         &args.args
+    //             .iter()
+    //             .map(ColumnarValue::data_type)
+    //             .collect::<Vec<_>>(),
+    //     )
+    //     .map_err(find_datafusion_root)?;
 
-    let columns = args
+    let columns = args.args
         .iter()
-        .map(|arg| arg.cast_to(&return_type, None))
+        .map(|arg| arg.cast_to(&args.return_type, None))
         .collect::<Result<Vec<_>, _>>()
         .map_err(find_datafusion_root)?;
 
@@ -204,7 +203,7 @@ fn accumulator_min_max(
 
     let mut values = vec![];
     for i in 0..(size) {
-        let mut acc = create_accumulator(&return_type).map_err(find_datafusion_root)?;
+        let mut acc = create_accumulator(&args.return_type).map_err(find_datafusion_root)?;
         let slices = arrays.iter().map(|arr| arr.slice(i, 1)).collect::<Vec<_>>();
         for slice in slices {
             acc.update_batch(&[slice]).map_err(find_datafusion_root)?;
