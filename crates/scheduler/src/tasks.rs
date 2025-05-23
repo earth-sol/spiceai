@@ -14,10 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use async_trait::async_trait;
 use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 use crate::Result;
 
@@ -42,26 +46,29 @@ pub struct TaskRequest {
     pub at: Instant,
     pub delivery: TaskDelivery,
     pub created_at: Instant,
+    pub evaluator_id: Arc<Uuid>, // the evaluator that created this task
 }
 
 impl TaskRequest {
     #[must_use]
-    pub fn now() -> Self {
+    pub fn now(evaluator_id: Arc<Uuid>) -> Self {
         let now = Instant::now();
         Self {
             at: now,
             delivery: TaskDelivery::Queued,
             created_at: now,
+            evaluator_id,
         }
     }
 
     #[must_use]
-    pub fn from_secs(secs: u64) -> Self {
+    pub fn from_secs(evaluator_id: Arc<Uuid>, secs: u64) -> Self {
         let now = Instant::now();
         Self {
             at: now + Duration::from_secs(secs),
             delivery: TaskDelivery::Queued,
             created_at: now,
+            evaluator_id,
         }
     }
 
@@ -88,13 +95,22 @@ impl TaskRequest {
 
 #[derive(Debug)]
 pub(crate) struct RunningTask {
+    pub(crate) evaluator_id: Arc<Uuid>,
     pub(crate) handle: JoinHandle<Result<()>>,
 }
 
 impl RunningTask {
     #[must_use]
-    pub(crate) fn new(handle: JoinHandle<Result<()>>) -> Self {
-        Self { handle }
+    pub(crate) fn new(evaluator_id: Arc<Uuid>, handle: JoinHandle<Result<()>>) -> Self {
+        Self {
+            evaluator_id,
+            handle,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn is_finished(&self) -> bool {
+        self.handle.is_finished()
     }
 }
 
@@ -103,4 +119,11 @@ impl RunningTask {
     pub fn consume_for_handle(self) -> JoinHandle<Result<()>> {
         self.handle
     }
+}
+
+#[derive(PartialEq)]
+pub(crate) enum TaskStatus {
+    NotStarted,
+    Running,
+    Finished(Arc<Uuid>),
 }

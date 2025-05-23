@@ -17,16 +17,18 @@ limitations under the License.
 use std::hash::Hash;
 use std::sync::Arc;
 
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 use uuid::Uuid;
 
 use crate::{
-    RunningTask, evaluators::ScheduleEvaluator, precondition::Precondition, tasks::ScheduledTask,
+    evaluators::Evaluator,
+    precondition::Precondition,
+    tasks::{RunningTask, ScheduledTask, TaskRequest},
 };
 
 pub struct Schedule {
     id: Arc<str>,
-    evaluators: Vec<Arc<RwLock<dyn ScheduleEvaluator>>>,
+    evaluators: Vec<Arc<RwLock<dyn Evaluator>>>,
     components: Vec<Arc<dyn ScheduledTask>>,
     preconditions: Vec<Arc<dyn Precondition>>,
 }
@@ -67,7 +69,7 @@ impl Schedule {
     }
 
     #[must_use]
-    pub fn add_evaluator(mut self, evaluator: Arc<RwLock<dyn ScheduleEvaluator>>) -> Self {
+    pub fn add_evaluator(mut self, evaluator: Arc<RwLock<dyn Evaluator>>) -> Self {
         self.evaluators.push(evaluator);
         self
     }
@@ -87,7 +89,11 @@ impl Schedule {
     /// Executes the components defined by this schedule.
     ///
     /// If any precondition is not met, the schedule will not execute.
-    pub(crate) async fn execute(self: &Arc<Self>) -> Option<RunningTask> {
+    pub(crate) async fn execute(
+        self: &Arc<Self>,
+        task: &Arc<TaskRequest>,
+        notifier: Arc<Notify>,
+    ) -> Option<RunningTask> {
         for condition in &self.preconditions {
             if !condition.check().await {
                 tracing::debug!(
@@ -112,14 +118,16 @@ impl Schedule {
                 // Log or handle the errors
             }
 
+            notifier.notify_one();
+
             Ok(())
         });
 
-        Some(RunningTask::new(handle))
+        Some(RunningTask::new(Arc::clone(&task.evaluator_id), handle))
     }
 
     #[must_use]
-    pub(crate) fn evaluators(&self) -> &Vec<Arc<RwLock<dyn ScheduleEvaluator>>> {
+    pub(crate) fn evaluators(&self) -> &Vec<Arc<RwLock<dyn Evaluator>>> {
         &self.evaluators
     }
 }

@@ -14,71 +14,119 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::any::Any;
 use std::sync::Arc;
+use std::time::Instant;
 
-use crate::TaskRequest;
+use uuid::Uuid;
 
-pub trait ScheduleEvaluator: Iterator<Item = Arc<TaskRequest>> + Any + Send + Sync {
-    /// Whether this schedule evaluator can deliver a task request with a delivery policy of ``TaskDelivery::Immediate``.
-    /// Evaluators with this property set to true are polled while a task is running, to determine if the task should be interrupted/cancelled.
-    fn can_deliver_immediate_task(&self) -> bool {
-        false
+use crate::tasks::TaskRequest;
+
+#[derive(PartialEq)]
+pub enum EvaluatorType {
+    /// The evaluator returns the next request in the schedule, only if the current time is greater than the last request.
+    /// E.g. `.next()` -> 1am, at 12:30am `.next()` -> 1am, at 1:00 am `.next()` -> 2am.
+    Sequential,
+    /// The evaluator returns requests based on a fixed interval, anchored from a specific time.
+    /// E.g. `.next()` -> 1am, at 12:30am `.next()` -> 1:30am, at 1:00 am `.next()` -> 2:00am.
+    /// Resetting a timed evaluator should reset the anchor time to the current time.
+    Timed,
+    /// The evaluator returns interrupt requests.
+    /// Interrupts have the highest priority and should be delivered immediately.
+    /// The scheduler should abort any in-progress evaluation wait timers and deliver the interrupt request.
+    Interrupt,
+}
+
+pub trait Evaluator: Send + Sync {
+    /// Returns a unique identifier for this evaluator.
+    fn id(&self) -> Arc<Uuid>;
+    /// Returns the type of this evaluator.
+    fn evaluator_type(&self) -> EvaluatorType;
+    /// Returns the next task request for this evaluator.
+    fn evaluate(&mut self) -> Option<Arc<TaskRequest>>;
+    /// Clears the internal state of this evaluator to reset it to its initial state.
+    fn reset(&mut self);
+}
+
+pub struct IntervalEvaluator {
+    id: Arc<Uuid>,
+    interval: u64,
+    last_evaluated: Option<Instant>,
+}
+
+impl IntervalEvaluator {
+    #[must_use]
+    pub fn new(interval: u64) -> Self {
+        Self {
+            id: Arc::new(Uuid::new_v4()),
+            interval,
+            last_evaluated: None,
+        }
     }
 }
 
-#[allow(dead_code)]
-pub struct CronSchedule(Arc<str>);
+impl Evaluator for IntervalEvaluator {
+    fn evaluator_type(&self) -> EvaluatorType {
+        EvaluatorType::Timed
+    }
 
-impl Iterator for CronSchedule {
-    type Item = Arc<TaskRequest>;
+    fn id(&self) -> Arc<Uuid> {
+        Arc::clone(&self.id)
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        // TODO: implement cron schedule evaluation
-        Some(Arc::new(TaskRequest::now()))
+    fn evaluate(&mut self) -> Option<Arc<TaskRequest>> {
+        let now = Instant::now();
+        if let Some(last_evaluated) = self.last_evaluated {
+            if now.duration_since(last_evaluated).as_secs() < self.interval {
+                return None;
+            }
+        }
+
+        self.last_evaluated = Some(now);
+        Some(Arc::new(TaskRequest::from_secs(
+            Arc::clone(&self.id),
+            self.interval,
+        )))
+    }
+
+    fn reset(&mut self) {
+        self.last_evaluated = None;
     }
 }
-impl ScheduleEvaluator for CronSchedule {}
-
-pub struct IntervalSchedule(u64);
-
-impl Iterator for IntervalSchedule {
-    type Item = Arc<TaskRequest>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(Arc::new(TaskRequest::from_secs(self.0)))
-    }
-}
-
-impl ScheduleEvaluator for IntervalSchedule {}
 
 pub struct ManualInterrupt {
+    id: Arc<Uuid>,
     rx: tokio::sync::mpsc::Receiver<Option<Arc<TaskRequest>>>,
 }
 
 impl ManualInterrupt {
     #[must_use]
     pub fn new(rx: tokio::sync::mpsc::Receiver<Option<Arc<TaskRequest>>>) -> Self {
-        Self { rx }
+        Self {
+            id: Arc::new(Uuid::new_v4()),
+            rx,
+        }
     }
 }
 
-impl Iterator for ManualInterrupt {
-    type Item = Arc<TaskRequest>;
+impl Evaluator for ManualInterrupt {
+    fn evaluator_type(&self) -> EvaluatorType {
+        EvaluatorType::Interrupt
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn id(&self) -> Arc<Uuid> {
+        Arc::clone(&self.id)
+    }
+
+    fn evaluate(&mut self) -> Option<Arc<TaskRequest>> {
         match self.rx.try_recv() {
             Ok(Some(instant)) => Some(instant),
-            Ok(None) => Some(Arc::new(TaskRequest::now().immediate())),
+            Ok(None) => Some(Arc::new(TaskRequest::now(Arc::clone(&self.id)))),
             Err(
                 tokio::sync::mpsc::error::TryRecvError::Empty
                 | tokio::sync::mpsc::error::TryRecvError::Disconnected,
             ) => None, // no interrupts to send
         }
     }
-}
-impl ScheduleEvaluator for ManualInterrupt {
-    fn can_deliver_immediate_task(&self) -> bool {
-        true
-    }
+
+    fn reset(&mut self) {}
 }

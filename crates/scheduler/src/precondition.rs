@@ -33,13 +33,14 @@ mod test {
     use std::{
         collections::HashMap,
         sync::{Arc, LazyLock},
+        time::Duration,
     };
     use tokio::sync::RwLock;
     use tracing_subscriber::EnvFilter;
 
     use crate::{
-        Result, Scheduler, evaluators::ScheduleEvaluator, schedule::Schedule, tasks::ScheduledTask,
-        tasks::TaskRequest,
+        Result, evaluators::IntervalEvaluator, schedule::Schedule, scheduler::Scheduler,
+        tasks::ScheduledTask,
     };
 
     fn init_tracing(default_level: Option<&str>) -> tracing::subscriber::DefaultGuard {
@@ -55,18 +56,6 @@ mod test {
             .finish();
         tracing::subscriber::set_default(subscriber)
     }
-
-    struct TestEvaluator;
-
-    impl Iterator for TestEvaluator {
-        type Item = Arc<TaskRequest>;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            Some(Arc::new(TaskRequest::from_secs(1)))
-        }
-    }
-
-    impl ScheduleEvaluator for TestEvaluator {}
 
     static TEST_EXECUTION_COUNT: LazyLock<RwLock<HashMap<Arc<str>, usize>>> = LazyLock::new(|| {
         let mut map = HashMap::new();
@@ -115,7 +104,7 @@ mod test {
         init_tracing(None);
 
         let schedule = Schedule::new()
-            .add_evaluator(Arc::new(RwLock::new(TestEvaluator {})))
+            .add_evaluator(Arc::new(RwLock::new(IntervalEvaluator::new(1))))
             .add_precondition(Arc::new(TestPrecondition {
                 name: "test_precondition_fail".into(),
                 should_pass: false,
@@ -124,17 +113,17 @@ mod test {
                 name: "test_precondition_fail".into(),
             }));
 
-        let scheduler = Scheduler::new("test_precondition_fail".into(), vec![Arc::new(schedule)])
-            .with_evaluation_period(std::time::Duration::from_secs(1));
-        let scheduler_handle = scheduler.run();
+        let scheduler = Scheduler::new(
+            "test_precondition_fail".into(),
+            vec![Arc::new(schedule)],
+            Duration::from_secs(1),
+            Duration::from_nanos(15000),
+        );
+        let scheduler = scheduler.start().await;
 
         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
 
-        scheduler.cancellation_token().cancel();
-        scheduler_handle
-            .await
-            .expect("Should join handle")
-            .expect("To finish the handle without error");
+        scheduler.stop().await;
 
         let map_lock = TEST_EXECUTION_COUNT.read().await;
         let count = map_lock
@@ -152,7 +141,7 @@ mod test {
         init_tracing(None);
 
         let schedule = Schedule::new()
-            .add_evaluator(Arc::new(RwLock::new(TestEvaluator {})))
+            .add_evaluator(Arc::new(RwLock::new(IntervalEvaluator::new(1))))
             .add_precondition(Arc::new(TestPrecondition {
                 name: "test_precondition_pass".into(),
                 should_pass: true,
@@ -161,17 +150,17 @@ mod test {
                 name: "test_precondition_pass".into(),
             }));
 
-        let scheduler = Scheduler::new("test_precondition_pass".into(), vec![Arc::new(schedule)])
-            .with_evaluation_period(std::time::Duration::from_secs(1));
-        let scheduler_handle = scheduler.run();
+        let scheduler = Scheduler::new(
+            "test_precondition_pass".into(),
+            vec![Arc::new(schedule)],
+            Duration::from_secs(1),
+            Duration::from_nanos(15000),
+        );
+        let scheduler = scheduler.start().await;
 
         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
 
-        scheduler.cancellation_token().cancel();
-        scheduler_handle
-            .await
-            .expect("Should join handle")
-            .expect("To finish the handle without error");
+        scheduler.stop().await;
 
         let map_lock = TEST_EXECUTION_COUNT.read().await;
         let count = map_lock
