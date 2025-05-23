@@ -15,16 +15,15 @@ limitations under the License.
 */
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     num::NonZeroUsize,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 
 use crate::{
     dataaccelerator::AcceleratorEngineRegistry, object_store_registry::SpiceObjectStoreRegistry,
 };
-use cache::QueryResultsCacheProvider;
+use cache::{CacheProvider, Caching, QueryResultsCacheProvider};
 use datafusion::{
     catalog::{CatalogProvider, MemoryCatalogProvider},
     execution::{
@@ -33,18 +32,17 @@ use datafusion::{
         memory_pool::{FairSpillPool, MemoryPool, TrackConsumersPool, UnboundedMemoryPool},
         runtime_env::{RuntimeEnv, RuntimeEnvBuilder},
     },
+    logical_expr::LogicalPlan,
     optimizer::{
         AnalyzerRule,
         analyzer::{
-            count_wildcard_rule::CountWildcardRule, expand_wildcard_rule::ExpandWildcardRule,
-            inline_table_scan::InlineTableScan, resolve_grouping_function::ResolveGroupingFunction,
-            type_coercion::TypeCoercion,
+            expand_wildcard_rule::ExpandWildcardRule, inline_table_scan::InlineTableScan,
+            resolve_grouping_function::ResolveGroupingFunction, type_coercion::TypeCoercion,
         },
     },
     prelude::{SessionConfig, SessionContext},
 };
 use datafusion_federation::FederationAnalyzerRule;
-use moka::future::CacheBuilder;
 use tokio::sync::{RwLock as TokioRwLock, Semaphore};
 
 use crate::{embeddings, status};
@@ -59,11 +57,13 @@ use super::{
 pub struct DataFusionBuilder {
     config: SessionConfig,
     status: Arc<status::RuntimeStatus>,
-    cache_provider: Option<Arc<QueryResultsCacheProvider>>,
+    results_cache_provider: Option<Arc<QueryResultsCacheProvider>>,
+    plans_cache_provider: Option<Arc<dyn CacheProvider<LogicalPlan> + Send + Sync>>,
     accelerator_engine_registry: Arc<AcceleratorEngineRegistry>,
     memory_limit: Option<u64>,
     temp_directory: Option<String>,
     accelerated_refresh_semaphore: Option<Arc<Semaphore>>,
+    task_history_enabled: bool,
 }
 
 pub(crate) fn get_df_default_config() -> SessionConfig {
@@ -110,17 +110,37 @@ impl DataFusionBuilder {
         Self {
             config: df_config,
             status,
-            cache_provider: None,
+            results_cache_provider: None,
+            plans_cache_provider: None,
             accelerator_engine_registry,
             memory_limit: None,
             temp_directory: None,
             accelerated_refresh_semaphore: None,
+            task_history_enabled: true,
         }
     }
 
     #[must_use]
-    pub fn with_cache_provider(mut self, cache_provider: Arc<QueryResultsCacheProvider>) -> Self {
-        self.cache_provider = Some(cache_provider);
+    pub fn with_task_history(mut self, task_history: bool) -> Self {
+        self.task_history_enabled = task_history;
+        self
+    }
+
+    #[must_use]
+    pub fn with_results_cache_provider(
+        mut self,
+        cache_provider: Arc<QueryResultsCacheProvider>,
+    ) -> Self {
+        self.results_cache_provider = Some(cache_provider);
+        self
+    }
+
+    #[must_use]
+    pub fn with_plans_cache_provider(
+        mut self,
+        cache_provider: Arc<dyn CacheProvider<LogicalPlan> + Send + Sync>,
+    ) -> Self {
+        self.plans_cache_provider = Some(cache_provider);
         self
     }
 
@@ -153,8 +173,6 @@ impl DataFusionBuilder {
     /// Panics if the `DataFusion` instance cannot be built due to errors in registering functions or schemas.
     #[must_use]
     pub fn build(self) -> DataFusion {
-        const DEFAULT_CACHED_PLANS_MAX_CAPACITY: u64 = 512;
-
         let mut state = SessionStateBuilder::new()
             .with_config(self.config)
             .with_default_features()
@@ -212,20 +230,31 @@ impl DataFusionBuilder {
 
         ctx.register_catalog(SPICE_DEFAULT_CATALOG, Arc::new(catalog));
 
-        let cached_plans = CacheBuilder::new(DEFAULT_CACHED_PLANS_MAX_CAPACITY)
-            .time_to_live(Duration::from_secs(3600)) // 1 hour TTL
-            .build();
+        let caching = Caching::new();
+        let caching = if let Some(cache_provider) = self.plans_cache_provider {
+            caching.with_plans_cache(cache_provider)
+        } else {
+            caching
+        };
+
+        let caching = if let Some(cache_provider) = self.results_cache_provider {
+            caching.with_results_cache(cache_provider)
+        } else {
+            caching
+        };
 
         DataFusion {
             runtime_status: self.status,
             ctx: Arc::new(ctx),
             data_writers: RwLock::new(HashSet::new()),
-            cache_provider: RwLock::new(self.cache_provider),
+            caching: Arc::new(caching),
             pending_sink_tables: TokioRwLock::new(Vec::new()),
-            cached_plans,
+            deferred_tables: TokioRwLock::new(HashMap::new()),
+            deferred_catalogs: TokioRwLock::new(HashMap::new()),
             accelerated_tables: TokioRwLock::new(HashSet::new()),
             accelerator_engine_registry: self.accelerator_engine_registry,
             acceleration_refresh_semaphore: self.accelerated_refresh_semaphore,
+            task_history_enabled: self.task_history_enabled,
         }
     }
 }
@@ -243,7 +272,6 @@ pub fn get_analyzer_rules() -> Vec<Arc<dyn AnalyzerRule + Send + Sync>> {
         // The rest of these rules are run after the federation analyzer since they only affect internal DataFusion execution.
         Arc::new(ResolveGroupingFunction::new()),
         Arc::new(TypeCoercion::new()),
-        Arc::new(CountWildcardRule::new()),
     ]
 }
 
@@ -312,7 +340,7 @@ mod tests {
         let default_rules = Analyzer::new().rules;
         assert_eq!(
             default_rules.len(),
-            5,
+            4,
             "Default analyzer rules have changed"
         );
         let expected_rule_names = vec![
@@ -320,7 +348,6 @@ mod tests {
             "expand_wildcard_rule",
             "resolve_grouping_function",
             "type_coercion",
-            "count_wildcard_rule",
         ];
         for (rule, expected_name) in default_rules.iter().zip(expected_rule_names.into_iter()) {
             assert_eq!(

@@ -14,19 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use crate::accelerated_table::refresh::{self, RefreshOverrides};
 use crate::accelerated_table::{self, AcceleratedTableBuilderError};
 use crate::accelerated_table::{AcceleratedTable, Retention, refresh::Refresh};
+use crate::catalogconnector::deferred::DeferredCatalogProvider;
 use crate::component::dataset::acceleration::RefreshMode;
 use crate::component::dataset::{Dataset, Mode, ReadyState};
 use crate::component::view::View;
 use crate::dataaccelerator::AcceleratorEngineRegistry;
 use crate::dataaccelerator::spice_sys::dataset_checkpoint::DatasetCheckpoint;
 use crate::dataaccelerator::{self};
+use crate::dataconnector::deferred::DeferredConnector;
 use crate::dataconnector::localpod::LOCALPOD_DATACONNECTOR;
 use crate::dataconnector::sink::SinkConnector;
 use crate::dataconnector::{DataConnector, DataConnectorError};
@@ -43,7 +45,7 @@ use arrow::datatypes::{Schema, SchemaRef};
 use arrow::error::ArrowError;
 use arrow_tools::schema::verify_schema;
 use builder::DataFusionBuilder;
-use cache::{CacheKey, QueryResultsCacheProvider, RawCacheKey};
+use cache::{CacheProvider, Caching, QueryResultsCacheProvider, RawCacheKey};
 use datafusion::catalog::CatalogProvider;
 use datafusion::catalog::SchemaProvider;
 use datafusion::datasource::{TableProvider, ViewTable};
@@ -59,7 +61,6 @@ use datafusion::sql::{ResolvedTableReference, TableReference, sqlparser};
 use datafusion_federation::FederatedTableProviderAdaptor;
 use error::find_datafusion_root;
 use itertools::Itertools;
-use moka::future::Cache;
 use query::QueryBuilder;
 use schema::ensure_schema_exists;
 use snafu::prelude::*;
@@ -261,20 +262,25 @@ struct PendingSinkRegistration {
     secrets: Arc<TokioRwLock<Secrets>>,
 }
 
-type SqlHash = RawCacheKey;
+struct DeferredTableRegistration {
+    dataset: Arc<Dataset>,
+    connector: Arc<dyn DataConnector>,
+}
 
 pub struct DataFusion {
     pub ctx: Arc<SessionContext>,
     runtime_status: Arc<status::RuntimeStatus>,
     data_writers: RwLock<HashSet<TableReference>>,
     accelerated_tables: TokioRwLock<HashSet<TableReference>>,
-    cache_provider: RwLock<Option<Arc<QueryResultsCacheProvider>>>,
-    cached_plans: Cache<SqlHash, LogicalPlan>,
-
+    caching: Arc<Caching>,
     pending_sink_tables: TokioRwLock<Vec<PendingSinkRegistration>>,
+    deferred_tables: TokioRwLock<HashMap<String, DeferredTableRegistration>>,
+    deferred_catalogs: TokioRwLock<HashMap<String, Arc<DeferredCatalogProvider>>>,
+
     accelerator_engine_registry: Arc<AcceleratorEngineRegistry>,
     // Controls the parallelism of accelerated table refreshes
     acceleration_refresh_semaphore: Option<Arc<Semaphore>>,
+    pub(crate) task_history_enabled: bool,
 }
 
 impl std::fmt::Debug for DataFusion {
@@ -283,7 +289,7 @@ impl std::fmt::Debug for DataFusion {
             .field("runtime_status", &self.runtime_status)
             .field("data_writers", &self.data_writers)
             .field("accelerated_tables", &self.accelerated_tables)
-            .field("cache_provider", &self.cache_provider)
+            .field("caching", &self.caching)
             .finish_non_exhaustive()
     }
 }
@@ -315,9 +321,18 @@ impl DataFusion {
         Arc::clone(&self.accelerator_engine_registry)
     }
 
-    pub fn set_cache_provider(&self, cache_provider: QueryResultsCacheProvider) {
-        if let Ok(mut a) = self.cache_provider.write() {
+    pub fn set_results_cache_provider(&self, cache_provider: QueryResultsCacheProvider) {
+        if let Ok(mut a) = self.caching.results.write() {
             *a = Some(Arc::new(cache_provider));
+        }
+    }
+
+    pub fn set_logical_plan_cache_provider(
+        &self,
+        cache_provider: Arc<dyn CacheProvider<LogicalPlan> + Send + Sync>,
+    ) {
+        if let Ok(mut a) = self.caching.plans.write() {
+            *a = Some(cache_provider);
         }
     }
 
@@ -388,8 +403,19 @@ impl DataFusion {
         Ok(())
     }
 
-    pub fn register_catalog(&self, name: &str, catalog: Arc<dyn CatalogProvider>) -> Result<()> {
-        self.ctx.register_catalog(name, catalog);
+    pub async fn register_catalog(
+        &self,
+        name: &str,
+        catalog: Arc<dyn CatalogProvider>,
+    ) -> Result<()> {
+        if let Some(deferred_catalog) = catalog.as_any().downcast_ref::<DeferredCatalogProvider>() {
+            self.deferred_catalogs
+                .write()
+                .await
+                .insert(name.to_string(), Arc::new(deferred_catalog.clone()));
+        } else {
+            self.ctx.register_catalog(name, catalog);
+        }
 
         Ok(())
     }
@@ -439,8 +465,23 @@ impl DataFusion {
                 data_connector,
                 federated_read_table,
             } => {
-                self.register_federated_table(&dataset, data_connector, federated_read_table)
-                    .await?;
+                if let Some(deferred_connector) =
+                    data_connector.as_any().downcast_ref::<DeferredConnector>()
+                {
+                    self.runtime_status
+                        .update_dataset(&dataset_table_ref, status::ComponentStatus::Ready);
+
+                    self.deferred_tables.write().await.insert(
+                        dataset.name.to_string(),
+                        DeferredTableRegistration {
+                            dataset: Arc::clone(&dataset),
+                            connector: deferred_connector.source(),
+                        },
+                    );
+                } else {
+                    self.register_federated_table(&dataset, data_connector, federated_read_table)
+                        .await?;
+                }
             }
         }
 
@@ -508,6 +549,48 @@ impl DataFusion {
         Ok(table_provider)
     }
 
+    pub async fn load_deferred_dataset(&self, table_reference: TableReference) -> Result<()> {
+        let deferred_tables = self.deferred_tables.read().await;
+        if let Some(deferred_registration) = deferred_tables.get(&table_reference.to_string()) {
+            let read_provider = deferred_registration
+                .connector
+                .read_provider(&deferred_registration.dataset)
+                .await
+                .context(UnableToResolveTableProviderSnafu)?;
+
+            let federated_table = FederatedTable::new_unchecked(read_provider);
+            self.register_federated_table(
+                &deferred_registration.dataset,
+                Arc::clone(&deferred_registration.connector),
+                federated_table,
+            )
+            .await?;
+
+            drop(deferred_tables);
+
+            let mut deferred_tables = self.deferred_tables.write().await;
+            deferred_tables.remove(&table_reference.to_string());
+        }
+
+        Ok(())
+    }
+
+    pub async fn load_deferred_catalog(&self, name: &str) -> Result<()> {
+        let deferred_catalogs = self.deferred_catalogs.read().await;
+        if let Some(catalog) = deferred_catalogs.get(name) {
+            if let Ok(provider) = catalog.get_catalog_provider().await {
+                self.ctx.register_catalog(name, Arc::clone(&provider));
+            }
+
+            drop(deferred_catalogs);
+
+            let mut deferred_catalogs = self.deferred_catalogs.write().await;
+            deferred_catalogs.remove(name);
+        }
+
+        Ok(())
+    }
+
     async fn ensure_sink_dataset(
         &self,
         table_reference: TableReference,
@@ -532,7 +615,7 @@ impl DataFusion {
             .read_provider(&pending_registration.dataset)
             .await
             .context(UnableToResolveTableProviderSnafu)?;
-        let federated_table = FederatedTable::new(read_provider);
+        let federated_table = FederatedTable::new_unchecked(read_provider);
 
         tracing::info!(
             "Loading data for dataset {}",
@@ -755,7 +838,7 @@ impl DataFusion {
                         .build()
                     })?
                     .context(UnableToResolveTableProviderSnafu)?;
-                Arc::new(FederatedTable::new(read_write_provider))
+                Arc::new(FederatedTable::new_unchecked(read_write_provider))
             }
         };
 
@@ -877,7 +960,7 @@ impl DataFusion {
 
         accelerated_table_builder.ready_state(dataset.ready_state);
 
-        accelerated_table_builder.cache_provider(self.cache_provider());
+        accelerated_table_builder.cache_provider(self.results_cache_provider());
 
         accelerated_table_builder.checkpointer_opt(DatasetCheckpoint::try_new(dataset).await.ok());
 
@@ -980,8 +1063,18 @@ impl DataFusion {
         );
     }
 
-    pub fn cache_provider(&self) -> Option<Arc<QueryResultsCacheProvider>> {
-        let Ok(provider) = self.cache_provider.read() else {
+    pub fn results_cache_provider(&self) -> Option<Arc<QueryResultsCacheProvider>> {
+        let Ok(provider) = self.caching.results.read() else {
+            return None;
+        };
+
+        provider.clone()
+    }
+
+    pub fn plans_cache_provider(
+        &self,
+    ) -> Option<Arc<dyn CacheProvider<LogicalPlan> + Send + Sync>> {
+        let Ok(provider) = self.caching.plans.read() else {
             return None;
         };
 
@@ -1285,7 +1378,7 @@ impl DataFusion {
                 tracing::error!("Failed to create view: {e}");
                 status.update_view(table, status::ComponentStatus::Error);
                 return;
-            };
+            }
             tracing::info!("{}", view_registered_trace(table, None));
             status.update_view(table, status::ComponentStatus::Ready);
         });
@@ -1320,7 +1413,8 @@ impl DataFusion {
         wait_until_dependent_tables_are_ready(table, dependent_tables, &runtime_status).await;
 
         let schema = view_table.schema();
-        let federated_table = FederatedTable::new(Arc::new(view_table) as Arc<dyn TableProvider>);
+        let federated_table =
+            FederatedTable::new_unchecked(Arc::new(view_table) as Arc<dyn TableProvider>);
 
         let accelerated_table_provider = self
             .accelerator_engine_registry()
@@ -1366,7 +1460,7 @@ impl DataFusion {
             refresh,
         );
         builder.initial_load_complete(initial_load_complete);
-        builder.cache_provider(self.cache_provider());
+        builder.cache_provider(self.results_cache_provider());
         builder.checkpointer_opt(DatasetCheckpoint::try_new(view).await.ok());
         builder.refresh_on_startup(acceleration.refresh_on_startup);
         builder.ready_state(view.ready_state);
@@ -1492,11 +1586,14 @@ impl DataFusion {
     async fn get_or_create_logical_plan(
         &self,
         session: &SessionState,
+        key: &RawCacheKey,
         sql: &str,
     ) -> Result<LogicalPlan, DataFusionError> {
-        let key = CacheKey::Query(sql, None).as_raw_key();
+        let Some(plans_cache) = self.plans_cache_provider() else {
+            return session.create_logical_plan(sql).await;
+        };
 
-        if let Some(plan) = self.cached_plans.get(&key).await {
+        if let Some(plan) = plans_cache.get_raw_key(&key.as_u64()).await {
             tracing::trace!("using cached plan for {sql}");
             return Ok(plan);
         }
@@ -1504,14 +1601,16 @@ impl DataFusion {
         let plan = session.create_logical_plan(sql).await?;
 
         tracing::trace!("caching plan for {sql}");
-        self.cached_plans.insert(key, plan.clone()).await;
+        plans_cache.put_raw_key(&key.as_u64(), plan.clone()).await;
 
         Ok(plan)
     }
 
     pub(crate) fn clear_cached_plans(&self) {
         tracing::trace!("clearing cached logical plans");
-        self.cached_plans.invalidate_all();
+        if let Some(cache_provider) = self.plans_cache_provider() {
+            cache_provider.invalidate_all();
+        }
     }
 }
 
@@ -1583,6 +1682,8 @@ async fn wait_until_dependent_tables_are_ready(
 
 #[cfg(test)]
 mod tests {
+    use cache::{CacheKey, SimpleCache};
+
     use crate::builder::RuntimeBuilder;
 
     use super::*;
@@ -1590,31 +1691,48 @@ mod tests {
     #[tokio::test]
     async fn test_get_or_create_logical_plan() {
         static SQL: &str = "SELECT 1";
+        let raw_cache_key =
+            CacheKey::Query(SQL, None).as_raw_key(Box::new(std::hash::DefaultHasher::new()));
 
         let runtime = RuntimeBuilder::new().build().await;
+
+        let plan_cache_provider = Arc::new(SimpleCache::new(
+            512,
+            Duration::from_secs(3600),
+            std::hash::RandomState::default(),
+        ));
         let df = Arc::new(
             DataFusion::builder(
                 status::RuntimeStatus::new(),
                 runtime.accelerator_engine_registry(),
             )
+            .with_plans_cache_provider(plan_cache_provider)
             .build(),
         );
 
         let session = df.ctx.state();
 
-        df.get_or_create_logical_plan(&session, SQL)
+        df.get_or_create_logical_plan(&session, &raw_cache_key, SQL)
             .await
             .expect("logical plan");
 
-        df.cached_plans.run_pending_tasks().await; // Ensure entry gets logged
-        assert_eq!(df.cached_plans.entry_count(), 1);
+        let Some(cache_provider) = df.plans_cache_provider() else {
+            unreachable!("Cache provider should be available");
+        };
+
+        cache_provider.checkpoint().await; // Ensure entry gets logged
+        assert_eq!(cache_provider.item_count(), 1);
+        drop(cache_provider);
 
         // Reusing the same query should no longer at to the cache
-        df.get_or_create_logical_plan(&session, SQL)
+        df.get_or_create_logical_plan(&session, &raw_cache_key, SQL)
             .await
             .expect("logical plan");
 
-        df.cached_plans.run_pending_tasks().await; // Ensure entry gets logged
-        assert_eq!(df.cached_plans.entry_count(), 1);
+        let Some(cache_provider) = df.plans_cache_provider() else {
+            unreachable!("Cache provider should be available");
+        };
+        cache_provider.checkpoint().await; // Ensure entry gets logged
+        assert_eq!(cache_provider.item_count(), 1);
     }
 }
