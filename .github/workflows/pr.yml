@@ -218,6 +218,6 @@ jobs:
           push: false
           build-args: |
             CARGO_FEATURES=odbc
-            RUST_PROFILE=${{ env.RUST_PROFILE || 'release' }}
+            RUST_PROFILE=${{ env.RUST_PROFILE }}
           tags: |
             ghcr.io/spiceai/spiceai-rust:ci
