@@ -63,7 +63,9 @@ pub(crate) fn cosine_distance_to_sql(
         .try_collect()?;
 
     let ast_fn = ast::Expr::Function(Function {
-        name: ObjectName(vec![ast::ObjectNamePart::Identifier(Ident::new("array_cosine_distance"))]),
+        name: ObjectName(vec![ast::ObjectNamePart::Identifier(Ident::new(
+            "array_cosine_distance",
+        ))]),
         args: ast::FunctionArguments::List(ast::FunctionArgumentList {
             duplicate_treatment: None,
             args: ast_args

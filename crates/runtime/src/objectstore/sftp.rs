@@ -65,7 +65,7 @@ impl SFTPObjectStore {
         }
     }
 
-     // TODO: Helper to allow static lifetime for walk_path
+    // TODO: Helper to allow static lifetime for walk_path
     fn clone_for_static(&self) -> SFTPObjectStore {
         SFTPObjectStore {
             user: self.user.clone(),
@@ -145,13 +145,12 @@ impl ObjectStore for SFTPObjectStore {
 
         let object_meta = ObjectMeta {
             location: location.clone(),
-            size: u64::try_from(file.stat().map_err(handle_error)?.size.ok_or_else(|| {
+            size: file.stat().map_err(handle_error)?.size.ok_or_else(|| {
                 object_store::Error::Generic {
                     store: "SFTP",
                     source: "No size found for file".into(),
                 }
-            })?)
-            .map_err(handle_error)?,
+            })?,
 
             #[allow(clippy::cast_possible_wrap)]
             last_modified: DateTime::from_timestamp(
@@ -183,7 +182,7 @@ impl ObjectStore for SFTPObjectStore {
         }
 
         let stream = stream! {
-            file.seek(SeekFrom::Start(start as u64)).map_err(handle_error)?;
+            file.seek(SeekFrom::Start(start)).map_err(handle_error)?;
 
             let mut total = 0;
             let mut buf = vec![0; 4096];
@@ -203,7 +202,7 @@ impl ObjectStore for SFTPObjectStore {
                     n -= total - data_to_read;
                 }
 
-                yield Ok(Bytes::copy_from_slice(&buf[..n as usize]))
+                yield Ok(Bytes::copy_from_slice(&buf[..usize::try_from(n).map_err(handle_error)?]));
             }
         };
 
@@ -226,7 +225,10 @@ impl ObjectStore for SFTPObjectStore {
         unimplemented!()
     }
 
-    fn list(&self, location: Option<&Path>) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
+    fn list(
+        &self,
+        location: Option<&Path>,
+    ) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
         let location = location
             .map(ToOwned::to_owned)
             .map_or("/".to_string(), |x| x.to_string());
@@ -256,10 +258,10 @@ impl ObjectStore for SFTPObjectStore {
                             store: "SFTP",
                             source: "Failed to convert path".into(),
                         })?),
-                        size: u64::try_from(entry.1.size.ok_or_else(|| object_store::Error::Generic {
+                        size: entry.1.size.ok_or_else(|| object_store::Error::Generic {
                             store: "SFTP",
                             source: "No size found for file".into(),
-                        })?).map_err(handle_error)?,
+                        })?,
                         #[allow(clippy::cast_possible_wrap)]
                         last_modified: DateTime::from_timestamp(entry.1.mtime.ok_or_else(|| object_store::Error::Generic {
                                 store: "SFTP",

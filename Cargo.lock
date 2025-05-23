@@ -506,7 +506,7 @@ dependencies = [
  "arrow",
  "chrono",
  "log",
- "odbc-api 13.0.1",
+ "odbc-api",
  "thiserror 2.0.12",
 ]
 
@@ -3879,7 +3879,7 @@ dependencies = [
  "datafusion-table-providers",
  "dyn-clone",
  "futures",
- "odbc-api 12.2.0",
+ "odbc-api",
  "pkcs8",
  "secrecy",
  "serde_json",
@@ -8669,20 +8669,6 @@ dependencies = [
  "tracing",
  "url",
  "web-time",
-]
-
-[[package]]
-name = "odbc-api"
-version = "12.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfa6c3cbfe5253d35eb3f55414d8b3447748febf8589d1895839976f508462d1"
-dependencies = [
- "atoi",
- "log",
- "odbc-sys",
- "thiserror 2.0.12",
- "widestring",
- "winit",
 ]
 
 [[package]]

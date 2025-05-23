@@ -18,7 +18,11 @@ use std::{borrow::Cow, ops::ControlFlow};
 
 use arrow::compute::concat_batches;
 use arrow_flight::{
-    decode::{DecodedPayload, FlightDataDecoder}, error::FlightError, flight_service_server::FlightService, sql::{self, CommandPreparedStatementQuery, DoPutPreparedStatementResult, ProstMessageExt}, FlightData, FlightDescriptor, FlightEndpoint, FlightInfo, PutResult, Ticket
+    FlightData, FlightDescriptor, FlightEndpoint, FlightInfo, PutResult, Ticket,
+    decode::{DecodedPayload, FlightDataDecoder},
+    error::FlightError,
+    flight_service_server::FlightService,
+    sql::{self, CommandPreparedStatementQuery, DoPutPreparedStatementResult, ProstMessageExt},
 };
 use arrow_ipc::{reader::StreamReader, writer::StreamWriter};
 use arrow_schema::SchemaRef;
@@ -290,7 +294,8 @@ impl VisitorMut for ConvertJdbcPlaceholdersVisitor {
     fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<Self::Break> {
         if let Expr::Value(value_with_span) = expr {
             if let Value::Placeholder(ref mut placeholder) = value_with_span.value {
-                let new_placeholder = placeholder.replace('?', &format!("${}", self.next_placeholder));
+                let new_placeholder =
+                    placeholder.replace('?', &format!("${}", self.next_placeholder));
                 value_with_span.value = Value::Placeholder(new_placeholder);
                 self.next_placeholder += 1;
             }

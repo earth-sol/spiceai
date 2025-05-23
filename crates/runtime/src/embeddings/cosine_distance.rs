@@ -20,12 +20,12 @@ limitations under the License.
 use arrow::array::{Array, ArrayRef, Float64Array, LargeListArray, ListArray, OffsetSizeTrait};
 use arrow_schema::DataType;
 use arrow_schema::DataType::{FixedSizeList, Float64, LargeList, List};
-use datafusion::logical_expr::ScalarFunctionArgs;
 use core::any::type_name;
 use datafusion::common::cast::{
     as_float32_array, as_float64_array, as_generic_list_array, as_int32_array, as_int64_array,
 };
 use datafusion::common::utils::coerced_fixed_size_list_to_list;
+use datafusion::logical_expr::ScalarFunctionArgs;
 use datafusion::scalar::ScalarValue;
 use datafusion::{
     common::{DataFusionError, Result as DataFusionResult, exec_err},

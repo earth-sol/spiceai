@@ -28,9 +28,7 @@ use datafusion::{
     execution::{SendableRecordBatchStream, TaskContext},
     logical_expr::{Expr, dml::InsertOp},
     physical_plan::{
-        DisplayAs, DisplayFormatType, ExecutionPlan,
-        empty::EmptyExec,
-        metrics::MetricsSet,
+        DisplayAs, DisplayFormatType, ExecutionPlan, empty::EmptyExec, metrics::MetricsSet,
     },
 };
 use futures::Future;

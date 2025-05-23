@@ -17,6 +17,7 @@ limitations under the License.
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef, TimeUnit};
 use async_trait::async_trait;
 use chrono::TimeZone;
+use datafusion::catalog::memory::DataSourceExec;
 use datafusion::catalog::Session;
 use datafusion::common::DFSchema;
 use datafusion::config::TableParquetOptions;
@@ -25,7 +26,7 @@ use datafusion::datasource::physical_plan::parquet::{
     DefaultParquetFileReaderFactory, ParquetAccessPlan, RowGroupAccess,
 };
 use datafusion::datasource::physical_plan::{
-    FileGroup, FileScanConfig, ParquetFileReaderFactory, ParquetSource
+    FileGroup, FileScanConfigBuilder, ParquetFileReaderFactory, ParquetSource
 };
 use datafusion::datasource::{TableProvider, TableType};
 use datafusion::error::DataFusionError;
@@ -212,7 +213,8 @@ impl DeltaTable {
         let parquet_source = ParquetSource::new(TableParquetOptions::default())
             .with_parquet_file_reader_factory(Arc::clone(parquet_file_reader_factory))
             .with_predicate(Arc::clone(schema), Arc::clone(physical_expr));
-        let file_scan_config = FileScanConfig::new(
+
+        let file_scan_config_builder = FileScanConfigBuilder::new(
             ObjectStoreUrl::local_filesystem(),
             Arc::clone(schema),
             Arc::new(parquet_source),
@@ -222,7 +224,7 @@ impl DeltaTable {
         .with_table_partition_cols(partition_cols.to_vec())
         .with_file_group(FileGroup::new(partitioned_files.to_vec()));
 
-        file_scan_config.build()
+        DataSourceExec::from_data_source(file_scan_config_builder.build())      
     }
 }
 
@@ -872,8 +874,7 @@ fn to_delta_kernel_binary_op(op: Operator) -> Option<DeltaBinaryOperator> {
         | Operator::AtQuestion
         | Operator::Question
         | Operator::QuestionAnd
-        | Operator::QuestionPipe
-         => None,
+        | Operator::QuestionPipe => None,
     }
 }
 

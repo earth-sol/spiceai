@@ -103,7 +103,7 @@ impl ObjectStoreMetadataTable {
         let size_array = UInt64Array::from(
             meta_list
                 .iter()
-                .map(|meta| meta.size as u64)
+                .map(|meta| meta.size)
                 .collect::<Vec<_>>(),
         );
         let e_tag_array = StringArray::from(

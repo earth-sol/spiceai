@@ -256,8 +256,8 @@ impl ObjectStore for FTPObjectStore {
             payload: GetResultPayload::Stream(pipe_stream(
                 client,
                 location_string,
-                start as usize,
-                data_to_read as usize,
+                usize::try_from(start).unwrap_or_default(),
+                usize::try_from(data_to_read).unwrap_or_default(),
             )),
             range: Range { start, end },
             attributes: Attributes::default(),
@@ -275,7 +275,10 @@ impl ObjectStore for FTPObjectStore {
         unimplemented!()
     }
 
-    fn list(&self, location: Option<&Path>) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
+    fn list(
+        &self,
+        location: Option<&Path>,
+    ) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
         // TODO: This is a workaround to allow the stream to be static
         let arc_self = Arc::new(self.clone_for_static());
         arc_self.walk_path(location.map(ToOwned::to_owned))

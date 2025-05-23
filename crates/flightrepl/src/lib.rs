@@ -410,8 +410,9 @@ pub async fn get_records(
 
     let stream = response.into_inner();
 
-    let mut stream =
-        FlightRecordBatchStream::new_from_flight_data(stream.map_err(|status| FlightError::Tonic(Box::new(status))));
+    let mut stream = FlightRecordBatchStream::new_from_flight_data(
+        stream.map_err(|status| FlightError::Tonic(Box::new(status))),
+    );
     let mut records = vec![];
     let mut total_rows = 0_usize;
     while let Some(data) = stream.next().await {
