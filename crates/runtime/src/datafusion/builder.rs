@@ -265,9 +265,6 @@ impl DataFusionBuilder {
 #[must_use]
 pub fn get_analyzer_rules() -> Vec<Arc<dyn AnalyzerRule + Send + Sync>> {
     vec![
-        // TODO
-        // Arc::new(InlineTableScan::new()),
-        // Arc::new(ExpandWildcardRule::new()),
         Arc::new(FederationAnalyzerRule::new()),
         // The rest of these rules are run after the federation analyzer since they only affect internal DataFusion execution.
         Arc::new(ResolveGroupingFunction::new()),
@@ -340,12 +337,10 @@ mod tests {
         let default_rules = Analyzer::new().rules;
         assert_eq!(
             default_rules.len(),
-            4,
+            2,
             "Default analyzer rules have changed"
         );
         let expected_rule_names = vec![
-            "inline_table_scan",
-            "expand_wildcard_rule",
             "resolve_grouping_function",
             "type_coercion",
         ];
