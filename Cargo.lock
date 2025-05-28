@@ -1112,6 +1112,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-glue"
+version = "1.90.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "443dae52f548499507d65f08c7cd8a7b59acf9308157b9c71ec457950842937f"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand 2.3.0",
+ "http 0.2.12",
+ "once_cell",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-secretsmanager"
 version = "1.74.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10898,7 +10921,9 @@ dependencies = [
  "async-stream",
  "async-trait",
  "aws-config",
+ "aws-credential-types",
  "aws-sdk-dynamodb",
+ "aws-sdk-glue",
  "aws-sdk-secretsmanager",
  "aws-sdk-sts",
  "axum 0.8.4",
