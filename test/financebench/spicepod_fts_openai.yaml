@@ -1,6 +1,6 @@
 version: v1
 kind: Spicepod
-name: financebench
+name: financebench_full_text
 
 runtime:
   flight:
@@ -152,9 +152,9 @@ datasets:
       mode: file
     columns:
       - name: content
-        embeddings:
-          - from: openai_embed
-            row_id: location
+        full_text_search:
+          enabled: true
+          row_id: location
 
   - from: spice.ai/spiceai/financebench/datasets/spice.financebench.tests_oss
     description: Dataset for evaluating model performance. Must be ignored by the model.
@@ -164,9 +164,3 @@ datasets:
       spiceai_endpoint: https://flight.spiceai.io
     acceleration:
       enabled: true
-
-embeddings:
-  - from: openai:text-embedding-3-small
-    name: openai_embed
-    params:
-      openai_api_key: ${secrets:OPENAI_API_KEY}
