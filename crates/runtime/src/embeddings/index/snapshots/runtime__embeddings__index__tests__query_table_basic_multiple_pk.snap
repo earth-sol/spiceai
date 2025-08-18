@@ -7,8 +7,8 @@ snapshot_kind: text
 | plan_type     | plan                                                                                   |
 +---------------+----------------------------------------------------------------------------------------+
 | logical_plan  | Sort: my_vectored_table.score DESC NULLS FIRST, fetch=5                                |
-|               |   TableScan: my_vectored_table projection=[pk, not_where, score]                       |
-| physical_plan | SortExec: TopK(fetch=5), expr=[score@2 DESC NULLS LAST], preserve_partitioning=[false] |
-|               |   ExplainExecutionPlan: projection=["pk", "not_where", "score"] filter=[] limit=None   |
+|               |   TableScan: my_vectored_table projection=[pk1, pk2, pk3, score]                       |
+| physical_plan | SortExec: TopK(fetch=5), expr=[score@3 DESC NULLS LAST], preserve_partitioning=[false] |
+|               |   ExplainExecutionPlan: projection=["pk1", "pk2", "pk3", "score"] filter=[] limit=None |
 |               |                                                                                        |
 +---------------+----------------------------------------------------------------------------------------+
