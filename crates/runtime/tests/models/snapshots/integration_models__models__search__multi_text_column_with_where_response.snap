@@ -7,11 +7,14 @@ snapshot_kind: text
   "duration_ms": "duration_ms_val",
   "results": [
     {
-      "dataset": "catalog_page_with_chunking_no_pk",
+      "dataset": "qs",
       "matches": {
-        "cp_description": "In general basic characters welcome. Clearly lively friends con"
+        "answer": "Relative or \"stress\" polycythaemia, which is secondary to a depletion in the plasma volume."
       },
-      "score": 0.94
+      "primary_key": {
+        "id": 890
+      },
+      "score": 7.52
     }
   ]
 }
