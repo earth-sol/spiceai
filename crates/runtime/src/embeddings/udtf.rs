@@ -291,7 +291,7 @@ impl VectorSearchTableFunc {
         tbl: &Arc<dyn TableProvider>,
         args: &VectorSearchTableFuncArgs,
     ) -> Result<Option<Arc<dyn TableProvider>>, DataFusionError> {
-        let Some(mut vector_indexes) = find_index_in_table_provider::<S3Vector>(tbl) else {
+        let Some((mut vector_indexes, _)) = find_index_in_table_provider::<S3Vector>(tbl) else {
             return Ok(None);
         };
 
