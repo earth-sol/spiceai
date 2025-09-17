@@ -222,13 +222,14 @@ impl EmbeddingConnector {
                         }
                     })?;
 
+                    let idx = Arc::new(vector_index);
                     // augment the previous underlying table provider with the vector index
                     // this will result in recursive augmentation of the underlying table for N embedding columns
                     provider.underlying = Arc::new(VectorScanTableProvider::new(
                         provider.underlying,
-                        Arc::new(vector_index.clone()) as Arc<dyn VectorIndex>,
+                        Arc::clone(&idx) as Arc<dyn VectorIndex>,
                     )) as Arc<dyn TableProvider>;
-                    provider = provider.add_index(Arc::new(vector_index.clone()) as Arc<dyn Index>);
+                    provider = provider.add_index(Arc::clone(&idx) as Arc<dyn Index>);
                 }
                 tracing::info!(
                     "S3 Vectors for dataset {} initialized in {:?}",
@@ -347,7 +348,6 @@ impl DataConnector for EmbeddingConnector {
 
     fn changes_stream(&self, federated_table: Arc<FederatedTable>) -> Option<ChangesStream> {
         let table_provider = federated_table.try_table_provider_sync()?;
-
         if let Some(indexed_table) = table_provider
             .as_any()
             .downcast_ref::<IndexedTableProvider>()
@@ -359,7 +359,6 @@ impl DataConnector for EmbeddingConnector {
             else {
                 return self.inner_connector.changes_stream(federated_table);
             };
-
             let stream = self
                 .inner_connector
                 .changes_stream(underlying_federated_table)?
