@@ -100,6 +100,7 @@ pub mod dialect;
 pub mod error;
 pub mod extension;
 pub mod filter_converter;
+pub mod managed_runtime;
 pub mod param_utils;
 pub mod refresh_sql;
 pub mod request_context_extension;
@@ -1067,6 +1068,7 @@ impl DataFusion {
             accelerated_table_provider,
             refresh,
         );
+        accelerated_table_builder.tokio_runtime(self.tokio_runtime().cloned());
 
         let retention_delete_expr = match dataset.retention_sql() {
             Some(retention_sql) => Some(
@@ -1632,6 +1634,7 @@ impl DataFusion {
             accelerated_table_provider,
             refresh,
         );
+        builder.tokio_runtime(self.tokio_runtime().cloned());
         builder.initial_load_complete(initial_load_complete);
         builder.caching(Some(Arc::clone(&self.caching)));
         builder.checkpointer_opt(
