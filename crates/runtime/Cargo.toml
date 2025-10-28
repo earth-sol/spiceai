@@ -138,6 +138,7 @@ runtime-table-partition = { path = "../runtime-table-partition" }
 runtime-rate-control = { path = "../runtime-rate-control" }
 runtime-request-context = { path = "../runtime-request-context" }
 rusqlite = { workspace = true, optional = true }
+turso = { workspace = true, optional = true }
 rustls.workspace = true
 rustls-pemfile.workspace = true
 s3_vectors = { path = "../s3_vectors", optional = true }
@@ -275,7 +276,15 @@ sqlite = [
     "data_components/sqlite",
     "dep:rusqlite",
 ]
-turso = []
+turso = [
+    "dep:turso",
+    "dep:tokio-rusqlite",
+    "db_connection_pool/sqlite",
+    "data_components/sqlite",
+    "data_components/turso",
+    "dep:rusqlite",
+]
+vortex = ["dep:vortex-datafusion", "dep:vortex"]
 pepper = ["dep:pepper", "dep:vortex-datafusion", "dep:vortex"]
 xxhash = ["dep:twox-hash", "cache/xxhash"]
 
