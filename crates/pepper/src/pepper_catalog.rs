@@ -857,10 +857,7 @@ impl MetadataCatalog for PepperCatalog {
 
             Ok::<(), CatalogError>(())
         })
-        .await
-        .map_err(|e| CatalogError::InvalidOperation {
-            message: format!("Failed to join shutdown task: {e}"),
-        })??;
+        .await??;
 
         Ok(())
     }
