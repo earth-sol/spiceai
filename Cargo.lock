@@ -10859,6 +10859,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
+ "data_components",
  "datafusion",
  "datafusion-catalog",
  "datafusion-common",
