@@ -20,6 +20,7 @@ use arrow::array::{
     Array, FixedSizeListBuilder, Float32Builder, LargeStringArray, RecordBatch, StringArray,
     StringViewArray,
 };
+use arrow::compute::concat_batches;
 use arrow_json::{EncoderOptions, writer::make_encoder};
 use arrow_schema::{DataType, Field, Schema};
 use data_components::s3_vectors::S3VectorsTable;
@@ -102,6 +103,37 @@ pub enum Error {
 /// Extra index data from the raw table batches, embedded required column and write to [`S3VectorsTable`].
 #[allow(clippy::too_many_lines)]
 pub async fn write(
+    index: &S3Vector,
+    table: &S3VectorsTable,
+    record: RecordBatch,
+    batch_write_rows: usize,
+) -> Result<RecordBatch, Error> {
+    if record.num_rows() <= batch_write_rows {
+        return process_single_batch(index, table, record).await;
+    }
+
+    let mut result_batches = Vec::with_capacity(record.num_rows().div_ceil(batch_write_rows));
+    let schema = record.schema();
+
+    for chunk_start in (0..record.num_rows()).step_by(batch_write_rows) {
+        let chunk_end = (chunk_start + batch_write_rows).min(record.num_rows());
+        let chunk_length = chunk_end - chunk_start;
+
+        let chunk_batch = record.slice(chunk_start, chunk_length);
+
+        let processed_chunk = process_single_batch(index, table, chunk_batch).await?;
+        result_batches.push(processed_chunk);
+    }
+
+    let concatenated =
+        concat_batches(&schema, &result_batches).context(IssueWithArrowProcessingSnafu {
+            index: index.name(),
+        })?;
+
+    Ok(concatenated)
+}
+
+async fn process_single_batch(
     index: &S3Vector,
     table: &S3VectorsTable,
     record: RecordBatch,
