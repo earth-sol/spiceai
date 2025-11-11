@@ -108,6 +108,11 @@ pub struct SQLResultsCacheConfig {
     pub hashing_algorithm: HashingAlgorithm,
     #[serde(default)]
     pub cache_key_type: CacheKeyType,
+    /// Maximum stale-while-revalidate duration to add to the cache TTL.
+    /// When stale-while-revalidate is used, cache entries need to live for
+    /// `item_ttl + max_stale_while_revalidate` to allow serving stale data
+    /// during the revalidation window.
+    pub max_stale_while_revalidate: Option<String>,
 }
 
 // serde(default) only applies when deserializing, so to return enabled: true from ::default() calls
@@ -121,6 +126,7 @@ impl Default for SQLResultsCacheConfig {
             eviction_policy: None,
             hashing_algorithm: HashingAlgorithm::default(),
             cache_key_type: CacheKeyType::default(),
+            max_stale_while_revalidate: None,
         }
     }
 }
@@ -138,6 +144,8 @@ pub struct ResultsCache {
     pub cache_key_type: CacheKeyType,
     #[serde(default)]
     pub hashing_algorithm: HashingAlgorithm,
+    /// Maximum stale-while-revalidate duration to add to the cache TTL.
+    pub max_stale_while_revalidate: Option<String>,
 }
 
 impl Default for ResultsCache {
@@ -149,6 +157,7 @@ impl Default for ResultsCache {
             eviction_policy: None,
             cache_key_type: CacheKeyType::default(),
             hashing_algorithm: HashingAlgorithm::default(),
+            max_stale_while_revalidate: None,
         }
     }
 }
@@ -162,6 +171,7 @@ impl From<ResultsCache> for SQLResultsCacheConfig {
             eviction_policy: val.eviction_policy,
             hashing_algorithm: val.hashing_algorithm,
             cache_key_type: val.cache_key_type,
+            max_stale_while_revalidate: val.max_stale_while_revalidate,
         }
     }
 }
