@@ -10804,9 +10804,9 @@ dependencies = [
 
 [[package]]
 name = "lz4_flex"
-version = "0.11.5"
+version = "0.11.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08ab2867e3eeeca90e844d1940eab391c9dc5228783db2ed999acbc0a9ed375a"
+checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
 dependencies = [
  "twox-hash",
 ]
@@ -16879,7 +16879,7 @@ dependencies = [
  "bytes",
  "chrono",
  "itertools 0.14.0",
- "lz4_flex 0.11.5",
+ "lz4_flex 0.11.6",
  "scylla-macros",
  "snap",
  "stable_deref_trait",
@@ -17603,7 +17603,7 @@ dependencies = [
  "hmac 0.13.0-rc.2",
  "kbkdf",
  "log",
- "lz4_flex 0.11.5",
+ "lz4_flex 0.11.6",
  "maybe-async",
  "modular-bitfield",
  "pastey",
@@ -18847,7 +18847,7 @@ dependencies = [
  "levenshtein_automata",
  "log",
  "lru 0.12.5",
- "lz4_flex 0.11.5",
+ "lz4_flex 0.11.6",
  "measure_time",
  "memmap2",
  "once_cell",
